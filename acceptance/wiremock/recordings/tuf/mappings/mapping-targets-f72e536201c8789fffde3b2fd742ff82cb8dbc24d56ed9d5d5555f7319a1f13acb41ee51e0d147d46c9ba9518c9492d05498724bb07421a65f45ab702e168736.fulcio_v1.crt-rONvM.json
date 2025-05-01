@@ -1,0 +1,20 @@
+{
+  "id" : "e74f6e60-91ba-3c2c-907b-1bf10fcb993d",
+  "request" : {
+    "url" : "/targets/f72e536201c8789fffde3b2fd742ff82cb8dbc24d56ed9d5d5555f7319a1f13acb41ee51e0d147d46c9ba9518c9492d05498724bb07421a65f45ab702e168736.fulcio_v1.crt.pem",
+    "method" : "GET"
+  },
+  "response" : {
+    "status" : 200,
+    "bodyFileName" : "body-targets-f72e536201c8789fffde3b2fd742ff82cb8dbc24d56ed9d5d5555f7319a1f13acb41ee51e0d147d46c9ba9518c9492d05498724bb07421a65f45ab702e168736.fulcio_v1.crt-rONvM.pem",
+    "headers" : {
+      "date" : "Tue, 11 Nov 2025 21:35:40 GMT",
+      "server" : "envoy",
+      "last-modified" : "Tue, 11 Nov 2025 21:35:15 GMT",
+      "x-envoy-upstream-service-time" : "1",
+      "content-type" : "application/pem-certificate-chain",
+      "accept-ranges" : "bytes"
+    }
+  },
+  "uuid" : "e74f6e60-91ba-3c2c-907b-1bf10fcb993d"
+}

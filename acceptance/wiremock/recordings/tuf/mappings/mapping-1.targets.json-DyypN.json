@@ -1,0 +1,20 @@
+{
+  "id" : "f1efb5cc-1ec7-380c-9f80-68553ebc0e11",
+  "request" : {
+    "url" : "/1.targets.json",
+    "method" : "GET"
+  },
+  "response" : {
+    "status" : 200,
+    "bodyFileName" : "body-1.targets.json-DyypN.json",
+    "headers" : {
+      "date" : "Tue, 11 Nov 2025 21:35:40 GMT",
+      "server" : "envoy",
+      "last-modified" : "Tue, 11 Nov 2025 21:35:15 GMT",
+      "x-envoy-upstream-service-time" : "1",
+      "content-type" : "application/json",
+      "accept-ranges" : "bytes"
+    }
+  },
+  "uuid" : "f1efb5cc-1ec7-380c-9f80-68553ebc0e11"
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright The Enterprise Contract Contributors
+# Copyright The Conforma Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -90,9 +90,9 @@ scaffolding="${WORKDIR}/scaffolding"
 mkdir -p "${scaffolding}"
 git clone https://github.com/sigstore/scaffolding.git "${scaffolding}"
 pushd "${scaffolding}" > /dev/null
-git checkout v0.4.13
+git checkout v0.7.22
 ./hack/setup-kind.sh
-export KO_DOCKER_REPO='registry.local:5000/sigstore'
+export KO_DOCKER_REPO='registry.local:5001/sigstore'
 ./hack/setup-scaffolding.sh
 # Setup the dummy OIDC issuer
 LDFLAGS='' ko apply -BRf ./testdata/config/gettoken
@@ -102,7 +102,7 @@ export TUF_ROOT="${WORKDIR}/tuf_root"
 mkdir -p "${TUF_ROOT}"
 
 function make_image() {
-    repo='registry.local:5000/sigstore/testimage'
+    repo='registry.local:5001/sigstore/testimage'
     container="$(buildah from scratch)"
     image="$(buildah commit "${container}")"
     digestfile="$(mktemp)"
@@ -197,7 +197,7 @@ rm -rf "${recordings}"
 docker run -d --rm --network=host -e uid="$(id -u)" \
     --name wiremock.local \
     -v "${recordings}:/home/wiremock:Z" \
-    wiremock/wiremock:2.33.2 \
+    wiremock/wiremock:3.13.0-1 \
     --proxy-all="${TUF_MIRROR}" \
     --record-mappings \
     --verbose
