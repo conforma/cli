@@ -25,14 +25,11 @@ import (
 	"time"
 
 	ecapi "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
-	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	v1types "github.com/google/go-containerregistry/pkg/v1/types"
 	appapi "github.com/konflux-ci/application-api/api/v1alpha1"
-	"github.com/sigstore/cosign/v2/pkg/cosign"
 	"github.com/sigstore/cosign/v2/pkg/cosign/bundle"
 	"github.com/sigstore/cosign/v2/pkg/oci"
-	"github.com/sigstore/sigstore/pkg/signature"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,8 +38,23 @@ import (
 	"github.com/conforma/cli/internal/evaluator"
 )
 
-// TestSignVSA tests the signing functionality of the Signer.
+// TestSignVSA tests the signing functionality using the new Signer structure from attest.go.
 func TestSignVSA(t *testing.T) {
+	t.Setenv("COSIGN_PASSWORD", "") // key is unencrypted
+
+	// Create test key content
+	testKey := `-----BEGIN ENCRYPTED SIGSTORE PRIVATE KEY-----
+eyJrZGYiOnsibmFtZSI6InNjcnlwdCIsInBhcmFtcyI6eyJOIjo2NTUzNiwiciI6
+OCwicCI6MX0sInNhbHQiOiJLYU9OQzduQVJLOVgxM1FoaWFucjAwTTBGYys2Sitr
+dnAxN1FuanpiVk9nPSJ9LCJjaXBoZXIiOnsibmFtZSI6Im5hY2wvc2VjcmV0Ym94
+Iiwibm9uY2UiOiJVOHZqWWtqMlZOUFZGdlZFZWZ3bXZ5VGloUERrelBoaCJ9LCJj
+aXBoZXJ0ZXh0IjoidWNWMnQ4TTZVNFJvb29FOXc0d3dkc3E1RDYrS2RKY245dERT
+KzFwRDRGN040SVJOWEgzSTBua3h1a3NackFOUHR1emIvTkVYQ201dUp3Zjh3Qzl1
+VlprbXdwNU5jRUZ6b3ZNS3JCZmNvdXdjaEkrMzkrQ0NhbVZPbzBucmRnZjhvcmpK
+dXdrWDBYL1phY0RUTERGaUxyc1laMWVMMmlqMGU1MVRpZmVQNTl4WXNPK1FnM1Jv
+OURRVjNQMk9ndDFDaVFHeGg1VXhUZytGc3c9PSJ9
+-----END ENCRYPTED SIGSTORE PRIVATE KEY-----`
+
 	// Set up test filesystem
 	fs := afero.NewMemMapFs()
 
@@ -61,41 +73,39 @@ func TestSignVSA(t *testing.T) {
 		RuleResults: []evaluator.Result{{Message: "violation1"}},
 	}
 
-	// Write test file
+	// Write test files
 	vsaPath := "/test.vsa.json"
 	data, _ := json.Marshal(pred)
 	err := afero.WriteFile(fs, vsaPath, data, 0600)
 	assert.NoError(t, err)
 
-	// Create mock key loader and signer
-	mockKeyLoader := func(key []byte, pass []byte) (signature.SignerVerifier, error) {
-		return nil, nil // Mock implementation
-	}
-
-	mockSigner := func(ctx context.Context, signer signature.SignerVerifier, ref name.Reference, att oci.Signature, opts *cosign.CheckOpts) (name.Digest, error) {
-		return name.Digest{}, nil // Mock implementation
-	}
-
-	// Create signer instance
-	signer := Signer{
-		FS:        fs,
-		KeyLoader: mockKeyLoader,
-		SignFunc:  mockSigner,
-	}
-
-	// Act
-	sig, err := signer.Sign(context.Background(), vsaPath, "irrelevant.key", "quay.io/test/image:tag")
-	// Assert
+	keyPath := "/test.key"
+	err = afero.WriteFile(fs, keyPath, []byte(testKey), 0600)
 	assert.NoError(t, err)
-	assert.NotNil(t, sig)
-	payload, err := sig.Payload()
-	assert.NoError(t, err)
-	assert.Contains(t, string(payload), "quay.io/test/image:tag")
 
-	// Test error propagation from attestation creation
-	_, err = signer.Sign(context.Background(), "/nonexistent/path", "irrelevant.key", "quay.io/test/image:tag")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to read VSA file")
+	// Test successful signing
+	t.Run("successful signing", func(t *testing.T) {
+		signer := testSigner(keyPath, fs)
+
+		opts, err := NewAttestOptions(vsaPath, "quay.io/test/image", "sha256:abcd1234", signer)
+		require.NoError(t, err)
+
+		env, err := opts.AttestPredicate(context.Background())
+		assert.NoError(t, err)
+		assert.NotEmpty(t, env)
+	})
+
+	// Test missing predicate file
+	t.Run("missing predicate file", func(t *testing.T) {
+		signer := testSigner(keyPath, fs)
+
+		opts, err := NewAttestOptions("/nonexistent.json", "quay.io/test/image", "sha256:abcd1234", signer)
+		require.NoError(t, err)
+
+		_, err = opts.AttestPredicate(context.Background())
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "open predicate")
+	})
 }
 
 func TestUploadVSAAttestation(t *testing.T) {
@@ -255,8 +265,8 @@ func TestGeneratePredicate(t *testing.T) {
 	}
 
 	// Create generator and generate predicate
-	generator := NewGenerator()
-	pred, err := generator.GeneratePredicate(context.Background(), report, comp)
+	generator := NewGenerator(report)
+	pred, err := generator.GeneratePredicate(context.Background(), comp)
 	require.NoError(t, err)
 
 	// Verify predicate fields

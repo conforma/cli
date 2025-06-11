@@ -44,6 +44,7 @@ import (
 	"github.com/conforma/cli/internal/utils"
 	"github.com/conforma/cli/internal/utils/oci"
 	"github.com/conforma/cli/internal/utils/oci/fake"
+	"github.com/conforma/cli/internal/validate/vsa"
 )
 
 type data struct {
@@ -1361,4 +1362,166 @@ func TestContainsAttestation(t *testing.T) {
 		result := containsOutput(test.input, "attestation")
 		assert.Equal(t, test.expected, result, test.name)
 	}
+}
+
+// --- Mocks and tests for processVSAForComponent ---
+
+type mockGenerator struct {
+	GeneratePredicateFunc func(ctx context.Context, comp applicationsnapshot.Component) (*vsa.Predicate, error)
+}
+
+func (m *mockGenerator) GeneratePredicate(ctx context.Context, comp applicationsnapshot.Component) (*vsa.Predicate, error) {
+	return m.GeneratePredicateFunc(ctx, comp)
+}
+
+type mockWriter struct {
+	WriteVSAFunc func(pred *vsa.Predicate) (string, error)
+}
+
+func (m *mockWriter) WriteVSA(pred *vsa.Predicate) (string, error) {
+	return m.WriteVSAFunc(pred)
+}
+
+type mockAttestor struct {
+	AttestPredicateFunc func(ctx context.Context) ([]byte, error)
+	WriteEnvelopeFunc   func(data []byte) (string, error)
+}
+
+func (m *mockAttestor) AttestPredicate(ctx context.Context) ([]byte, error) {
+	return m.AttestPredicateFunc(ctx)
+}
+
+func (m *mockAttestor) WriteEnvelope(data []byte) (string, error) {
+	return m.WriteEnvelopeFunc(data)
+}
+
+func Test_attestVSA_success(t *testing.T) {
+	ctx := context.Background()
+	comp := applicationsnapshot.Component{
+		SnapshotComponent: app.SnapshotComponent{
+			ContainerImage: "test-image",
+		},
+	}
+
+	attestor := &mockAttestor{
+		AttestPredicateFunc: func(ctx context.Context) ([]byte, error) {
+			return []byte("envelope"), nil
+		},
+		WriteEnvelopeFunc: func(data []byte) (string, error) {
+			if string(data) != "envelope" {
+				t.Errorf("unexpected data passed to WriteEnvelope")
+			}
+			return "/tmp/envelope.json", nil
+		},
+	}
+
+	path, err := attestVSA(ctx, attestor, comp)
+	assert.NoError(t, err)
+	assert.Equal(t, "/tmp/envelope.json", path)
+}
+
+func Test_attestVSA_errors(t *testing.T) {
+	ctx := context.Background()
+	comp := applicationsnapshot.Component{
+		SnapshotComponent: app.SnapshotComponent{
+			ContainerImage: "test-image",
+		},
+	}
+
+	t.Run("attest predicate fails", func(t *testing.T) {
+		attestor := &mockAttestor{
+			AttestPredicateFunc: func(ctx context.Context) ([]byte, error) {
+				return nil, errors.New("attest error")
+			},
+		}
+		path, err := attestVSA(ctx, attestor, comp)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "Error attesting VSA")
+		assert.Empty(t, path)
+	})
+
+	t.Run("write envelope fails", func(t *testing.T) {
+		attestor := &mockAttestor{
+			AttestPredicateFunc: func(ctx context.Context) ([]byte, error) {
+				return []byte("envelope"), nil
+			},
+			WriteEnvelopeFunc: func(data []byte) (string, error) {
+				return "", errors.New("envelope error")
+			},
+		}
+		path, err := attestVSA(ctx, attestor, comp)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "Error writing envelope")
+		assert.Empty(t, path)
+	})
+}
+
+func Test_generateAndWrite_success(t *testing.T) {
+	ctx := context.Background()
+	comp := applicationsnapshot.Component{
+		SnapshotComponent: app.SnapshotComponent{
+			ContainerImage: "test-image",
+		},
+	}
+	pred := &vsa.Predicate{ImageRef: "test-image"}
+
+	gen := &mockGenerator{
+		GeneratePredicateFunc: func(ctx context.Context, c applicationsnapshot.Component) (*vsa.Predicate, error) {
+			return pred, nil
+		},
+	}
+	writer := &mockWriter{
+		WriteVSAFunc: func(p *vsa.Predicate) (string, error) {
+			if p != pred {
+				t.Errorf("unexpected predicate passed to WriteVSA")
+			}
+			return "/tmp/vsa.json", nil
+		},
+	}
+
+	path, err := generateAndWrite(ctx, gen, writer, comp)
+	assert.NoError(t, err)
+	assert.Equal(t, "/tmp/vsa.json", path)
+}
+
+func Test_generateAndWrite_errors(t *testing.T) {
+	ctx := context.Background()
+	comp := applicationsnapshot.Component{
+		SnapshotComponent: app.SnapshotComponent{
+			ContainerImage: "test-image",
+		},
+	}
+	pred := &vsa.Predicate{ImageRef: "test-image"}
+
+	t.Run("predicate generation fails", func(t *testing.T) {
+		gen := &mockGenerator{
+			GeneratePredicateFunc: func(ctx context.Context, c applicationsnapshot.Component) (*vsa.Predicate, error) {
+				return nil, errors.New("predicate generation error")
+			},
+		}
+		writer := &mockWriter{}
+
+		path, err := generateAndWrite(ctx, gen, writer, comp)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "predicate generation error")
+		assert.Empty(t, path)
+	})
+
+	t.Run("write VSA fails", func(t *testing.T) {
+		gen := &mockGenerator{
+			GeneratePredicateFunc: func(ctx context.Context, c applicationsnapshot.Component) (*vsa.Predicate, error) {
+				return pred, nil
+			},
+		}
+		writer := &mockWriter{
+			WriteVSAFunc: func(p *vsa.Predicate) (string, error) {
+				return "", errors.New("write VSA error")
+			},
+		}
+
+		path, err := generateAndWrite(ctx, gen, writer, comp)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "write VSA error")
+		assert.Empty(t, path)
+	})
 }

@@ -458,11 +458,38 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 			}
 
 			if data.vsaEnabled {
+				generator := vsa.NewGenerator(report)
+				writer := vsa.NewWriter()
 				for _, comp := range components {
-					if err := processVSA(cmd.Context(), report, comp); err != nil {
-						log.Errorf("[VSA] Error processing VSA for image %s: %v", comp.ContainerImage, err)
+					writtenPath, err := generateAndWrite(cmd.Context(), generator, writer, comp)
+					if err != nil {
+						log.Error(err)
 						continue
 					}
+
+					signer, err := vsa.NewSigner(data.vsaSigningKey, utils.FS(cmd.Context()))
+					if err != nil {
+						log.Error(err)
+						continue
+					}
+
+					// Get the git URL safely, defaulting to empty string if GitSource is nil
+					var gitURL string
+					if comp.Source.GitSource != nil {
+						gitURL = comp.Source.GitSource.URL
+					}
+
+					attestor, err := vsa.NewAttestOptions(writtenPath, gitURL, comp.ContainerImage, signer)
+					if err != nil {
+						log.Error(err)
+						continue
+					}
+					envelope, err := attestVSA(cmd.Context(), attestor, comp)
+					if err != nil {
+						log.Error(err)
+						continue
+					}
+					log.Infof("[VSA] VSA attested and envelope written to %s", envelope)
 				}
 			}
 			if data.strict && !report.Success {
@@ -581,50 +608,42 @@ func containsOutput(data []string, value string) bool {
 	return false
 }
 
-// PredicateGenerator defines the interface for generating VSA predicates
-type PredicateGenerator interface {
-	GeneratePredicate(ctx context.Context, report applicationsnapshot.Report, comp applicationsnapshot.Component) (*vsa.Predicate, error)
+// Create interfaces for the VSA components for easier testing
+type Generator interface {
+	GeneratePredicate(ctx context.Context, comp applicationsnapshot.Component) (*vsa.Predicate, error)
 }
 
-// VSAWriter defines the interface for writing VSA files
-type VSAWriter interface {
-	WriteVSA(predicate *vsa.Predicate) (string, error)
+type Writer interface {
+	WriteVSA(pred *vsa.Predicate) (string, error)
 }
 
-// generateAndWriteVSA generates a VSA predicate and writes it to a file
-func generateAndWriteVSA(
-	ctx context.Context,
-	report applicationsnapshot.Report,
-	comp applicationsnapshot.Component,
-	generator PredicateGenerator,
-	writer VSAWriter,
-) (string, error) {
-	log.Debugf("[VSA] Generating predicate for image: %s", comp.ContainerImage)
-	pred, err := generator.GeneratePredicate(ctx, report, comp)
+type Attestor interface {
+	AttestPredicate(ctx context.Context) ([]byte, error)
+	WriteEnvelope(data []byte) (string, error)
+}
+
+// attestVSA handles VSA attestation and envelope writing for a single component.
+func attestVSA(ctx context.Context, attestor Attestor, comp applicationsnapshot.Component) (string, error) {
+	env, err := attestor.AttestPredicate(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate predicate for image %s: %w", comp.ContainerImage, err)
+		return "", fmt.Errorf("[VSA] Error attesting VSA for image %s: %w", comp.ContainerImage, err)
 	}
-	log.Debugf("[VSA] Predicate generated for image: %s", comp.ContainerImage)
+	envelopePath, err := attestor.WriteEnvelope(env)
+	if err != nil {
+		return "", fmt.Errorf("[VSA] Error writing envelope for image %s: %w", comp.ContainerImage, err)
+	}
+	return envelopePath, nil
+}
 
-	log.Debugf("[VSA] Writing VSA for image: %s", comp.ContainerImage)
+// generateAndWrite generates a VSA predicate and writes it to a file, returning the written path.
+func generateAndWrite(ctx context.Context, generator Generator, writer Writer, comp applicationsnapshot.Component) (string, error) {
+	pred, err := generator.GeneratePredicate(ctx, comp)
+	if err != nil {
+		return "", err
+	}
 	writtenPath, err := writer.WriteVSA(pred)
 	if err != nil {
-		return "", fmt.Errorf("failed to write VSA for image %s: %w", comp.ContainerImage, err)
+		return "", err
 	}
-	log.Debugf("[VSA] VSA written to %s", writtenPath)
-
 	return writtenPath, nil
-}
-
-// processVSA handles the complete VSA generation, signing and upload process for a component
-func processVSA(ctx context.Context, report applicationsnapshot.Report, comp applicationsnapshot.Component) error {
-	generator := vsa.NewGenerator()
-	writer := vsa.NewWriter()
-
-	vsaPath, err := generateAndWriteVSA(ctx, report, comp, generator, writer)
-	log.Infof("[VSA] VSA written to %s", vsaPath)
-	if err != nil {
-		return err
-	}
-	return nil
 }

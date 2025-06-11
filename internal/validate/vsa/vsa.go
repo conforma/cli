@@ -24,11 +24,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/google/go-containerregistry/pkg/name"
-	"github.com/sigstore/cosign/v2/pkg/cosign"
 	"github.com/sigstore/cosign/v2/pkg/oci"
-	"github.com/sigstore/cosign/v2/pkg/oci/static"
-	"github.com/sigstore/sigstore/pkg/signature"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 
@@ -48,15 +44,19 @@ type Predicate struct {
 }
 
 // Generator handles VSA predicate generation
-type Generator struct{}
+type Generator struct {
+	Report applicationsnapshot.Report
+}
 
 // NewGenerator creates a new VSA predicate generator
-func NewGenerator() *Generator {
-	return &Generator{}
+func NewGenerator(report applicationsnapshot.Report) *Generator {
+	return &Generator{
+		Report: report,
+	}
 }
 
 // GeneratePredicate creates a Predicate for a validated image/component.
-func (g *Generator) GeneratePredicate(ctx context.Context, report applicationsnapshot.Report, comp applicationsnapshot.Component) (*Predicate, error) {
+func (g *Generator) GeneratePredicate(ctx context.Context, comp applicationsnapshot.Component) (*Predicate, error) {
 	log.Infof("Generating VSA predicate for image: %s", comp.ContainerImage)
 
 	// Compose the component info as a map
@@ -78,8 +78,8 @@ func (g *Generator) GeneratePredicate(ctx context.Context, report applicationsna
 	}
 
 	policySource := ""
-	if report.Policy.Name != "" {
-		policySource = report.Policy.Name
+	if g.Report.Policy.Name != "" {
+		policySource = g.Report.Policy.Name
 	}
 
 	return &Predicate{
@@ -157,42 +157,4 @@ func RekorUploader(ctx context.Context, att oci.Signature, location string) (str
 func NoopUploader(ctx context.Context, att oci.Signature, location string) (string, error) {
 	log.Infof("Upload type is 'none'; skipping upload for %s", location)
 	return "", nil
-}
-
-type PrivateKeyLoader func(key []byte, pass []byte) (signature.SignerVerifier, error)
-type AttestationSigner func(ctx context.Context, signer signature.SignerVerifier, ref name.Reference, att oci.Signature, opts *cosign.CheckOpts) (name.Digest, error)
-
-type Signer struct {
-	FS        afero.Fs          // for reading the VSA file
-	KeyLoader PrivateKeyLoader  // injected loader
-	SignFunc  AttestationSigner // injected cosign API
-}
-
-func NewSigner(fs afero.Fs, loader PrivateKeyLoader, signer AttestationSigner) *Signer {
-	return &Signer{
-		FS:        fs,
-		KeyLoader: loader,
-		SignFunc:  signer,
-	}
-}
-
-// Sign reads the file, loads the key, and returns the signature.
-func (s *Signer) Sign(ctx context.Context, vsaPath, keyPath, imageRef string) (oci.Signature, error) {
-	log.Infof("Signing VSA for image: %s", imageRef)
-	vsaData, err := afero.ReadFile(s.FS, vsaPath)
-	if err != nil {
-		log.Errorf("Failed to read VSA file: %v", err)
-		return nil, fmt.Errorf("failed to read VSA file: %w", err)
-	}
-	// TODO: Actually sign the attestation using cosign APIs. For now, just create the attestation object.
-	// Example:
-	// signer, err := s.KeyLoader( /* load key bytes from keyPath */ )
-	// attestationSigned, err := s.SignFunc(ctx, signer, ref, att, nil)
-	att, err := static.NewAttestation(vsaData)
-	if err != nil {
-		log.Errorf("Failed to create attestation: %v", err)
-		return nil, fmt.Errorf("failed to create attestation: %w", err)
-	}
-	log.Infof("VSA attestation (unsigned) created for %s", imageRef)
-	return att, nil
 }
