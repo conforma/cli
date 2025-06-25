@@ -447,6 +447,81 @@ func TestCollections(t *testing.T) {
 	}
 }
 
+func TestPipelineIntention(t *testing.T) {
+	cases := []struct {
+		name       string
+		annotation *ast.AnnotationsRef
+		expected   []string
+	}{
+		{
+			name:       "no code",
+			annotation: nil,
+			expected:   []string{},
+		},
+		{
+			name: "no annotations",
+			annotation: annotationRef(heredoc.Doc(`
+				package a
+				import rego.v1
+				deny if { true }`)),
+			expected: []string{},
+		},
+		{
+			name: "without custom annotations",
+			annotation: annotationRef(heredoc.Doc(`
+				package a
+				import rego.v1
+				# METADATA
+				# title: title
+				deny if { true }`)),
+			expected: []string{},
+		},
+		{
+			name: "with custom annotation but no pipeline_intention",
+			annotation: annotationRef(heredoc.Doc(`
+				package a
+				import rego.v1
+				# METADATA
+				# custom:
+				#   short_name: test
+				deny if { true }`)),
+			expected: []string{},
+		},
+		{
+			name: "with single pipeline_intention",
+			annotation: annotationRef(heredoc.Doc(`
+				package a
+				import rego.v1
+				# METADATA
+				# custom:
+				#   pipeline_intention:
+				#     - release
+				deny if { true }`)),
+			expected: []string{"release"},
+		},
+		{
+			name: "with multiple pipeline_intentions",
+			annotation: annotationRef(heredoc.Doc(`
+				package a
+				import rego.v1
+				# METADATA
+				# custom:
+				#   pipeline_intention:
+				#     - release
+				#     - production
+				#     - test
+				deny if { true }`)),
+			expected: []string{"release", "production", "test"},
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(fmt.Sprintf("[%d] - %s", i, c.name), func(t *testing.T) {
+			assert.Equal(t, c.expected, pipelineIntention(c.annotation))
+		})
+	}
+}
+
 func TestCodeAndDocumentationUrl(t *testing.T) {
 	cases := []struct {
 		name        string

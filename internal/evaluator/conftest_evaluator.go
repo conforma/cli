@@ -167,17 +167,18 @@ type testRunner interface {
 }
 
 const (
-	effectiveOnFormat   = "2006-01-02T15:04:05Z"
-	effectiveOnTimeout  = -90 * 24 * time.Hour // keep effective_on metadata up to 90 days
-	metadataCode        = "code"
-	metadataCollections = "collections"
-	metadataDependsOn   = "depends_on"
-	metadataDescription = "description"
-	metadataSeverity    = "severity"
-	metadataEffectiveOn = "effective_on"
-	metadataSolution    = "solution"
-	metadataTerm        = "term"
-	metadataTitle       = "title"
+	effectiveOnFormat         = "2006-01-02T15:04:05Z"
+	effectiveOnTimeout        = -90 * 24 * time.Hour // keep effective_on metadata up to 90 days
+	metadataCode              = "code"
+	metadataCollections       = "collections"
+	metadataDependsOn         = "depends_on"
+	metadataDescription       = "description"
+	metadataPipelineIntention = "pipeline_intention"
+	metadataSeverity          = "severity"
+	metadataEffectiveOn       = "effective_on"
+	metadataSolution          = "solution"
+	metadataTerm              = "term"
+	metadataTitle             = "title"
 )
 
 const (
@@ -205,6 +206,7 @@ type conftestEvaluator struct {
 	exclude       *Criteria
 	fs            afero.Fs
 	namespace     []string
+	source        ecc.Source
 }
 
 type conftestRunner struct {
@@ -302,9 +304,11 @@ func NewConftestEvaluatorWithNamespace(ctx context.Context, policySources []sour
 		policy:        p,
 		fs:            fs,
 		namespace:     namespace,
+		source:        source,
 	}
 
 	c.include, c.exclude = computeIncludeExclude(source, p)
+
 	dir, err := utils.CreateWorkDir(fs)
 	if err != nil {
 		log.Debug("Failed to create work dir!")
@@ -424,22 +428,33 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		}
 	}
 
+	// Filter namespaces using the new pluggable filtering system
+	filterFactory := NewDefaultFilterFactory()
+	filters := filterFactory.CreateFilters(c.source)
+	filteredNamespaces := filterNamespaces(rules, filters...)
+
 	var r testRunner
 	var ok bool
 	if r, ok = ctx.Value(runnerKey).(testRunner); r == nil || !ok {
 
-		// should there be a namespace defined or not
-		allNamespaces := true
-		if len(c.namespace) > 0 {
-			allNamespaces = false
+		// Determine which namespaces to use
+		namespaceToUse := c.namespace
+
+		// If we have filtered namespaces from the filtering system, use those
+		if len(filteredNamespaces) > 0 {
+			namespaceToUse = filteredNamespaces
+		} else if len(c.namespace) == 0 {
+			// When no namespaces are specified and filtering results in empty list,
+			// use an empty namespace list to prevent any evaluation
+			namespaceToUse = []string{}
 		}
 
 		r = &conftestRunner{
 			runner.TestRunner{
 				Data:          []string{c.dataDir},
 				Policy:        []string{c.policyDir},
-				Namespace:     c.namespace,
-				AllNamespaces: allNamespaces,
+				Namespace:     namespaceToUse,
+				AllNamespaces: false, // Always false to prevent bypassing filtering
 				NoFail:        true,
 				Output:        c.outputFormat,
 				Capabilities:  c.CapabilitiesPath(),
