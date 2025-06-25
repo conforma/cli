@@ -167,17 +167,18 @@ type testRunner interface {
 }
 
 const (
-	effectiveOnFormat   = "2006-01-02T15:04:05Z"
-	effectiveOnTimeout  = -90 * 24 * time.Hour // keep effective_on metadata up to 90 days
-	metadataCode        = "code"
-	metadataCollections = "collections"
-	metadataDependsOn   = "depends_on"
-	metadataDescription = "description"
-	metadataSeverity    = "severity"
-	metadataEffectiveOn = "effective_on"
-	metadataSolution    = "solution"
-	metadataTerm        = "term"
-	metadataTitle       = "title"
+	effectiveOnFormat         = "2006-01-02T15:04:05Z"
+	effectiveOnTimeout        = -90 * 24 * time.Hour // keep effective_on metadata up to 90 days
+	metadataCode              = "code"
+	metadataCollections       = "collections"
+	metadataDependsOn         = "depends_on"
+	metadataDescription       = "description"
+	metadataPipelineIntention = "pipeline_intention"
+	metadataSeverity          = "severity"
+	metadataEffectiveOn       = "effective_on"
+	metadataSolution          = "solution"
+	metadataTerm              = "term"
+	metadataTitle             = "title"
 )
 
 const (
@@ -638,6 +639,10 @@ func (c conftestEvaluator) computeSuccesses(
 			success.Metadata[metadataDependsOn] = rule.DependsOn
 		}
 
+		if len(rule.PipelineIntention) > 0 {
+			success.Metadata[metadataPipelineIntention] = rule.PipelineIntention
+		}
+
 		if !c.isResultIncluded(success, target, missingIncludes) {
 			log.Debugf("Skipping result success: %#v", success)
 			continue
@@ -710,6 +715,12 @@ func addMetadataToResults(ctx context.Context, r *Result, rule rule.Info) {
 	}
 	if len(rule.DependsOn) > 0 {
 		r.Metadata[metadataDependsOn] = rule.DependsOn
+	}
+	if len(rule.PipelineIntention) > 0 {
+		log.Debugf("Evaluator Debug: Adding pipeline_intention %v to rule %s", rule.PipelineIntention, rule.Code)
+		r.Metadata[metadataPipelineIntention] = rule.PipelineIntention
+	} else {
+		log.Debugf("Evaluator Debug: No pipeline_intention for rule %s", rule.Code)
 	}
 
 	// If the rule has been effective for a long time, we'll consider
