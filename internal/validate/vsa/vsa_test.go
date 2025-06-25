@@ -280,3 +280,125 @@ func TestGeneratePredicate(t *testing.T) {
 	assert.Equal(t, comp.Source, pred.Component["source"])
 	assert.Equal(t, comp.Successes, pred.RuleResults)
 }
+
+func TestGeneratePredicateWithPipelineIntention(t *testing.T) {
+	tests := []struct {
+		name     string
+		results  []evaluator.Result
+		expected map[string]interface{}
+	}{
+		{
+			name: "rule with pipeline_intention metadata",
+			results: []evaluator.Result{
+				{
+					Message: "Rule with pipeline intention passed",
+					Metadata: map[string]interface{}{
+						"code":               "release.security_check",
+						"title":              "Security Check",
+						"pipeline_intention": []string{"release", "production"},
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"code":               "release.security_check",
+				"title":              "Security Check",
+				"pipeline_intention": []string{"release", "production"},
+			},
+		},
+		{
+			name: "rule without pipeline_intention metadata",
+			results: []evaluator.Result{
+				{
+					Message: "Rule without pipeline intention passed",
+					Metadata: map[string]interface{}{
+						"code":  "general.basic_check",
+						"title": "Basic Check",
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"code":  "general.basic_check",
+				"title": "Basic Check",
+			},
+		},
+		{
+			name: "mixed rules with and without pipeline_intention",
+			results: []evaluator.Result{
+				{
+					Message: "Rule with pipeline intention",
+					Metadata: map[string]interface{}{
+						"code":               "release.security_check",
+						"pipeline_intention": []string{"release"},
+					},
+				},
+				{
+					Message: "Rule without pipeline intention",
+					Metadata: map[string]interface{}{
+						"code": "general.basic_check",
+					},
+				},
+			},
+			expected: map[string]interface{}{}, // We'll check both results individually
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create test data
+			report := applicationsnapshot.Report{
+				Policy: ecapi.EnterpriseContractPolicySpec{
+					Name: "test-policy",
+				},
+			}
+
+			comp := applicationsnapshot.Component{
+				SnapshotComponent: appapi.SnapshotComponent{
+					Name:           "test-component",
+					ContainerImage: "test-image:tag",
+					Source:         appapi.ComponentSource{},
+				},
+				Success:    true,
+				Violations: []evaluator.Result{},
+				Warnings:   []evaluator.Result{},
+				Successes:  tt.results,
+			}
+
+			// Create generator and generate predicate
+			generator := NewGenerator(report)
+			pred, err := generator.GeneratePredicate(context.Background(), comp)
+			require.NoError(t, err)
+
+			// Verify basic predicate fields
+			assert.Equal(t, comp.ContainerImage, pred.ImageRef)
+			assert.Equal(t, "passed", pred.ValidationResult)
+			assert.Equal(t, "ec-cli", pred.Verifier)
+
+			// Verify rule results contain expected metadata
+			assert.Equal(t, len(tt.results), len(pred.RuleResults))
+
+			if tt.name == "mixed rules with and without pipeline_intention" {
+				// Special case: check each result individually
+				for _, result := range pred.RuleResults {
+					if result.Metadata["code"] == "release.security_check" {
+						assert.Equal(t, []string{"release"}, result.Metadata["pipeline_intention"])
+					} else if result.Metadata["code"] == "general.basic_check" {
+						_, hasPipelineIntention := result.Metadata["pipeline_intention"]
+						assert.False(t, hasPipelineIntention, "Rule without pipeline_intention should not have the field")
+					}
+				}
+			} else {
+				// Single result case: check expected metadata
+				result := pred.RuleResults[0]
+				for key, expectedValue := range tt.expected {
+					assert.Equal(t, expectedValue, result.Metadata[key], "Metadata field %s should match", key)
+				}
+
+				// Verify pipeline_intention is absent when not expected
+				if _, expectedPipelineIntention := tt.expected["pipeline_intention"]; !expectedPipelineIntention {
+					_, hasPipelineIntention := result.Metadata["pipeline_intention"]
+					assert.False(t, hasPipelineIntention, "Rule without pipeline_intention should not have the field")
+				}
+			}
+		})
+	}
+}

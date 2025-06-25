@@ -1041,3 +1041,69 @@ func TestSetAttestationSyntaxCheckFromError(t *testing.T) {
 		})
 	}
 }
+
+func TestKeepSomeMetadataSingle(t *testing.T) {
+	cases := []struct {
+		name             string
+		input            evaluator.Result
+		expectedMetadata map[string]interface{}
+	}{
+		{
+			name: "preserves required metadata including pipeline_intention",
+			input: evaluator.Result{
+				Message: "Test message",
+				Metadata: map[string]interface{}{
+					"code":               "test.rule",
+					"effective_on":       "2023-01-01",
+					"term":               "test-term",
+					"pipeline_intention": []string{"release", "production"},
+					"title":              "Test Rule Title",
+					"description":        "Test Rule Description",
+					"some_other_key":     "should be removed",
+				},
+			},
+			expectedMetadata: map[string]interface{}{
+				"code":               "test.rule",
+				"effective_on":       "2023-01-01",
+				"term":               "test-term",
+				"pipeline_intention": []string{"release", "production"},
+			},
+		},
+		{
+			name: "preserves basic metadata without pipeline_intention",
+			input: evaluator.Result{
+				Message: "Test message",
+				Metadata: map[string]interface{}{
+					"code":           "test.rule",
+					"effective_on":   "2023-01-01",
+					"title":          "Test Rule Title",
+					"description":    "Test Rule Description",
+					"some_other_key": "should be removed",
+				},
+			},
+			expectedMetadata: map[string]interface{}{
+				"code":         "test.rule",
+				"effective_on": "2023-01-01",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Make a copy to avoid modifying the original
+			result := evaluator.Result{
+				Message:  tc.input.Message,
+				Metadata: make(map[string]interface{}),
+			}
+			for k, v := range tc.input.Metadata {
+				result.Metadata[k] = v
+			}
+
+			// Apply the function
+			keepSomeMetadataSingle(result)
+
+			// Verify the result
+			assert.Equal(t, tc.expectedMetadata, result.Metadata)
+		})
+	}
+}
