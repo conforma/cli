@@ -214,7 +214,7 @@ func documentationUrl(a *ast.AnnotationsRef) string {
 	// Given all this, the documentationUrl is not really reliable. We could remove it
 	// entirely, but since it's used only the `ec inspect policy` output, let's live
 	// with its flaws for now and fix it later.
-	ruleDocUrlFormat := "https://conforma.dev/docs/policy/release_policy.html#%s__%s"
+	ruleDocUrlFormat := "https://conforma.dev/docs/policy/packages/release_%s.html#%s__%s"
 
 	// a.Path might be something like this: "data.foo.deny" or
 	// "data.some.path.foo.warn". We want to pick out just "foo".
@@ -224,7 +224,8 @@ func documentationUrl(a *ast.AnnotationsRef) string {
 	shortName := shortName(a)
 
 	if lenPathStrings > 2 && pathStrings[lenPathStrings-2] != "" && shortName != "" {
-		return fmt.Sprintf(ruleDocUrlFormat, pathStrings[lenPathStrings-2], shortName)
+		packageName := pathStrings[lenPathStrings-2]
+		return fmt.Sprintf(ruleDocUrlFormat, packageName, packageName, shortName)
 	}
 
 	return ""
