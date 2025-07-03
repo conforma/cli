@@ -27,6 +27,6 @@ func Execute(args []string) error {
 	c := root.NewRootCmd()
 	cmd.AddCommandsTo(c)
 	c.SetArgs(args)
-	c.SetOutput(io.Discard)
+	c.SetOut(io.Discard)
 	return c.Execute()
 }
