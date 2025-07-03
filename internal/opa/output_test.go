@@ -66,7 +66,7 @@ func Test_RegoTextOutput(t *testing.T) {
 				# Source: spam.io/bacon-bundle
 
 				policy.foo.bar.rule_title (deny)
-				https://conforma.dev/docs/policy/release_policy.html#bar__rule_title
+				https://conforma.dev/docs/policy/packages/release_bar.html#bar__rule_title
 				Rule title
 				Rule description
 				--

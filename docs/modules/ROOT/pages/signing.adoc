@@ -7,7 +7,7 @@ command.
 == Image Verification
 
 When Conforma validates an image, there are certain
-https://conforma.dev/docs/policy/release_policy.html#builtin_attestation_package[builtin]
+https://conforma.dev/docs/policy/packages/release_builtin_attestation.html[builtin]
 policy rules that are always applied and cannot be skipped. Most of these rely on
 https://github.com/sigstore/cosign[cosign] to fetch and verify image signatures and attestations.
 These meta artifacts are associated to the underlying container image by digest. This has two

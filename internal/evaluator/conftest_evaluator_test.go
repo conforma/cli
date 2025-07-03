@@ -1422,7 +1422,7 @@ func TestCollectAnnotationData(t *testing.T) {
 			Package:          "a.b.c",
 			ShortName:        "short",
 			Title:            "Title",
-			DocumentationUrl: "https://conforma.dev/docs/policy/release_policy.html#c__short",
+			DocumentationUrl: "https://conforma.dev/docs/policy/packages/release_c.html#c__short",
 		},
 	}, rules)
 }
