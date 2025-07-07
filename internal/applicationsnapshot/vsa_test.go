@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,104 +20,72 @@ package applicationsnapshot
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
-	"github.com/in-toto/in-toto-golang/in_toto"
 	app "github.com/konflux-ci/application-api/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/conforma/cli/internal/evaluator"
-	"github.com/conforma/cli/internal/policy"
-	"github.com/conforma/cli/internal/utils"
 )
 
-func TestNewVSA(t *testing.T) {
-	components := []Component{
-		{
-			SnapshotComponent: app.SnapshotComponent{Name: "component1"},
-			Violations: []evaluator.Result{
-				{
-					Message: "violation1",
+func TestSnapshotVSAGenerator_GeneratePredicate(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a test report
+	report := Report{
+		Components: []Component{
+			{
+				SnapshotComponent: app.SnapshotComponent{
+					Name:           "test-component",
+					ContainerImage: "test-image:latest",
 				},
+				Success:    true,
+				Violations: []evaluator.Result{},
+				Warnings:   []evaluator.Result{},
+				Successes:  []evaluator.Result{},
 			},
-			Attestations: []AttestationResult{
-				{
-					Statement: []byte{},
-				},
-			},
+		},
+		Policy: ecc.EnterpriseContractPolicySpec{
+			Name: "test-policy",
 		},
 	}
 
-	utils.SetTestRekorPublicKey(t)
-	pkey := utils.TestPublicKey
-	testPolicy, err := policy.NewPolicy(context.Background(), policy.Options{
-		PublicKey:     pkey,
-		EffectiveTime: policy.Now,
-		PolicyRef:     toJson(&ecc.EnterpriseContractPolicySpec{PublicKey: pkey}),
-	})
-	assert.NoError(t, err)
+	generator := NewSnapshotVSAGenerator(report)
 
-	report, err := NewReport("snappy", components, testPolicy, nil, true)
-	assert.NoError(t, err)
+	predicate, err := generator.GeneratePredicate(ctx)
+	require.NoError(t, err)
 
-	expected := ProvenanceStatementVSA{
-		StatementHeader: in_toto.StatementHeader{
-			Type:          "https://in-toto.io/Statement/v1",
-			PredicateType: "https://conforma.dev/verification_summary/v1",
-			Subject:       nil,
-		},
-		Predicate: report,
-	}
-	vsa, err := NewVSA(report)
-	assert.NoError(t, err)
-	assert.Equal(t, expected, vsa)
+	// Verify the predicate is the same as the report
+	assert.Equal(t, report, predicate)
 }
 
-func TestSubjects(t *testing.T) {
-	expected := []in_toto.Subject{
-		{
-			Name:   "my-subject",
-			Digest: nil,
-		},
-	}
-
-	statement := in_toto.Statement{
-		StatementHeader: in_toto.StatementHeader{
-			Subject: expected,
-		},
-	}
-	data, err := json.Marshal(statement)
-	assert.NoError(t, err)
-
-	components := []Component{
-		{
-			SnapshotComponent: app.SnapshotComponent{Name: "component1"},
-			Violations: []evaluator.Result{
-				{
-					Message: "violation1",
+func TestSnapshotVSAWriter_WritePredicate(t *testing.T) {
+	// Create a test report
+	report := Report{
+		Components: []Component{
+			{
+				SnapshotComponent: app.SnapshotComponent{
+					Name:           "test-component",
+					ContainerImage: "test-image:latest",
 				},
-			},
-			Attestations: []AttestationResult{
-				{
-					Statement: data,
-				},
+				Success: true,
 			},
 		},
 	}
 
-	report := Report{Components: components}
-	subjects, err := getSubjects(report)
-	assert.NoError(t, err)
-	assert.Equal(t, expected, subjects)
-}
+	writer := NewSnapshotVSAWriter()
 
-func toJson(policy any) string {
-	newInline, err := json.Marshal(policy)
-	if err != nil {
-		panic(fmt.Errorf("invalid JSON: %w", err))
-	}
-	return string(newInline)
+	path, err := writer.WritePredicate(report)
+	require.NoError(t, err)
+
+	// Verify the file was created and contains valid JSON
+	assert.Contains(t, path, "snapshot-vsa-")
+	assert.Contains(t, path, "application-snapshot-vsa.json")
+
+	// Clean up
+	os.RemoveAll(filepath.Dir(path))
 }

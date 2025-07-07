@@ -41,7 +41,7 @@ var loadPrivateKey = cosign.LoadPrivateKey
 type Attestor struct {
 	PredicatePath string // path to the raw VSA (predicate) JSON
 	PredicateType string // e.g. "https://enterprisecontract.dev/attestations/vsa/v1" // TODO: make this configurable
-	ImageDigest   string // sha256:abcd…  (as returned by `skopeo inspect --format {{.Digest}}`)
+	Digest        string // sha256:abcd…  (as returned by `skopeo inspect --format {{.Digest}}`)
 	Repo          string // "quay.io/acme/widget" (hostname/namespace/repo)
 	Signer        *Signer
 }
@@ -71,14 +71,18 @@ func NewSigner(keyPath string, fs afero.Fs) (*Signer, error) {
 }
 
 // Add a constructor with sensible defaults
-func NewAttestor(predicatePath, repo, imageDigest string, signer *Signer) (*Attestor, error) {
+func NewAttestor(predicatePath, repo, digest string, signer *Signer) (*Attestor, error) {
 	return &Attestor{
 		PredicatePath: predicatePath,
 		PredicateType: "https://conforma.dev/verification_summary/v1",
-		ImageDigest:   imageDigest,
+		Digest:        digest,
 		Repo:          repo,
 		Signer:        signer,
 	}, nil
+}
+
+func (a Attestor) TargetDigest() string {
+	return a.Digest
 }
 
 // AttestPredicate builds an in‑toto Statement around the predicate and
@@ -96,7 +100,7 @@ func (a Attestor) AttestPredicate(ctx context.Context) ([]byte, error) {
 	stmt, err := att.GenerateStatement(att.GenerateOpts{
 		Predicate: predFile,
 		Type:      a.PredicateType,
-		Digest:    strings.TrimPrefix(a.ImageDigest, "sha256:"),
+		Digest:    strings.TrimPrefix(a.TargetDigest(), "sha256:"),
 		Repo:      a.Repo,
 		Time:      time.Now, // keeps tests deterministic
 	})

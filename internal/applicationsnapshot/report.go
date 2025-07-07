@@ -18,6 +18,7 @@ package applicationsnapshot
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"encoding/json"
 	"encoding/xml"
@@ -219,11 +220,12 @@ func (r *Report) toFormat(format string) (data []byte, err error) {
 }
 
 func (r *Report) toVSA() ([]byte, error) {
-	vsa, err := NewVSA(*r)
+	generator := NewSnapshotVSAGenerator(*r)
+	predicate, err := generator.GeneratePredicate(context.Background())
 	if err != nil {
 		return []byte{}, err
 	}
-	return json.Marshal(vsa)
+	return json.Marshal(predicate)
 }
 
 // toSummary returns a condensed version of the report.

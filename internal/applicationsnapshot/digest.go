@@ -14,25 +14,20 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package vsa
+package applicationsnapshot
 
 import (
-	"context"
+	"crypto/sha256"
+	"fmt"
+
+	"github.com/spf13/afero"
 )
 
-// PredicateGenerator interface for generating VSA predicates
-type PredicateGenerator[T any] interface {
-	GeneratePredicate(ctx context.Context) (T, error)
-}
-
-// PredicateWriter interface for writing VSA predicates to files
-type PredicateWriter[T any] interface {
-	WritePredicate(pred T) (string, error)
-}
-
-// PredicateAttestor interface for attesting VSA predicates and writing envelopes
-type PredicateAttestor interface {
-	AttestPredicate(ctx context.Context) ([]byte, error)
-	WriteEnvelope(data []byte) (string, error)
-	TargetDigest() string
+// GetVSAPredicateDigest calculates the sha256 digest of the given file path.
+func GetVSAPredicateDigest(fs afero.Fs, path string) (string, error) {
+	data, err := afero.ReadFile(fs, path)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("sha256:%x", sha256.Sum256(data)), nil
 }
