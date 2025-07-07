@@ -146,6 +146,30 @@ func collections(a *ast.AnnotationsRef) []string {
 	return collections
 }
 
+func pipelineIntention(a *ast.AnnotationsRef) []string {
+	pipelineIntentions := make([]string, 0, 3)
+	if a == nil || a.Annotations == nil || a.Annotations.Custom == nil {
+		return pipelineIntentions
+	}
+
+	if values, ok := a.Annotations.Custom["pipeline_intention"].([]any); ok {
+		for _, value := range values {
+			if intention, ok := value.(string); ok {
+				pipelineIntentions = append(pipelineIntentions, intention)
+			}
+		}
+		// Debug logging
+		if len(pipelineIntentions) > 0 {
+			fmt.Printf("Rule Debug: Found pipeline_intention: %v\n", pipelineIntentions)
+		}
+	} else {
+		// Debug logging
+		fmt.Printf("Rule Debug: No pipeline_intention found in annotations\n")
+	}
+
+	return pipelineIntentions
+}
+
 func packages(a *ast.AnnotationsRef) []string {
 	packages := []string{}
 	if a == nil {
@@ -262,32 +286,34 @@ const (
 )
 
 type Info struct {
-	Code             string
-	Collections      []string
-	DependsOn        []string
-	Description      string
-	DocumentationUrl string
-	Severity         string
-	EffectiveOn      string
-	Kind             RuleKind
-	Package          string
-	ShortName        string
-	Solution         string
-	Title            string
+	Code              string
+	Collections       []string
+	DependsOn         []string
+	Description       string
+	DocumentationUrl  string
+	Severity          string
+	EffectiveOn       string
+	Kind              RuleKind
+	Package           string
+	PipelineIntention []string
+	ShortName         string
+	Solution          string
+	Title             string
 }
 
 func RuleInfo(a *ast.AnnotationsRef) Info {
 	return Info{
-		Code:             code(a),
-		Collections:      collections(a),
-		Description:      description(a),
-		DependsOn:        dependsOn(a),
-		DocumentationUrl: documentationUrl(a),
-		EffectiveOn:      effectiveOn(a),
-		Solution:         solution(a),
-		Kind:             kind(a),
-		Package:          packageName(a),
-		ShortName:        shortName(a),
-		Title:            title(a),
+		Code:              code(a),
+		Collections:       collections(a),
+		Description:       description(a),
+		DependsOn:         dependsOn(a),
+		DocumentationUrl:  documentationUrl(a),
+		EffectiveOn:       effectiveOn(a),
+		Solution:          solution(a),
+		Kind:              kind(a),
+		Package:           packageName(a),
+		PipelineIntention: pipelineIntention(a),
+		ShortName:         shortName(a),
+		Title:             title(a),
 	}
 }

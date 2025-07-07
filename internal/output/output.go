@@ -218,7 +218,7 @@ func keepSomeMetadata(results []evaluator.Result) {
 
 func keepSomeMetadataSingle(result evaluator.Result) {
 	for key := range result.Metadata {
-		if key == "code" || key == "effective_on" || key == "term" {
+		if key == "code" || key == "effective_on" || key == "term" || key == "pipeline_intention" {
 			continue
 		}
 		delete(result.Metadata, key)

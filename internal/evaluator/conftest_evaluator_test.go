@@ -1402,6 +1402,7 @@ func TestCollectAnnotationData(t *testing.T) {
 		#   collections: [A, B, C]
 		#   effective_on: 2022-01-01T00:00:00Z
 		#   depends_on: a.b.c
+		#   pipeline_intention: [release, production]
 		deny contains msg if {
 			msg := "hi"
 		}`), ast.ParserOptions{
@@ -1413,16 +1414,17 @@ func TestCollectAnnotationData(t *testing.T) {
 
 	assert.Equal(t, policyRules{
 		"a.b.c.short": {
-			Code:             "a.b.c.short",
-			Collections:      []string{"A", "B", "C"},
-			DependsOn:        []string{"a.b.c"},
-			Description:      "Description",
-			EffectiveOn:      "2022-01-01T00:00:00Z",
-			Kind:             rule.Deny,
-			Package:          "a.b.c",
-			ShortName:        "short",
-			Title:            "Title",
-			DocumentationUrl: "https://conforma.dev/docs/policy/release_policy.html#c__short",
+			Code:              "a.b.c.short",
+			Collections:       []string{"A", "B", "C"},
+			DependsOn:         []string{"a.b.c"},
+			Description:       "Description",
+			EffectiveOn:       "2022-01-01T00:00:00Z",
+			Kind:              rule.Deny,
+			Package:           "a.b.c",
+			PipelineIntention: []string{"release", "production"},
+			ShortName:         "short",
+			Title:             "Title",
+			DocumentationUrl:  "https://conforma.dev/docs/policy/release_policy.html#c__short",
 		},
 	}, rules)
 }
@@ -1451,6 +1453,11 @@ func TestRuleMetadata(t *testing.T) {
 			Title:       "Warning3",
 			Description: "Warning 3 description",
 			EffectiveOn: effectiveOnTest,
+		},
+		"pipelineIntentionRule": rule.Info{
+			Title:             "Pipeline Intention Rule",
+			Description:       "Rule with pipeline intention",
+			PipelineIntention: []string{"release", "production"},
 		},
 	}
 	cases := []struct {
@@ -1542,6 +1549,25 @@ func TestRuleMetadata(t *testing.T) {
 			want: Result{
 				Metadata: map[string]any{
 					"collections": []any{"A"},
+				},
+			},
+		},
+		{
+			name: "add pipeline intention metadata",
+			result: Result{
+				Metadata: map[string]any{
+					"code":        "pipelineIntentionRule",
+					"collections": []any{"B"},
+				},
+			},
+			rules: rules,
+			want: Result{
+				Metadata: map[string]any{
+					"code":               "pipelineIntentionRule",
+					"collections":        []string{"B"},
+					"title":              "Pipeline Intention Rule",
+					"description":        "Rule with pipeline intention",
+					"pipeline_intention": []string{"release", "production"},
 				},
 			},
 		},
