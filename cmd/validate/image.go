@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	hd "github.com/MakeNowJust/heredoc"
+	"github.com/google/go-containerregistry/pkg/name"
 	app "github.com/konflux-ci/application-api/api/v1alpha1"
 	"github.com/sigstore/cosign/v2/pkg/cosign"
 	log "github.com/sirupsen/logrus"
@@ -39,6 +40,7 @@ import (
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/policy/source"
 	"github.com/conforma/cli/internal/utils"
+	"github.com/conforma/cli/internal/utils/oci"
 	validate_utils "github.com/conforma/cli/internal/validate"
 	"github.com/conforma/cli/internal/validate/vsa"
 )
@@ -458,40 +460,45 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 			}
 
 			if data.vsaEnabled {
-				generator := vsa.NewGenerator(report)
-				writer := vsa.NewWriter()
-				for _, comp := range components {
-					writtenPath, err := vsa.GenerateAndWriteVSA(cmd.Context(), generator, writer, comp)
-					if err != nil {
-						log.Error(err)
-						continue
-					}
+				signer, err := vsa.NewSigner(data.vsaSigningKey, utils.FS(cmd.Context()))
+				if err != nil {
+					log.Error(err)
+					return err
+				}
 
-					signer, err := vsa.NewSigner(data.vsaSigningKey, utils.FS(cmd.Context()))
-					if err != nil {
-						log.Error(err)
-						continue
-					}
+				// Create VSA service
+				vsaService := vsa.NewServiceWithFS(signer, utils.FS(cmd.Context()))
 
-					// Get the git URL safely, defaulting to empty string if GitSource is nil
-					var gitURL string
+				// Define helper functions for getting git URL and digest
+				getGitURL := func(comp applicationsnapshot.Component) string {
 					if comp.Source.GitSource != nil {
-						gitURL = comp.Source.GitSource.URL
+						return comp.Source.GitSource.URL
+					}
+					return ""
+				}
+
+				getDigest := func(comp applicationsnapshot.Component) (string, error) {
+					imageRef, err := name.ParseReference(comp.ContainerImage)
+					if err != nil {
+						return "", fmt.Errorf("failed to parse image reference %s: %v", comp.ContainerImage, err)
 					}
 
-					attestor, err := vsa.NewAttestor(writtenPath, gitURL, comp.ContainerImage, signer)
+					digest, err := oci.NewClient(cmd.Context()).ResolveDigest(imageRef)
 					if err != nil {
-						log.Error(err)
-						continue
+						return "", fmt.Errorf("failed to resolve digest for image %s: %v", comp.ContainerImage, err)
 					}
-					envelope, err := vsa.AttestVSA(cmd.Context(), attestor, comp)
-					if err != nil {
-						log.Error(err)
-						continue
-					}
-					log.Infof("[VSA] VSA attested and envelope written to %s", envelope)
+
+					return digest, nil
+				}
+
+				// Process all VSAs using the service
+				err = vsaService.ProcessAllVSAs(cmd.Context(), report, getGitURL, getDigest)
+				if err != nil {
+					log.Errorf("Failed to process VSAs: %v", err)
+					// Don't return error here, continue with the rest of the command
 				}
 			}
+
 			if data.strict && !report.Success {
 				return errors.New("success criteria not met")
 			}

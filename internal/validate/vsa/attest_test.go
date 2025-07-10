@@ -187,7 +187,7 @@ func TestAttestPredicate(t *testing.T) {
 				return Attestor{
 					PredicatePath: pred,
 					PredicateType: "https://enterprisecontract.dev/attestations/vsa/v1",
-					ImageDigest:   digest,
+					Digest:        digest,
 					Repo:          repo,
 					Signer:        signer,
 				}, nil
@@ -206,7 +206,7 @@ func TestAttestPredicate(t *testing.T) {
 				return Attestor{
 					PredicatePath: filepath.Join(tmp, "no.json"),
 					PredicateType: "https://enterprisecontract.dev/attestations/vsa/v1",
-					ImageDigest:   digest,
+					Digest:        digest,
 					Repo:          repo,
 					Signer:        signer,
 				}, nil

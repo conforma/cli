@@ -17,45 +17,74 @@
 package applicationsnapshot
 
 import (
-	"github.com/in-toto/in-toto-golang/in_toto"
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/spf13/afero"
 )
 
-const (
-	// Make it visible elsewhere
-	PredicateVSAProvenance = "https://conforma.dev/verification_summary/v1"
-	StatmentVSA            = "https://in-toto.io/Statement/v1"
-)
-
-type ProvenanceStatementVSA struct {
-	in_toto.StatementHeader
-	Predicate Report `json:"predicate"`
+// SnapshotVSAWriter handles writing application snapshot VSA predicates to files
+type SnapshotVSAWriter struct {
+	FS            afero.Fs    // defaults to afero.NewOsFs()
+	TempDirPrefix string      // defaults to "snapshot-vsa-"
+	FilePerm      os.FileMode // defaults to 0600
 }
 
-func NewVSA(report Report) (ProvenanceStatementVSA, error) {
-	subjects, err := getSubjects(report)
-	if err != nil {
-		return ProvenanceStatementVSA{}, err
+// NewSnapshotVSAWriter creates a new application snapshot VSA file writer
+func NewSnapshotVSAWriter() *SnapshotVSAWriter {
+	return &SnapshotVSAWriter{
+		FS:            afero.NewOsFs(),
+		TempDirPrefix: "snapshot-vsa-",
+		FilePerm:      0o600,
 	}
-
-	return ProvenanceStatementVSA{
-		StatementHeader: in_toto.StatementHeader{
-			Type:          StatmentVSA,
-			PredicateType: PredicateVSAProvenance,
-			Subject:       subjects,
-		},
-		Predicate: report,
-	}, nil
 }
 
-func getSubjects(report Report) ([]in_toto.Subject, error) {
-	statements, err := report.attestations()
+// WritePredicate writes the Report as a VSA predicate to a file
+func (w *SnapshotVSAWriter) WritePredicate(report Report) (string, error) {
+	log.Infof("Writing application snapshot VSA")
+
+	// Serialize with indent
+	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
-		return []in_toto.Subject{}, err
+		return "", fmt.Errorf("failed to marshal application snapshot VSA: %w", err)
 	}
 
-	var subjects []in_toto.Subject
-	for _, stmt := range statements {
-		subjects = append(subjects, stmt.Subject...)
+	// Create temp directory
+	tempDir, err := afero.TempDir(w.FS, "", w.TempDirPrefix)
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp directory: %w", err)
 	}
-	return subjects, nil
+
+	// Write to file
+	filename := "application-snapshot-vsa.json"
+	filepath := filepath.Join(tempDir, filename)
+	err = afero.WriteFile(w.FS, filepath, data, w.FilePerm)
+	if err != nil {
+		return "", fmt.Errorf("failed to write application snapshot VSA to file: %w", err)
+	}
+
+	log.Infof("Application snapshot VSA written to: %s", filepath)
+	return filepath, nil
+}
+
+type SnapshotVSAGenerator struct {
+	Report Report
+}
+
+// NewSnapshotVSAGenerator creates a new VSA predicate generator for application snapshots
+func NewSnapshotVSAGenerator(report Report) *SnapshotVSAGenerator {
+	return &SnapshotVSAGenerator{
+		Report: report,
+	}
+}
+
+// GeneratePredicate creates a VSA predicate for the entire application snapshot
+func (g *SnapshotVSAGenerator) GeneratePredicate(ctx context.Context) (Report, error) {
+	log.Infof("Generating application snapshot VSA predicate with %d components", len(g.Report.Components))
+
+	return g.Report, nil
 }
