@@ -45,35 +45,37 @@ type Predicate struct {
 
 // Generator handles VSA predicate generation
 type Generator struct {
-	Report applicationsnapshot.Report
+	Report    applicationsnapshot.Report
+	Component applicationsnapshot.Component
 }
 
 // NewGenerator creates a new VSA predicate generator
-func NewGenerator(report applicationsnapshot.Report) *Generator {
+func NewGenerator(report applicationsnapshot.Report, comp applicationsnapshot.Component) *Generator {
 	return &Generator{
-		Report: report,
+		Report:    report,
+		Component: comp,
 	}
 }
 
 // GeneratePredicate creates a Predicate for a validated image/component.
-func (g *Generator) GeneratePredicate(ctx context.Context, comp applicationsnapshot.Component) (*Predicate, error) {
-	log.Infof("Generating VSA predicate for image: %s", comp.ContainerImage)
+func (g *Generator) GeneratePredicate(ctx context.Context) (*Predicate, error) {
+	log.Infof("Generating VSA predicate for image: %s", g.Component.ContainerImage)
 
 	// Compose the component info as a map
 	componentInfo := map[string]interface{}{
-		"name":           comp.Name,
-		"containerImage": comp.ContainerImage,
-		"source":         comp.Source,
+		"name":           g.Component.Name,
+		"containerImage": g.Component.ContainerImage,
+		"source":         g.Component.Source,
 	}
 
 	// Compose rule results: combine violations, warnings, and successes
-	ruleResults := make([]evaluator.Result, 0, len(comp.Violations)+len(comp.Warnings)+len(comp.Successes))
-	ruleResults = append(ruleResults, comp.Violations...)
-	ruleResults = append(ruleResults, comp.Warnings...)
-	ruleResults = append(ruleResults, comp.Successes...)
+	ruleResults := make([]evaluator.Result, 0, len(g.Component.Violations)+len(g.Component.Warnings)+len(g.Component.Successes))
+	ruleResults = append(ruleResults, g.Component.Violations...)
+	ruleResults = append(ruleResults, g.Component.Warnings...)
+	ruleResults = append(ruleResults, g.Component.Successes...)
 
 	validationResult := "failed"
-	if comp.Success {
+	if g.Component.Success {
 		validationResult = "passed"
 	}
 
@@ -83,7 +85,7 @@ func (g *Generator) GeneratePredicate(ctx context.Context, comp applicationsnaps
 	}
 
 	return &Predicate{
-		ImageRef:         comp.ContainerImage,
+		ImageRef:         g.Component.ContainerImage,
 		ValidationResult: validationResult,
 		Timestamp:        time.Now().UTC().Format(time.RFC3339),
 		Verifier:         "ec-cli",
@@ -119,22 +121,22 @@ func (w *Writer) WritePredicate(predicate *Predicate) (string, error) {
 		return "", fmt.Errorf("failed to marshal VSA predicate: %w", err)
 	}
 
-	// Create temp directory using the injected FS and prefix
+	// Create temp directory
 	tempDir, err := afero.TempDir(w.FS, "", w.TempDirPrefix)
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp directory: %w", err)
 	}
 
-	fullPath := filepath.Join(tempDir, "vsa.json")
-
-	log.Infof("Writing VSA file to %s", fullPath)
-	// Write file with injected FS and file-permissions
-	if err := afero.WriteFile(w.FS, fullPath, data, w.FilePerm); err != nil {
-		log.Errorf("Failed to write VSA file to %s: %v", fullPath, err)
-		return "", fmt.Errorf("failed to write VSA file: %w", err)
+	// Write to file
+	filename := fmt.Sprintf("vsa-%s.json", predicate.Component["name"])
+	filepath := filepath.Join(tempDir, filename)
+	err = afero.WriteFile(w.FS, filepath, data, w.FilePerm)
+	if err != nil {
+		return "", fmt.Errorf("failed to write VSA predicate to file: %w", err)
 	}
 
-	return fullPath, nil
+	log.Infof("VSA predicate written to: %s", filepath)
+	return filepath, nil
 }
 
 // AttestationUploader is a function that uploads an attestation and returns a result string or error

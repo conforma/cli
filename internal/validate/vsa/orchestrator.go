@@ -19,13 +19,11 @@ package vsa
 import (
 	"context"
 	"fmt"
-
-	"github.com/conforma/cli/internal/applicationsnapshot"
 )
 
 // GenerateAndWriteVSA generates a VSA predicate and writes it to a file, returning the written path.
-func GenerateAndWriteVSA(ctx context.Context, generator PredicateGenerator, writer PredicateWriter, comp applicationsnapshot.Component) (string, error) {
-	pred, err := generator.GeneratePredicate(ctx, comp)
+func GenerateAndWriteVSA[T any](ctx context.Context, generator PredicateGenerator[T], writer PredicateWriter[T]) (string, error) {
+	pred, err := generator.GeneratePredicate(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -36,15 +34,15 @@ func GenerateAndWriteVSA(ctx context.Context, generator PredicateGenerator, writ
 	return writtenPath, nil
 }
 
-// AttestVSA handles VSA attestation and envelope writing for a single component.
-func AttestVSA(ctx context.Context, attestor PredicateAttestor, comp applicationsnapshot.Component) (string, error) {
+// AttestVSA handles VSA attestation and envelope writing for the target component.
+func AttestVSA(ctx context.Context, attestor PredicateAttestor) (string, error) {
 	env, err := attestor.AttestPredicate(ctx)
 	if err != nil {
-		return "", fmt.Errorf("[VSA] Error attesting VSA for image %s: %w", comp.ContainerImage, err)
+		return "", fmt.Errorf("[VSA] Error attesting VSA for artifact %s: %w", attestor.TargetDigest(), err)
 	}
 	envelopePath, err := attestor.WriteEnvelope(env)
 	if err != nil {
-		return "", fmt.Errorf("[VSA] Error writing envelope for image %s: %w", comp.ContainerImage, err)
+		return "", fmt.Errorf("[VSA] Error writing envelope for artifact %s: %w", attestor.TargetDigest(), err)
 	}
 	return envelopePath, nil
 }
