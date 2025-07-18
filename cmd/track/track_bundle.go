@@ -62,14 +62,14 @@ func trackBundleCmd(track trackBundleFn, pullImage pullImageFn, pushImage pushIm
 			or a digest is required.
 
 			The output is meant to assist enforcement of policies that ensure the
-			most recent Tekton Bundle is used. As such, each entry contains an
-			"effective_on" date which is set to 30 days from today. This indicates
-			the Tekton Bundle usage should be updated within that period.
+			most recent Tekton Bundle is used. Each entry contains an "expires_on"
+			date which indicates when that specific bundle version should no longer
+			be used. The most recent bundle has no expiration date until it is
+			replaced by a newer version.
 
-			If --prune is set, on by default, non-acceptable entries are removed.
-			Any entry with an effective_on date in the future, and the entry with
-			the most recent effective_on date *not* in the future are considered
-			acceptable.
+			If --prune is set, on by default, expired entries are removed.
+			Any entry with an expires_on date in the future (or no expires_on date)
+			is considered acceptable and will be kept.
 		`),
 
 		Example: hd.Doc(`
@@ -181,7 +181,7 @@ func trackBundleCmd(track trackBundleFn, pullImage pullImageFn, pushImage pushIm
 
 	cmd.Flags().BoolVar(&params.freshen, "freshen", params.freshen, "resolve image tags to catch updates and use the latest image for the tag")
 
-	cmd.Flags().IntVar(&params.inEffectDays, "in-effect-days", params.inEffectDays, "number of days representing when the added reference becomes effective")
+	cmd.Flags().IntVar(&params.inEffectDays, "in-effect-days", params.inEffectDays, "number of days after which older bundle entries expire (most recent entry stays valid until replaced)")
 
 	cmd.MarkFlagsOneRequired("bundle", "git", "input")
 

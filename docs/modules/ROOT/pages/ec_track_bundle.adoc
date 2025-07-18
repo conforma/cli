@@ -12,14 +12,14 @@ command will query the registry to determine its value. Either a tag
 or a digest is required.
 
 The output is meant to assist enforcement of policies that ensure the
-most recent Tekton Bundle is used. As such, each entry contains an
-"effective_on" date which is set to 30 days from today. This indicates
-the Tekton Bundle usage should be updated within that period.
+most recent Tekton Bundle is used. Each entry contains an "expires_on"
+date which indicates when that specific bundle version should no longer
+be used. The most recent bundle has no expiration date until it is
+replaced by a newer version.
 
-If --prune is set, on by default, non-acceptable entries are removed.
-Any entry with an effective_on date in the future, and the entry with
-the most recent effective_on date *not* in the future are considered
-acceptable.
+If --prune is set, on by default, expired entries are removed.
+Any entry with an expires_on date in the future (or no expires_on date)
+is considered acceptable and will be kept.
 
 [source,shell]
 ----
@@ -65,7 +65,7 @@ Update existing acceptable bundles:
 --freshen:: resolve image tags to catch updates and use the latest image for the tag (Default: false)
 -g, --git:: git references to track - may be used multiple times (Default: [])
 -h, --help:: help for bundle (Default: false)
---in-effect-days:: number of days representing when the added reference becomes effective (Default: 30)
+--in-effect-days:: number of days after which older bundle entries expire (most recent entry stays valid until replaced) (Default: 30)
 -i, --input:: existing tracking file
 -o, --output:: write modified tracking file to a file. Use empty string for stdout, default behavior
 -p, --prune:: remove entries that are no longer acceptable, i.e. a newer entry already effective exists (Default: true)

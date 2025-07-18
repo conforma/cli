@@ -34,8 +34,7 @@ import (
 const ociPrefix = "oci://"
 
 type taskRecord struct {
-	Ref         string    `json:"ref"`
-	EffectiveOn time.Time `json:"effective_on"`
+	Ref string `json:"ref"`
 	// ExpiresOn should be omitted if there isn't a value. Not using a pointer means it will always
 	// have a value, e.g. 0001-01-01T00:00:00Z.
 	ExpiresOn  *time.Time `json:"expires_on,omitempty"`
@@ -111,20 +110,20 @@ func Track(ctx context.Context, urls []string, input []byte, prune bool, freshen
 
 	imageUrls, gitUrls := groupUrls(urls)
 
-	days := oneDay * time.Duration(inEffectDays)
-	effectiveOn := time.Now().Add(days).UTC().Round(oneDay)
+	// Note: inEffectDays parameter is kept for backward compatibility but no longer used
+	// Records now use creation timestamps instead of future effective dates
 
-	if err := t.trackImageReferences(ctx, imageUrls, freshen, effectiveOn); err != nil {
+	if err := t.trackImageReferences(ctx, imageUrls, freshen); err != nil {
 		return nil, err
 	}
 
-	if err := t.trackGitReferences(ctx, gitUrls, freshen, effectiveOn); err != nil {
+	if err := t.trackGitReferences(ctx, gitUrls, freshen); err != nil {
 		return nil, err
 	}
 
 	t.filterBundles(prune)
 
-	t.setExpiration()
+	t.setExpiration(inEffectDays)
 
 	return t.Output()
 }
@@ -143,7 +142,7 @@ func groupUrls(urls []string) ([]string, []string) {
 	return imgs, gits
 }
 
-func (t *Tracker) trackImageReferences(ctx context.Context, urls []string, freshen bool, effectiveOn time.Time) error {
+func (t *Tracker) trackImageReferences(ctx context.Context, urls []string, freshen bool) error {
 	refs, err := image.ParseAndResolveAll(ctx, urls, name.StrictValidation)
 	if err != nil {
 		return err
@@ -168,10 +167,9 @@ func (t *Tracker) trackImageReferences(ctx context.Context, urls []string, fresh
 
 		if hasTask {
 			t.addTrustedTaskRecord(ociPrefix, taskRecord{
-				Ref:         ref.Digest,
-				Tag:         ref.Tag,
-				EffectiveOn: effectiveOn,
-				Repository:  ref.Repository,
+				Ref:        ref.Digest,
+				Tag:        ref.Tag,
+				Repository: ref.Repository,
 			})
 		}
 	}
@@ -179,7 +177,7 @@ func (t *Tracker) trackImageReferences(ctx context.Context, urls []string, fresh
 	return nil
 }
 
-func (t *Tracker) trackGitReferences(ctx context.Context, urls []string, freshen bool, effectiveOn time.Time) error {
+func (t *Tracker) trackGitReferences(ctx context.Context, urls []string, freshen bool) error {
 	if freshen {
 		log.Debug("Freshen is enabled")
 
@@ -224,9 +222,8 @@ func (t *Tracker) trackGitReferences(ctx context.Context, urls []string, freshen
 		}
 
 		t.addTrustedTaskRecord("", taskRecord{
-			Repository:  fmt.Sprintf("%s//%s", repository, path),
-			Ref:         rev,
-			EffectiveOn: effectiveOn,
+			Repository: fmt.Sprintf("%s//%s", repository, path),
+			Ref:        rev,
 		})
 	}
 
@@ -263,9 +260,7 @@ func (t *Tracker) filterBundles(prune bool) {
 
 // filterRecords reduces the list of records by removing superfluous entries.
 // It removes records that have the same reference in a certain group. If prune is
-// true, it skips any record that is no longer acceptable. Any record with an
-// EffectiveOn date in the future, and the record with the most recent
-// EffectiveOn date *not* in the future are considered acceptable.
+// true, it removes records that have already expired based on their expires_on date.
 func filterRecords(records []taskRecord, prune bool) []taskRecord {
 	now := time.Now().UTC()
 
@@ -290,17 +285,10 @@ func filterRecords(records []taskRecord, prune bool) []taskRecord {
 
 	var relevant []taskRecord
 	if prune {
-		// skip tracks when records should start to be pruned.
-		skip := false
 		for _, r := range unique {
-			if skip {
-				continue
-			}
-			relevant = append(relevant, r)
-			if !skip {
-				if now.After(r.EffectiveOn) {
-					skip = true
-				}
+			// Keep records that haven't expired yet, or records with no expiration date
+			if r.ExpiresOn == nil || now.Before(*r.ExpiresOn) {
+				relevant = append(relevant, r)
 			}
 		}
 	} else {
@@ -314,20 +302,23 @@ func filterRecords(records []taskRecord, prune bool) []taskRecord {
 	return relevant
 }
 
-// setExpiration sets the expires_on attribute on records. The expires_on value for record N is the
-// effective_on value of the n-1 record. The first record on the list does not contain an expires_on
-// value since there is no newer record that invalidates it in the future.
-// TODO: Probably need to compute the expires_on value without requiring the "effective_on" value so
-// we don't have to always require both values. But this may be required during some transition
-// period.
-func (t *Tracker) setExpiration() {
+// setExpiration sets the expires_on attribute on records using a duration-based approach.
+// Each record expires after a configurable duration based on inEffectDays from when it's added.
+// The most recent record (index 0) gets no expiration date, making it the current active record.
+func (t *Tracker) setExpiration(inEffectDays int) {
+	expirationDuration := time.Duration(inEffectDays) * oneDay // Use --in-effect-days flag value
+	now := time.Now().UTC().Round(oneDay)
+
 	for _, records := range t.TrustedTasks {
-		var expiration *time.Time
 		for i := range records {
-			if expiration != nil {
-				records[i].ExpiresOn = expiration
+			if i == 0 {
+				// Most recent record doesn't expire
+				records[i].ExpiresOn = nil
+			} else {
+				// Older records expire after the duration
+				expiresOn := now.Add(expirationDuration)
+				records[i].ExpiresOn = &expiresOn
 			}
-			expiration = &records[i].EffectiveOn
 		}
 	}
 }
