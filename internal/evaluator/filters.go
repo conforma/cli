@@ -52,16 +52,23 @@ func NewDefaultFilterFactory() FilterFactory { return &DefaultFilterFactory{} }
 func (f *DefaultFilterFactory) CreateFilters(source ecc.Source) []RuleFilter {
 	var filters []RuleFilter
 
-	// ── 1. Pipeline‑intention ───────────────────────────────────────────────
+	// ── 1. Pipeline‑intention ───────────────────────────────────────────────
 	intentions := extractStringArrayFromRuleData(source, "pipeline_intention")
+	hasIncludes := source.Config != nil && len(source.Config.Include) > 0
+
+	// When pipeline_intention is set, only include packages that contain rules with pipeline_intention metadata
 	if len(intentions) > 0 {
 		filters = append(filters, NewPipelineIntentionFilter(intentions))
 	}
 
-	// ── 2. Include list (handles @collection / pkg / pkg.rule) ─────────────
-	if source.Config != nil && len(source.Config.Include) > 0 {
+	// ── 2. Include list (handles @collection / pkg / pkg.rule) ─────────────
+	if hasIncludes {
 		filters = append(filters, NewIncludeListFilter(source.Config.Include))
 	}
+
+	// ── 3. Default behavior: when no includes and no pipeline_intention, include all packages ──
+	// This is handled by not adding any filters when both conditions are false
+	// When no filters are applied, all packages are included by default
 
 	return filters
 }
@@ -79,15 +86,13 @@ func NewPipelineIntentionFilter(target []string) RuleFilter {
 
 func (f *PipelineIntentionFilter) Include(_ string, rules []rule.Info) bool {
 	if len(f.targetIntentions) == 0 {
-		return true // no filtering requested
+		return true // no filtering requested
 	}
+
+	// When pipeline_intention is set, only include packages that contain rules with pipeline_intention metadata
 	for _, r := range rules {
-		for _, pi := range r.PipelineIntention {
-			for _, want := range f.targetIntentions {
-				if pi == want {
-					return true
-				}
-			}
+		if len(r.PipelineIntention) > 0 {
+			return true
 		}
 	}
 	return false
