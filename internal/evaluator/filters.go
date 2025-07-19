@@ -42,7 +42,37 @@ type FilterFactory interface {
 }
 
 //////////////////////////////////////////////////////////////////////////////
-// DefaultFilterFactory
+// BuiltinFilter
+//////////////////////////////////////////////////////////////////////////////
+
+// BuiltinFilter ensures that builtin packages and rules are always included
+// regardless of other filtering criteria.
+type BuiltinFilter struct{}
+
+func NewBuiltinFilter() RuleFilter {
+	return &BuiltinFilter{}
+}
+
+func (f *BuiltinFilter) Include(pkg string, rules []rule.Info) bool {
+	// Always include packages with "builtin" prefix
+	if strings.HasPrefix(pkg, "builtin") {
+		return true
+	}
+
+	// Always include packages that contain rules with "builtin" collection
+	for _, r := range rules {
+		for _, c := range r.Collections {
+			if c == "builtin" {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// DefaultFilterFactory
 //////////////////////////////////////////////////////////////////////////////
 
 type DefaultFilterFactory struct{}
@@ -51,6 +81,9 @@ func NewDefaultFilterFactory() FilterFactory { return &DefaultFilterFactory{} }
 
 func (f *DefaultFilterFactory) CreateFilters(source ecc.Source) []RuleFilter {
 	var filters []RuleFilter
+
+	// ── 0. Builtin filter (always first, ensures builtin packages are always included) ──
+	filters = append(filters, NewBuiltinFilter())
 
 	// ── 1. Pipeline‑intention ───────────────────────────────────────────────
 	intentions := extractStringArrayFromRuleData(source, "pipeline_intention")
@@ -147,12 +180,16 @@ func NewNamespaceFilter(filters ...RuleFilter) *NamespaceFilter {
 }
 
 func (nf *NamespaceFilter) Filter(rules policyRules) []string {
-	// group rules by package
+	// group rules by package
 	grouped := make(map[string][]rule.Info)
 	for fqName, r := range rules {
-		pkg := strings.SplitN(fqName, ".", 2)[0]
+		pkg := r.Package
 		if pkg == "" {
-			pkg = fqName // fallback
+			// fallback to extracting from key if Package is not set
+			pkg = strings.SplitN(fqName, ".", 2)[0]
+			if pkg == "" {
+				pkg = fqName // fallback
+			}
 		}
 		grouped[pkg] = append(grouped[pkg], r)
 	}
@@ -160,13 +197,41 @@ func (nf *NamespaceFilter) Filter(rules policyRules) []string {
 	var out []string
 	for pkg, pkgRules := range grouped {
 		include := true
-		for _, flt := range nf.filters {
-			ok := flt.Include(pkg, pkgRules)
 
-			if !ok {
-				include = false
-				break
+		// Check if this is a builtin package first
+		builtinIncluded := false
+		for _, flt := range nf.filters {
+			if _, ok := flt.(*BuiltinFilter); ok {
+				if flt.Include(pkg, pkgRules) {
+					builtinIncluded = true
+					break
+				}
 			}
+		}
+
+		// If it's a builtin package, include it regardless of other filters
+		if builtinIncluded {
+			out = append(out, pkg)
+			continue
+		}
+
+		// For non-builtin packages, apply all filters with AND logic
+		// But if there are no non-builtin filters, include all packages
+		hasNonBuiltinFilters := false
+		for _, flt := range nf.filters {
+			if _, ok := flt.(*BuiltinFilter); !ok {
+				hasNonBuiltinFilters = true
+				ok := flt.Include(pkg, pkgRules)
+				if !ok {
+					include = false
+					break
+				}
+			}
+		}
+
+		// If there are no non-builtin filters, include all packages
+		if !hasNonBuiltinFilters {
+			include = true
 		}
 
 		if include {

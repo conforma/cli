@@ -53,27 +53,27 @@ func TestDefaultFilterFactory(t *testing.T) {
 		{
 			name:        "no config",
 			source:      ecc.Source{},
-			wantFilters: 0,
+			wantFilters: 1, // BuiltinFilter is always included
 		},
 		{
 			name:        "pipeline intention only",
 			source:      makeSource(`{"pipeline_intention":"release"}`, nil),
-			wantFilters: 1,
+			wantFilters: 2, // BuiltinFilter + PipelineIntentionFilter
 		},
 		{
 			name:        "include list only",
 			source:      makeSource("", []string{"@redhat", "cve"}),
-			wantFilters: 1,
+			wantFilters: 2, // BuiltinFilter + IncludeListFilter
 		},
 		{
 			name:        "both pipeline_intention and include list",
 			source:      makeSource(`{"pipeline_intention":"release"}`, []string{"@redhat", "cve"}),
-			wantFilters: 2,
+			wantFilters: 3, // BuiltinFilter + PipelineIntentionFilter + IncludeListFilter
 		},
 		{
 			name:        "no includes and no pipeline_intention - should include all packages",
 			source:      makeSource("", nil),
-			wantFilters: 0, // No filters means all packages are included
+			wantFilters: 1, // Only BuiltinFilter
 		},
 	}
 
@@ -174,16 +174,46 @@ func TestPipelineIntentionFilter(t *testing.T) {
 }
 
 //////////////////////////////////////////////////////////////////////////////
+// BuiltinFilter
+//////////////////////////////////////////////////////////////////////////////
+
+func TestBuiltinFilter(t *testing.T) {
+	rules := policyRules{
+		"builtin.image.rule":       {Package: "builtin.image", Collections: []string{"builtin"}},
+		"builtin.attestation.rule": {Package: "builtin.attestation", Collections: []string{"builtin"}},
+		"other.package.rule":       {Package: "other", Collections: []string{"security"}},
+		"another.package.rule":     {Package: "another", Collections: []string{"redhat"}},
+	}
+
+	tests := []struct {
+		name     string
+		wantPkgs []string
+	}{
+		{
+			name:     "builtin packages and rules with builtin collection are always included",
+			wantPkgs: []string{"builtin.image", "builtin.attestation", "other", "another"},
+		},
+	}
+
+	for _, tc := range tests {
+		got := filterNamespaces(rules, NewBuiltinFilter())
+		assert.ElementsMatch(t, tc.wantPkgs, got, tc.name)
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////////
 // Complete filtering behavior tests
 //////////////////////////////////////////////////////////////////////////////
 
 func TestCompleteFilteringBehavior(t *testing.T) {
 	rules := policyRules{
-		"release.rule1": {PipelineIntention: []string{"release"}},
-		"release.rule2": {PipelineIntention: []string{"release", "production"}},
-		"dev.rule1":     {PipelineIntention: []string{"dev"}},
-		"general.rule1": {}, // No pipeline_intention metadata
-		"general.rule2": {}, // No pipeline_intention metadata
+		"release.rule1":            {Package: "release", PipelineIntention: []string{"release"}},
+		"release.rule2":            {Package: "release", PipelineIntention: []string{"release", "production"}},
+		"dev.rule1":                {Package: "dev", PipelineIntention: []string{"dev"}},
+		"general.rule1":            {Package: "general"}, // No pipeline_intention metadata
+		"general.rule2":            {Package: "general"}, // No pipeline_intention metadata
+		"builtin.image.rule":       {Package: "builtin.image", Collections: []string{"builtin"}},
+		"builtin.attestation.rule": {Package: "builtin.attestation", Collections: []string{"builtin"}},
 	}
 
 	tests := []struct {
@@ -194,22 +224,22 @@ func TestCompleteFilteringBehavior(t *testing.T) {
 		{
 			name:        "no includes and no pipeline_intention - all packages included",
 			source:      makeSource("", nil),
-			expectedPkg: []string{"release", "dev", "general"},
+			expectedPkg: []string{"release", "dev", "general", "builtin.image", "builtin.attestation"},
 		},
 		{
 			name:        "pipeline_intention set - only packages with pipeline_intention metadata",
 			source:      makeSource(`{"pipeline_intention":"release"}`, nil),
-			expectedPkg: []string{"release", "dev"}, // general has no pipeline_intention metadata
+			expectedPkg: []string{"release", "dev", "builtin.image", "builtin.attestation"}, // general has no pipeline_intention metadata
 		},
 		{
 			name:        "includes set - only matching packages",
 			source:      makeSource("", []string{"release", "general"}),
-			expectedPkg: []string{"release", "general"},
+			expectedPkg: []string{"release", "general", "builtin.image", "builtin.attestation"},
 		},
 		{
 			name:        "both pipeline_intention and includes - AND logic",
 			source:      makeSource(`{"pipeline_intention":"release"}`, []string{"release"}),
-			expectedPkg: []string{"release"}, // Only release matches both conditions
+			expectedPkg: []string{"release", "builtin.image", "builtin.attestation"}, // Only release matches both conditions
 		},
 	}
 
