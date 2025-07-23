@@ -39,6 +39,14 @@ type mockRekorClient struct {
 	uuidError     error
 }
 
+func (m *mockRekorClient) SearchIndex(ctx context.Context, query *models.SearchIndex) ([]models.LogEntryAnon, error) {
+	if m.searchError != nil {
+		return nil, m.searchError
+	}
+	fmt.Printf("Mock SearchIndex called, returning %d entries\n", len(m.searchEntries))
+	return m.searchEntries, nil
+}
+
 func (m *mockRekorClient) SearchLogQuery(ctx context.Context, query *models.SearchLogQuery) ([]models.LogEntryAnon, error) {
 	if m.searchError != nil {
 		return nil, m.searchError
@@ -124,7 +132,7 @@ func TestRekorVSARetriever_RetrieveVSA(t *testing.T) {
 					IntegratedTime: int64Ptr(1234567890),
 					Body:           "test-body",
 					Attestation: &models.LogEntryAnonAttestation{
-						Data: strfmt.Base64("c2hhMjU2OmFiYzEyMw=="),
+						Data: strfmt.Base64("eyJwcmVkaWNhdGVUeXBlIjoiaHR0cHM6Ly9jb25mb3JtYS5kZXYvdmVyaWZpY2F0aW9uX3N1bW1hcnkvdjEiLCJzdWJqZWN0IjpbeyJuYW1lIjoicXVheS5pby90ZXN0L2ltYWdlIiwiZGlnZXN0Ijp7InNoYTI1NiI6ImFiYzEyMyJ9fV19"),
 					},
 				},
 			},
@@ -141,7 +149,7 @@ func TestRekorVSARetriever_RetrieveVSA(t *testing.T) {
 					IntegratedTime: int64Ptr(1234567890),
 					Body:           "test-body-1",
 					Attestation: &models.LogEntryAnonAttestation{
-						Data: strfmt.Base64("c2hhMjU2OmFiYzEyMw=="),
+						Data: strfmt.Base64("eyJwcmVkaWNhdGVUeXBlIjoiaHR0cHM6Ly9jb25mb3JtYS5kZXYvdmVyaWZpY2F0aW9uX3N1bW1hcnkvdjEiLCJzdWJqZWN0IjpbeyJuYW1lIjoicXVheS5pby90ZXN0L2ltYWdlIiwiZGlnZXN0Ijp7InNoYTI1NiI6ImFiYzEyMyJ9fV19"),
 					},
 				},
 				{
@@ -150,7 +158,7 @@ func TestRekorVSARetriever_RetrieveVSA(t *testing.T) {
 					IntegratedTime: int64Ptr(1234567891),
 					Body:           "test-body-2",
 					Attestation: &models.LogEntryAnonAttestation{
-						Data: strfmt.Base64("c2hhMjU2OmFiYzEyMw=="),
+						Data: strfmt.Base64("eyJwcmVkaWNhdGVUeXBlIjoiaHR0cHM6Ly9jb25mb3JtYS5kZXYvdmVyaWZpY2F0aW9uX3N1bW1hcnkvdjEiLCJzdWJqZWN0IjpbeyJuYW1lIjoicXVheS5pby90ZXN0L2ltYWdlIiwiZGlnZXN0Ijp7InNoYTI1NiI6ImFiYzEyMyJ9fV19"),
 					},
 				},
 			},
@@ -306,71 +314,6 @@ func TestIsValidImageDigest(t *testing.T) {
 	}
 }
 
-func TestEntryContainsImageDigest(t *testing.T) {
-	tests := []struct {
-		name        string
-		entry       models.LogEntryAnon
-		imageDigest string
-		expected    bool
-	}{
-		{
-			name: "entry contains digest in body",
-			entry: models.LogEntryAnon{
-				Body: "sha256:abc123",
-			},
-			imageDigest: "sha256:abc123",
-			expected:    true,
-		},
-		{
-			name: "entry contains digest in attestation",
-			entry: models.LogEntryAnon{
-				Attestation: &models.LogEntryAnonAttestation{
-					Data: strfmt.Base64("c2hhMjU2OmFiYzEyMw=="),
-				},
-			},
-			imageDigest: "sha256:abc123",
-			expected:    true,
-		},
-		{
-			name: "entry does not contain digest",
-			entry: models.LogEntryAnon{
-				Body: "other-content",
-			},
-			imageDigest: "sha256:abc123",
-			expected:    false,
-		},
-		{
-			name:        "empty entry",
-			entry:       models.LogEntryAnon{},
-			imageDigest: "sha256:abc123",
-			expected:    false,
-		},
-		{
-			name: "entry with nil body",
-			entry: models.LogEntryAnon{
-				Body: nil,
-			},
-			imageDigest: "sha256:abc123",
-			expected:    false,
-		},
-		{
-			name: "entry with non-string body",
-			entry: models.LogEntryAnon{
-				Body: 123,
-			},
-			imageDigest: "sha256:abc123",
-			expected:    false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := entryContainsImageDigest(tt.entry, tt.imageDigest)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestIsVSARecord(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -379,10 +322,10 @@ func TestIsVSARecord(t *testing.T) {
 		expected    bool
 	}{
 		{
-			name: "valid VSA record",
+			name: "valid VSA record with predicate type",
 			entry: models.LogEntryAnon{
 				Attestation: &models.LogEntryAnonAttestation{
-					Data: strfmt.Base64("c2hhMjU2OmFiYzEyMw=="),
+					Data: strfmt.Base64("eyJwcmVkaWNhdGVUeXBlIjoiaHR0cHM6Ly9jb25mb3JtYS5kZXYvdmVyaWZpY2F0aW9uX3N1bW1hcnkvdjEiLCJzdWJqZWN0IjpbeyJuYW1lIjoicXVheS5pby90ZXN0L2ltYWdlIiwiZGlnZXN0Ijp7InNoYTI1NiI6ImFiYzEyMyJ9fV19"),
 				},
 			},
 			imageDigest: "sha256:abc123",
@@ -407,10 +350,20 @@ func TestIsVSARecord(t *testing.T) {
 			expected:    false,
 		},
 		{
-			name: "entry without matching digest",
+			name: "entry with non-VSA attestation",
 			entry: models.LogEntryAnon{
 				Attestation: &models.LogEntryAnonAttestation{
-					Data: strfmt.Base64("c2hhMjU2OmRlZjQ1Ng=="),
+					Data: strfmt.Base64("eyJwcmVkaWNhdGVUeXBlIjoiaHR0cHM6Ly9leGFtcGxlLmNvbS9vdGhlci1hdHRlc3RhdGlvbiIsInN1YmplY3QiOlt7Im5hbWUiOiJxdWF5LmlvL3Rlc3QvaW1hZ2UiLCJkaWdlc3QiOnsic2hhMjU2IjoiZGVmNDU2In19XX0="),
+				},
+			},
+			imageDigest: "sha256:abc123",
+			expected:    false,
+		},
+		{
+			name: "entry with malformed attestation data",
+			entry: models.LogEntryAnon{
+				Attestation: &models.LogEntryAnonAttestation{
+					Data: strfmt.Base64("aW52YWxpZC1iYXNlNjQ="),
 				},
 			},
 			imageDigest: "sha256:abc123",
