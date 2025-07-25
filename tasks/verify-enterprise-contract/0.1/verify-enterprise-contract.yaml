@@ -245,7 +245,7 @@ spec:
         - "--effective-time=$(params.EFFECTIVE_TIME)"
         - "--extra-rule-data=$(params.EXTRA_RULE_DATA)"
         - "--output"
-        - "text?show-successes=false"
+        - "text=$(params.HOMEDIR)/text-report.txt?show-successes=false"
         - "--output"
         - "appstudio=$(results.TEST_OUTPUT.path)"
         - "--output"
@@ -310,18 +310,6 @@ spec:
         - "."
         - "$(results.TEST_OUTPUT.path)"
 
-    - name: info
-      computeResources:
-        requests:
-          cpu: 100m
-          memory: 256Mi
-        limits:
-          memory: 256Mi
-      image: quay.io/conforma/cli:latest
-      command: [printf]
-      args:
-        - "----- DEBUG OUTPUT -----\n"
-
     - name: version
       computeResources:
         requests:
@@ -346,6 +334,13 @@ spec:
       args:
         - '{policy: .policy, key: .key, "effective-time": .["effective-time"]}'
         - "$(params.HOMEDIR)/report-json.json"
+
+    - name: detailed-report
+      image: quay.io/conforma/cli:latest
+      onError: continue
+      command: ["cat"]
+      args:
+        - "$(params.HOMEDIR)/text-report.txt"
 
     - name: assert
       computeResources:
