@@ -147,6 +147,7 @@ func newTestCommand() *cobra.Command {
 			}
 
 			var runner runner.TestRunner
+
 			if err := viper.Unmarshal(&runner); err != nil {
 				return fmt.Errorf("unmarshal parameters: %w", err)
 			}
@@ -162,9 +163,9 @@ func newTestCommand() *cobra.Command {
 			results, resultsErr := runner.Run(ctx, fileList)
 			var exitCode int
 			if runner.FailOnWarn {
-				exitCode = output.ExitCodeFailOnWarn(results)
+				exitCode = results.ExitCodeFailOnWarn()
 			} else {
-				exitCode = output.ExitCode(results)
+				exitCode = results.ExitCode()
 			}
 
 			if !runner.Quiet || exitCode != 0 {
