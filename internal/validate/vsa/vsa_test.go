@@ -60,17 +60,15 @@ OURRVjNQMk9ndDFDaVFHeGg1VXhUZytGc3c9PSJ9
 
 	// Create test predicate
 	pred := &Predicate{
-		ImageRef:         "quay.io/test/image:tag",
-		ValidationResult: "passed",
-		Timestamp:        time.Now().UTC().Format(time.RFC3339),
-		Verifier:         "Conforma",
-		PolicySource:     "mock-policy",
+		ImageRef:     "quay.io/test/image:tag",
+		Timestamp:    time.Now().UTC().Format(time.RFC3339),
+		Verifier:     "Conforma",
+		PolicySource: "mock-policy",
 		Component: map[string]interface{}{
 			"name":           "test-component",
 			"containerImage": "quay.io/test/image:tag",
 			"source":         map[string]interface{}{"git": "repo"},
 		},
-		RuleResults: []evaluator.Result{{Message: "violation1"}},
 	}
 
 	// Write test files
@@ -191,21 +189,14 @@ func TestWritePredicate(t *testing.T) {
 
 	// Create test predicate
 	pred := &Predicate{
-		ImageRef:         "test-image:tag",
-		ValidationResult: "passed",
-		Timestamp:        "2024-03-21T12:00:00Z",
-		Verifier:         "ec-cli",
-		PolicySource:     "test-policy",
+		ImageRef:     "test-image:tag",
+		Timestamp:    "2024-03-21T12:00:00Z",
+		Verifier:     "ec-cli",
+		PolicySource: "test-policy",
 		Component: map[string]interface{}{
 			"name":           "test-component",
 			"containerImage": "test-image:tag",
 			"source":         nil,
-		},
-		RuleResults: []evaluator.Result{
-			{
-				Message:  "Test rule passed",
-				Metadata: map[string]interface{}{"code": "TEST-001"},
-			},
 		},
 	}
 	writer := Writer{
@@ -231,12 +222,10 @@ func TestWritePredicate(t *testing.T) {
 
 	// Verify fields
 	assert.Equal(t, pred.ImageRef, output.ImageRef)
-	assert.Equal(t, pred.ValidationResult, output.ValidationResult)
 	assert.Equal(t, pred.Timestamp, output.Timestamp)
 	assert.Equal(t, pred.Verifier, output.Verifier)
 	assert.Equal(t, pred.PolicySource, output.PolicySource)
 	assert.Equal(t, pred.Component, output.Component)
-	assert.Equal(t, pred.RuleResults, output.RuleResults)
 }
 
 func TestGeneratePredicate(t *testing.T) {
@@ -244,6 +233,57 @@ func TestGeneratePredicate(t *testing.T) {
 	report := applicationsnapshot.Report{
 		Policy: ecapi.EnterpriseContractPolicySpec{
 			Name: "test-policy",
+		},
+		Components: []applicationsnapshot.Component{
+			{
+				SnapshotComponent: appapi.SnapshotComponent{
+					Name:           "test-component",
+					ContainerImage: "test-image:tag",
+					Source:         appapi.ComponentSource{},
+				},
+				Success:    true,
+				Violations: []evaluator.Result{},
+				Warnings:   []evaluator.Result{},
+				Successes: []evaluator.Result{
+					{
+						Message:  "Test rule passed",
+						Metadata: map[string]interface{}{"code": "TEST-001"},
+					},
+				},
+			},
+			{
+				SnapshotComponent: appapi.SnapshotComponent{
+					Name:           "test-component-sha256:abc123-amd64",
+					ContainerImage: "test-image-amd64:tag",
+					Source:         appapi.ComponentSource{},
+				},
+				Success:    true,
+				Violations: []evaluator.Result{},
+				Warnings:   []evaluator.Result{},
+				Successes:  []evaluator.Result{},
+			},
+			{
+				SnapshotComponent: appapi.SnapshotComponent{
+					Name:           "test-component-sha256:def456-arm64",
+					ContainerImage: "test-image-arm64:tag",
+					Source:         appapi.ComponentSource{},
+				},
+				Success:    true,
+				Violations: []evaluator.Result{},
+				Warnings:   []evaluator.Result{},
+				Successes:  []evaluator.Result{},
+			},
+			{
+				SnapshotComponent: appapi.SnapshotComponent{
+					Name:           "other-component",
+					ContainerImage: "other-image:tag",
+					Source:         appapi.ComponentSource{},
+				},
+				Success:    true,
+				Violations: []evaluator.Result{},
+				Warnings:   []evaluator.Result{},
+				Successes:  []evaluator.Result{},
+			},
 		},
 	}
 
@@ -271,133 +311,151 @@ func TestGeneratePredicate(t *testing.T) {
 
 	// Verify predicate fields
 	assert.Equal(t, comp.ContainerImage, pred.ImageRef)
-	assert.Equal(t, "passed", pred.ValidationResult)
 	assert.NotEmpty(t, pred.Timestamp)
 	assert.Equal(t, "ec-cli", pred.Verifier)
 	assert.Equal(t, report.Policy.Name, pred.PolicySource)
 	assert.Equal(t, comp.Name, pred.Component["name"])
 	assert.Equal(t, comp.ContainerImage, pred.Component["containerImage"])
 	assert.Equal(t, comp.Source, pred.Component["source"])
-	assert.Equal(t, comp.Successes, pred.RuleResults)
+
+	// Verify Results field contains filtered report
+	assert.NotNil(t, pred.Results)
+	assert.Equal(t, report.Snapshot, pred.Results.Snapshot)
+	assert.Equal(t, report.Key, pred.Results.Key)
+	assert.Equal(t, report.Policy, pred.Results.Policy)
+	assert.Equal(t, report.EcVersion, pred.Results.EcVersion)
+	assert.Equal(t, report.EffectiveTime, pred.Results.EffectiveTime)
+
+	// Verify filtered components include target and variants but not other components
+	filteredComponents := pred.Results.Components
+	assert.Len(t, filteredComponents, 3) // test-component + 2 variants
+
+	componentNames := make([]string, len(filteredComponents))
+	for i, comp := range filteredComponents {
+		componentNames[i] = comp.Name
+	}
+
+	assert.Contains(t, componentNames, "test-component")
+	assert.Contains(t, componentNames, "test-component-sha256:abc123-amd64")
+	assert.Contains(t, componentNames, "test-component-sha256:def456-arm64")
+	assert.NotContains(t, componentNames, "other-component")
 }
 
-func TestGeneratePredicateWithPipelineIntention(t *testing.T) {
+func TestFilterReportForComponent(t *testing.T) {
 	tests := []struct {
-		name     string
-		results  []evaluator.Result
-		expected map[string]interface{}
+		name                string
+		targetComponentName string
+		components          []applicationsnapshot.Component
+		expectedCount       int
+		expectedNames       []string
 	}{
 		{
-			name: "rule with pipeline_intention metadata",
-			results: []evaluator.Result{
-				{
-					Message: "Rule with pipeline intention passed",
-					Metadata: map[string]interface{}{
-						"code":               "release.security_check",
-						"title":              "Security Check",
-						"pipeline_intention": []string{"release", "production"},
-					},
-				},
+			name:                "base component with variants",
+			targetComponentName: "Unnamed",
+			components: []applicationsnapshot.Component{
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed-sha256:abc123-amd64"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed-sha256:def456-arm64"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "OtherComponent"}},
 			},
-			expected: map[string]interface{}{
-				"code":               "release.security_check",
-				"title":              "Security Check",
-				"pipeline_intention": []string{"release", "production"},
-			},
+			expectedCount: 3,
+			expectedNames: []string{"Unnamed", "Unnamed-sha256:abc123-amd64", "Unnamed-sha256:def456-arm64"},
 		},
 		{
-			name: "rule without pipeline_intention metadata",
-			results: []evaluator.Result{
-				{
-					Message: "Rule without pipeline intention passed",
-					Metadata: map[string]interface{}{
-						"code":  "general.basic_check",
-						"title": "Basic Check",
-					},
-				},
+			name:                "specific variant component",
+			targetComponentName: "Unnamed-sha256:abc123-amd64",
+			components: []applicationsnapshot.Component{
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed-sha256:abc123-amd64"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed-sha256:def456-arm64"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "OtherComponent"}},
 			},
-			expected: map[string]interface{}{
-				"code":  "general.basic_check",
-				"title": "Basic Check",
-			},
+			expectedCount: 3,
+			expectedNames: []string{"Unnamed", "Unnamed-sha256:abc123-amd64", "Unnamed-sha256:def456-arm64"},
 		},
 		{
-			name: "mixed rules with and without pipeline_intention",
-			results: []evaluator.Result{
-				{
-					Message: "Rule with pipeline intention",
-					Metadata: map[string]interface{}{
-						"code":               "release.security_check",
-						"pipeline_intention": []string{"release"},
-					},
-				},
-				{
-					Message: "Rule without pipeline intention",
-					Metadata: map[string]interface{}{
-						"code": "general.basic_check",
-					},
-				},
+			name:                "component without variants",
+			targetComponentName: "SimpleComponent",
+			components: []applicationsnapshot.Component{
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "SimpleComponent"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "OtherComponent"}},
 			},
-			expected: map[string]interface{}{}, // We'll check both results individually
+			expectedCount: 1,
+			expectedNames: []string{"SimpleComponent"},
+		},
+		{
+			name:                "component with different base name",
+			targetComponentName: "MyApp",
+			components: []applicationsnapshot.Component{
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "MyApp"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "MyApp-sha256:abc123-amd64"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "MyApp-sha256:def456-arm64"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "MyAppHelper"}}, // Should not match
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "OtherComponent"}},
+			},
+			expectedCount: 3,
+			expectedNames: []string{"MyApp", "MyApp-sha256:abc123-amd64", "MyApp-sha256:def456-arm64"},
+		},
+		{
+			name:                "empty component list",
+			targetComponentName: "TestComponent",
+			components:          []applicationsnapshot.Component{},
+			expectedCount:       0,
+			expectedNames:       []string{},
+		},
+		{
+			name:                "component with dash in name but no variant pattern",
+			targetComponentName: "Test-Component",
+			components: []applicationsnapshot.Component{
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "Test-Component"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "Test-Component-Other"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "OtherComponent"}},
+			},
+			expectedCount: 2,
+			expectedNames: []string{"Test-Component", "Test-Component-Other"},
+		},
+		{
+			name:                "exact match only",
+			targetComponentName: "ExactMatch",
+			components: []applicationsnapshot.Component{
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "ExactMatch"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "ExactMatchHelper"}}, // Should not match
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "OtherComponent"}},
+			},
+			expectedCount: 1,
+			expectedNames: []string{"ExactMatch"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create test data
 			report := applicationsnapshot.Report{
-				Policy: ecapi.EnterpriseContractPolicySpec{
-					Name: "test-policy",
-				},
+				Components: tt.components,
+				Policy:     ecapi.EnterpriseContractPolicySpec{Name: "test-policy"},
+				EcVersion:  "1.0.0",
 			}
 
-			comp := applicationsnapshot.Component{
-				SnapshotComponent: appapi.SnapshotComponent{
-					Name:           "test-component",
-					ContainerImage: "test-image:tag",
-					Source:         appapi.ComponentSource{},
-				},
-				Success:    true,
-				Violations: []evaluator.Result{},
-				Warnings:   []evaluator.Result{},
-				Successes:  tt.results,
+			filteredReport := FilterReportForComponent(report, tt.targetComponentName)
+
+			// Verify the filtered report structure using struct fields
+			assert.NotNil(t, filteredReport)
+			assert.Equal(t, report.Snapshot, filteredReport.Snapshot)
+			assert.Equal(t, report.Key, filteredReport.Key)
+			assert.Equal(t, report.Policy, filteredReport.Policy)
+			assert.Equal(t, report.EcVersion, filteredReport.EcVersion)
+			assert.Equal(t, report.EffectiveTime, filteredReport.EffectiveTime)
+
+			// Verify filtered components
+			filteredComponents := filteredReport.Components
+			assert.Len(t, filteredComponents, tt.expectedCount)
+
+			componentNames := make([]string, len(filteredComponents))
+			for i, comp := range filteredComponents {
+				componentNames[i] = comp.Name
 			}
 
-			// Create generator and generate predicate
-			generator := NewGenerator(report, comp)
-			pred, err := generator.GeneratePredicate(context.Background())
-			require.NoError(t, err)
-
-			// Verify basic predicate fields
-			assert.Equal(t, comp.ContainerImage, pred.ImageRef)
-			assert.Equal(t, "passed", pred.ValidationResult)
-			assert.Equal(t, "ec-cli", pred.Verifier)
-
-			// Verify rule results contain expected metadata
-			assert.Equal(t, len(tt.results), len(pred.RuleResults))
-
-			if tt.name == "mixed rules with and without pipeline_intention" {
-				// Special case: check each result individually
-				for _, result := range pred.RuleResults {
-					if result.Metadata["code"] == "release.security_check" {
-						assert.Equal(t, []string{"release"}, result.Metadata["pipeline_intention"])
-					} else if result.Metadata["code"] == "general.basic_check" {
-						_, hasPipelineIntention := result.Metadata["pipeline_intention"]
-						assert.False(t, hasPipelineIntention, "Rule without pipeline_intention should not have the field")
-					}
-				}
-			} else {
-				// Single result case: check expected metadata
-				result := pred.RuleResults[0]
-				for key, expectedValue := range tt.expected {
-					assert.Equal(t, expectedValue, result.Metadata[key], "Metadata field %s should match", key)
-				}
-
-				// Verify pipeline_intention is absent when not expected
-				if _, expectedPipelineIntention := tt.expected["pipeline_intention"]; !expectedPipelineIntention {
-					_, hasPipelineIntention := result.Metadata["pipeline_intention"]
-					assert.False(t, hasPipelineIntention, "Rule without pipeline_intention should not have the field")
-				}
+			for _, expectedName := range tt.expectedNames {
+				assert.Contains(t, componentNames, expectedName)
 			}
 		})
 	}
