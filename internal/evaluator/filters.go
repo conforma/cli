@@ -18,6 +18,7 @@ package evaluator
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
@@ -183,10 +184,8 @@ func (f *PipelineIntentionFilter) Include(_ string, rules []rule.Info) bool {
 	// This ensures only pipeline-specific rules are evaluated
 	for _, r := range rules {
 		for _, ruleIntention := range r.PipelineIntention {
-			for _, targetIntention := range f.targetIntentions {
-				if ruleIntention == targetIntention {
-					return true // Include packages with matching pipeline_intention metadata
-				}
+			if slices.Contains(f.targetIntentions, ruleIntention) {
+				return true // Include packages with matching pipeline_intention metadata
 			}
 		}
 	}
@@ -231,10 +230,8 @@ func (f *IncludeListFilter) Include(pkg string, rules []rule.Info) bool {
 			// Collection-based filtering
 			want := strings.TrimPrefix(entry, "@")
 			for _, r := range rules {
-				for _, c := range r.Collections {
-					if c == want {
-						return true // Package contains a rule in the specified collection
-					}
+				if slices.Contains(r.Collections, want) {
+					return true // Package contains a rule in the specified collection
 				}
 			}
 		case strings.Contains(entry, "."):
