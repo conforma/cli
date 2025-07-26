@@ -20,13 +20,13 @@ package inspect
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	hd "github.com/MakeNowJust/heredoc"
 	"github.com/open-policy-agent/opa/v1/ast"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"golang.org/x/exp/slices"
 
 	"github.com/conforma/cli/internal/opa"
 	opaRule "github.com/conforma/cli/internal/opa/rule"
@@ -175,8 +175,8 @@ func filterResults(results map[string][]*ast.AnnotationsRef, rule, pkg, collecti
 		for _, r := range rules {
 			info := opaRule.RuleInfo(r)
 			matches := ((rule != "" && ruleNameMatches(rule, info)) ||
-				(pkg != "" && packageNameMatches(pkg, info)) ||
-				(collection != "" && ruleCollectionMatches(collection, info)))
+				(pkg != "" && slices.Contains(pkg, info)) ||
+				(collection != "" && slices.Contains(collection, info)))
 			if matches {
 				filteredRules = append(filteredRules, r)
 			}
@@ -187,32 +187,9 @@ func filterResults(results map[string][]*ast.AnnotationsRef, rule, pkg, collecti
 }
 
 func ruleNameMatches(rule string, info opaRule.Info) bool {
-	for _, name := range []string{
+	return slices.Contains([]string{
 		info.Code,
 		fmt.Sprintf("%s.%s", info.Package, info.ShortName),
 		info.ShortName,
-	} {
-		if name == rule {
-			return true
-		}
-	}
-	return false
-}
-
-func packageNameMatches(pkg string, info opaRule.Info) bool {
-	for _, name := range []string{info.Package} {
-		if name == pkg {
-			return true
-		}
-	}
-	return false
-}
-
-func ruleCollectionMatches(collection string, info opaRule.Info) bool {
-	for _, c := range info.Collections {
-		if c == collection {
-			return true
-		}
-	}
-	return false
+	}, rule)
 }
