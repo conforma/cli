@@ -22,25 +22,25 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
 	"github.com/sigstore/cosign/v2/pkg/oci"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 
 	"github.com/conforma/cli/internal/applicationsnapshot"
-	"github.com/conforma/cli/internal/evaluator"
 )
 
 // Predicate represents a Verification Summary Attestation (VSA) predicate.
 type Predicate struct {
-	ImageRef         string                 `json:"imageRef"`
-	ValidationResult string                 `json:"validationResult"`
-	Timestamp        string                 `json:"timestamp"`
-	Verifier         string                 `json:"verifier"`
-	PolicySource     string                 `json:"policySource"`
-	Component        map[string]interface{} `json:"component"`
-	RuleResults      []evaluator.Result     `json:"ruleResults"`
+	ImageRef     string                 `json:"imageRef"`
+	Timestamp    string                 `json:"timestamp"`
+	Verifier     string                 `json:"verifier"`
+	PolicySource string                 `json:"policySource"`
+	Component    map[string]interface{} `json:"component"`
+	Results      *FilteredReport        `json:"results,omitempty"` // Filtered report containing target component and its variants
 }
 
 // Generator handles VSA predicate generation
@@ -57,6 +57,56 @@ func NewGenerator(report applicationsnapshot.Report, comp applicationsnapshot.Co
 	}
 }
 
+// FilteredReport represents a filtered version of the application snapshot report
+// that contains only the target component and its architecture variants.
+type FilteredReport struct {
+	Snapshot      string                           `json:"snapshot"`
+	Components    []applicationsnapshot.Component  `json:"components"`
+	Key           string                           `json:"key"`
+	Policy        ecc.EnterpriseContractPolicySpec `json:"policy"`
+	EcVersion     string                           `json:"ec-version"`
+	EffectiveTime time.Time                        `json:"effective-time"`
+}
+
+// FilterReportForComponent filters the report to include only the target component and its architecture variants.
+// It returns a filtered report that excludes the top-level "success" field and includes only components
+// that match the target component name or are architecture variants of the same base component.
+//
+// Parameters:
+//   - report: The complete application snapshot report
+//   - targetComponentName: The name of the component to filter for
+//
+// Returns:
+//   - A FilteredReport containing only the target component and its variants
+func FilterReportForComponent(report applicationsnapshot.Report, targetComponentName string) *FilteredReport {
+	// Extract the base component name (before the first dash)
+	baseName := targetComponentName
+	if idx := strings.Index(targetComponentName, "-"); idx != -1 {
+		baseName = targetComponentName[:idx]
+	}
+
+	// Filter components that match the base name or are architecture variants
+	var filteredComponents []applicationsnapshot.Component
+	for _, comp := range report.Components {
+		// Check if this component is the target, the base component, or a variant
+		if comp.Name == targetComponentName ||
+			comp.Name == baseName ||
+			strings.HasPrefix(comp.Name, baseName+"-") {
+			filteredComponents = append(filteredComponents, comp)
+		}
+	}
+
+	// Create a filtered report without the success field
+	return &FilteredReport{
+		Snapshot:      report.Snapshot,
+		Components:    filteredComponents,
+		Key:           report.Key,
+		Policy:        report.Policy,
+		EcVersion:     report.EcVersion,
+		EffectiveTime: report.EffectiveTime,
+	}
+}
+
 // GeneratePredicate creates a Predicate for a validated image/component.
 func (g *Generator) GeneratePredicate(ctx context.Context) (*Predicate, error) {
 	log.Infof("Generating VSA predicate for image: %s", g.Component.ContainerImage)
@@ -68,30 +118,21 @@ func (g *Generator) GeneratePredicate(ctx context.Context) (*Predicate, error) {
 		"source":         g.Component.Source,
 	}
 
-	// Compose rule results: combine violations, warnings, and successes
-	ruleResults := make([]evaluator.Result, 0, len(g.Component.Violations)+len(g.Component.Warnings)+len(g.Component.Successes))
-	ruleResults = append(ruleResults, g.Component.Violations...)
-	ruleResults = append(ruleResults, g.Component.Warnings...)
-	ruleResults = append(ruleResults, g.Component.Successes...)
-
-	validationResult := "failed"
-	if g.Component.Success {
-		validationResult = "passed"
-	}
-
 	policySource := ""
 	if g.Report.Policy.Name != "" {
 		policySource = g.Report.Policy.Name
 	}
 
+	// Filter the report to include only the target component and its architecture variants
+	filteredReport := FilterReportForComponent(g.Report, g.Component.Name)
+
 	return &Predicate{
-		ImageRef:         g.Component.ContainerImage,
-		ValidationResult: validationResult,
-		Timestamp:        time.Now().UTC().Format(time.RFC3339),
-		Verifier:         "ec-cli",
-		PolicySource:     policySource,
-		Component:        componentInfo,
-		RuleResults:      ruleResults,
+		ImageRef:     g.Component.ContainerImage,
+		Timestamp:    time.Now().UTC().Format(time.RFC3339),
+		Verifier:     "ec-cli",
+		PolicySource: policySource,
+		Component:    componentInfo,
+		Results:      filteredReport,
 	}, nil
 }
 
