@@ -19,6 +19,7 @@ package oci
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path"
 	"runtime/trace"
@@ -35,25 +36,14 @@ import (
 	ociremote "github.com/sigstore/cosign/v2/pkg/oci/remote"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/conforma/cli/internal/http"
+	echttp "github.com/conforma/cli/internal/http"
 )
-
-// imageRefTransport is used to inject the type of transport to use with the
-// remote.WithTransport function. By default, remote.DefaultTransport is
-// equivalent to http.DefaultTransport, with a reduced timeout and keep-alive
-var imageRefTransport = remote.WithTransport(remote.DefaultTransport)
 
 type contextKey string
 
 const clientContextKey contextKey = "ec.oci.client"
 
 var imgCache = sync.OnceValue(initCache)
-
-func init() {
-	if log.IsLevelEnabled(log.TraceLevel) {
-		imageRefTransport = remote.WithTransport(http.NewTracingRoundTripper(remote.DefaultTransport))
-	}
-}
 
 func initCache() cache.Cache {
 	// if a value was set and it is parsed as false, turn the cache off
@@ -77,14 +67,33 @@ func initCache() cache.Cache {
 
 func createRemoteOptions(ctx context.Context) []remote.Option {
 	backoff := remote.Backoff{
-		Duration: http.DefaultBackoff.Duration,
-		Factor:   http.DefaultBackoff.Factor,
-		Jitter:   http.DefaultBackoff.Jitter,
-		Steps:    http.DefaultRetry.MaxRetry,
+		Duration: echttp.DefaultBackoff.Duration,
+		Factor:   echttp.DefaultBackoff.Factor,
+		Jitter:   echttp.DefaultBackoff.Jitter,
+		Steps:    echttp.DefaultRetry.MaxRetry,
+	}
+
+	// Log retry/backoff configuration when tracing is enabled
+	if log.IsLevelEnabled(log.TraceLevel) {
+		log.Tracef("OCI client retry configuration: max_retry=%d, max_wait=%v, base_duration=%v, factor=%.2f, jitter=%.2f",
+			echttp.DefaultRetry.MaxRetry,
+			echttp.DefaultRetry.MaxWait,
+			echttp.DefaultBackoff.Duration,
+			echttp.DefaultBackoff.Factor,
+			echttp.DefaultBackoff.Jitter,
+		)
+	}
+
+	// Create a transport that handles transient errors with exponential backoff
+	var transport http.RoundTripper
+	if log.IsLevelEnabled(log.TraceLevel) {
+		transport = echttp.NewTracingRoundTripper(echttp.NewRetryTransport(remote.DefaultTransport))
+	} else {
+		transport = echttp.NewRetryTransport(remote.DefaultTransport)
 	}
 
 	return []remote.Option{
-		imageRefTransport,
+		remote.WithTransport(transport),
 		remote.WithContext(ctx),
 		remote.WithAuthFromKeychain(authn.DefaultKeychain),
 		remote.WithRetryBackoff(backoff),
