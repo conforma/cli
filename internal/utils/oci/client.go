@@ -19,6 +19,7 @@ package oci
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path"
 	"runtime/trace"
@@ -35,13 +36,13 @@ import (
 	ociremote "github.com/sigstore/cosign/v2/pkg/oci/remote"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/conforma/cli/internal/http"
+	echttp "github.com/conforma/cli/internal/http"
 )
 
 // imageRefTransport is used to inject the type of transport to use with the
 // remote.WithTransport function. By default, remote.DefaultTransport is
 // equivalent to http.DefaultTransport, with a reduced timeout and keep-alive
-var imageRefTransport = remote.WithTransport(remote.DefaultTransport)
+// var imageRefTransport = remote.WithTransport(remote.DefaultTransport)
 
 type contextKey string
 
@@ -50,9 +51,9 @@ const clientContextKey contextKey = "ec.oci.client"
 var imgCache = sync.OnceValue(initCache)
 
 func init() {
-	if log.IsLevelEnabled(log.TraceLevel) {
-		imageRefTransport = remote.WithTransport(http.NewTracingRoundTripper(remote.DefaultTransport))
-	}
+	// if log.IsLevelEnabled(log.TraceLevel) {
+	// 	// imageRefTransport = remote.WithTransport(echttp.NewTracingRoundTripper(remote.DefaultTransport))
+	// }
 }
 
 func initCache() cache.Cache {
@@ -77,14 +78,22 @@ func initCache() cache.Cache {
 
 func createRemoteOptions(ctx context.Context) []remote.Option {
 	backoff := remote.Backoff{
-		Duration: http.DefaultBackoff.Duration,
-		Factor:   http.DefaultBackoff.Factor,
-		Jitter:   http.DefaultBackoff.Jitter,
-		Steps:    http.DefaultRetry.MaxRetry,
+		Duration: echttp.DefaultBackoff.Duration,
+		Factor:   echttp.DefaultBackoff.Factor,
+		Jitter:   echttp.DefaultBackoff.Jitter,
+		Steps:    echttp.DefaultRetry.MaxRetry,
+	}
+
+	// Create a transport that handles 429 errors with exponential backoff
+	var transport http.RoundTripper
+	if log.IsLevelEnabled(log.TraceLevel) {
+		transport = echttp.NewTracingRoundTripper(echttp.NewRetryTransport(remote.DefaultTransport))
+	} else {
+		transport = echttp.NewRetryTransport(remote.DefaultTransport)
 	}
 
 	return []remote.Option{
-		imageRefTransport,
+		remote.WithTransport(transport),
 		remote.WithContext(ctx),
 		remote.WithAuthFromKeychain(authn.DefaultKeychain),
 		remote.WithRetryBackoff(backoff),

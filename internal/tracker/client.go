@@ -24,6 +24,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/tektoncd/pipeline/pkg/remote/oci"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	echttp "github.com/conforma/cli/internal/http"
 )
 
 type Client interface {
@@ -56,5 +58,5 @@ func (c exoClient) GetTektonObject(ctx context.Context, bundle, kind, name strin
 }
 
 func (c exoClient) GetImage(ctx context.Context, ref name.Reference) (v1.Image, error) {
-	return remote.Image(ref, remote.WithContext(ctx))
+	return remote.Image(ref, remote.WithContext(ctx), remote.WithTransport(echttp.NewRetryTransport(remote.DefaultTransport)))
 }

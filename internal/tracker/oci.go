@@ -28,6 +28,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/types"
+
+	echttp "github.com/conforma/cli/internal/http"
 )
 
 const (
@@ -53,6 +55,7 @@ func (containerRegistry) write(ref name.Reference, image v1.Image, options ...re
 }
 
 func (containerRegistry) read(ref name.Reference, options ...remote.Option) (v1.Image, error) {
+	options = append(options, remote.WithTransport(echttp.NewRetryTransport(remote.DefaultTransport)))
 	return remote.Image(ref, options...)
 }
 
