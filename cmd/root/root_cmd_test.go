@@ -89,7 +89,6 @@ func TestRetryConfigurationFlags(t *testing.T) {
 			name: "default retry configuration",
 			args: []string{},
 			expectedConfig: http.RetryConfig{
-				MinWait:  200 * time.Millisecond,
 				MaxWait:  3 * time.Second,
 				MaxRetry: 3,
 				Duration: 1 * time.Second,
@@ -100,7 +99,6 @@ func TestRetryConfigurationFlags(t *testing.T) {
 		{
 			name: "custom retry configuration",
 			args: []string{
-				"--retry-min-wait", "100ms",
 				"--retry-max-wait", "2s",
 				"--retry-max-retry", "5",
 				"--retry-duration", "500ms",
@@ -108,7 +106,6 @@ func TestRetryConfigurationFlags(t *testing.T) {
 				"--retry-jitter", "0.2",
 			},
 			expectedConfig: http.RetryConfig{
-				MinWait:  100 * time.Millisecond,
 				MaxWait:  2 * time.Second,
 				MaxRetry: 5,
 				Duration: 500 * time.Millisecond,
@@ -121,7 +118,6 @@ func TestRetryConfigurationFlags(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset to default values
-			retryMinWait = 200 * time.Millisecond
 			retryMaxWait = 3 * time.Second
 			retryMaxRetry = 3
 			retryDuration = 1 * time.Second
@@ -144,7 +140,6 @@ func TestRetryConfigurationFlags(t *testing.T) {
 			// that the flags were parsed correctly
 			if len(tt.args) > 0 {
 				// For custom configuration, verify that the flags were parsed
-				assert.Equal(t, tt.expectedConfig.MinWait, retryMinWait)
 				assert.Equal(t, tt.expectedConfig.MaxWait, retryMaxWait)
 				assert.Equal(t, tt.expectedConfig.MaxRetry, retryMaxRetry)
 				assert.Equal(t, tt.expectedConfig.Duration, retryDuration)

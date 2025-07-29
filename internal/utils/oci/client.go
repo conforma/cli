@@ -39,22 +39,11 @@ import (
 	echttp "github.com/conforma/cli/internal/http"
 )
 
-// imageRefTransport is used to inject the type of transport to use with the
-// remote.WithTransport function. By default, remote.DefaultTransport is
-// equivalent to http.DefaultTransport, with a reduced timeout and keep-alive
-// var imageRefTransport = remote.WithTransport(remote.DefaultTransport)
-
 type contextKey string
 
 const clientContextKey contextKey = "ec.oci.client"
 
 var imgCache = sync.OnceValue(initCache)
-
-func init() {
-	// if log.IsLevelEnabled(log.TraceLevel) {
-	// 	// imageRefTransport = remote.WithTransport(echttp.NewTracingRoundTripper(remote.DefaultTransport))
-	// }
-}
 
 func initCache() cache.Cache {
 	// if a value was set and it is parsed as false, turn the cache off
@@ -84,7 +73,7 @@ func createRemoteOptions(ctx context.Context) []remote.Option {
 		Steps:    echttp.DefaultRetry.MaxRetry,
 	}
 
-	// Create a transport that handles 429 errors with exponential backoff
+	// Create a transport that handles transient errors with exponential backoff
 	var transport http.RoundTripper
 	if log.IsLevelEnabled(log.TraceLevel) {
 		transport = echttp.NewTracingRoundTripper(echttp.NewRetryTransport(remote.DefaultTransport))

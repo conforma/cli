@@ -47,7 +47,6 @@ var (
 	logfile       string
 
 	// Retry configuration flags
-	retryMinWait  time.Duration = 200 * time.Millisecond
 	retryMaxWait  time.Duration = 3 * time.Second
 	retryMaxRetry int           = 3
 	retryDuration time.Duration = 1 * time.Second
@@ -103,7 +102,6 @@ func NewRootCmd() *cobra.Command {
 
 			// Apply retry configuration from CLI flags
 			retryConfig := http.RetryConfig{
-				MinWait:  retryMinWait,
 				MaxWait:  retryMaxWait,
 				MaxRetry: retryMaxRetry,
 				Duration: retryDuration,
@@ -215,12 +213,11 @@ func setFlags(rootCmd *cobra.Command) {
 	rootCmd.PersistentFlags().StringVar(&logfile, "logfile", "", "file to write the logging output. If not specified logging output will be written to stderr")
 
 	// Retry configuration flags
-	rootCmd.PersistentFlags().DurationVar(&retryMinWait, "retry-min-wait", retryMinWait, "minimum wait time between retries for 429 errors")
-	rootCmd.PersistentFlags().DurationVar(&retryMaxWait, "retry-max-wait", retryMaxWait, "maximum wait time between retries for 429 errors")
-	rootCmd.PersistentFlags().IntVar(&retryMaxRetry, "retry-max-retry", retryMaxRetry, "maximum number of retries for 429 errors")
+	rootCmd.PersistentFlags().DurationVar(&retryMaxWait, "retry-max-wait", retryMaxWait, "maximum wait time between retries")
+	rootCmd.PersistentFlags().IntVar(&retryMaxRetry, "retry-max-retry", retryMaxRetry, "maximum number of retry attempts")
 	rootCmd.PersistentFlags().DurationVar(&retryDuration, "retry-duration", retryDuration, "base duration for exponential backoff calculation")
-	rootCmd.PersistentFlags().Float64Var(&retryFactor, "retry-factor", retryFactor, "factor for exponential backoff calculation")
-	rootCmd.PersistentFlags().Float64Var(&retryJitter, "retry-jitter", retryJitter, "jitter factor for backoff calculation (0.0-1.0)")
+	rootCmd.PersistentFlags().Float64Var(&retryFactor, "retry-factor", retryFactor, "exponential backoff multiplier")
+	rootCmd.PersistentFlags().Float64Var(&retryJitter, "retry-jitter", retryJitter, "randomness factor for backoff calculation (0.0-1.0)")
 
 	kubernetes.AddKubeconfigFlag(rootCmd)
 }

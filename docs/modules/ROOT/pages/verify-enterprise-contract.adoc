@@ -78,24 +78,21 @@ paths can be provided by using the `:` separator.
 *Default*: `unknown`
 *SINGLE_COMPONENT_CUSTOM_RESOURCE_NS* (`string`):: Kubernetes namespace where the SINGLE_COMPONENT_NAME is found. Only used when single component mode is enabled.
 
-*RETRY_MIN_WAIT* (`string`):: Minimum wait time between retries for 429 errors (e.g., "200ms", "1s")
-+
-*Default*: `200ms`
-*RETRY_MAX_WAIT* (`string`):: Maximum wait time between retries for 429 errors (e.g., "3s", "10s")
-+
-*Default*: `3s`
-*RETRY_MAX_RETRY* (`string`):: Maximum number of retries for 429 errors
-+
-*Default*: `3`
 *RETRY_DURATION* (`string`):: Base duration for exponential backoff calculation (e.g., "1s", "500ms")
 +
 *Default*: `1s`
-*RETRY_FACTOR* (`string`):: Factor for exponential backoff calculation (e.g., "2.0", "1.5")
+*RETRY_FACTOR* (`string`):: Exponential backoff multiplier (e.g., "2.0", "1.5")
 +
 *Default*: `2.0`
-*RETRY_JITTER* (`string`):: Jitter factor for backoff calculation (0.0-1.0, e.g., "0.1", "0.2")
+*RETRY_JITTER* (`string`):: Randomness factor for backoff calculation (0.0-1.0, e.g., "0.1", "0.2")
 +
 *Default*: `0.1`
+*RETRY_MAX_RETRY* (`string`):: Maximum number of retry attempts
++
+*Default*: `3`
+*RETRY_MAX_WAIT* (`string`):: Maximum wait time between retries (e.g., "3s", "10s")
++
+*Default*: `3s`
 
 == Results
 

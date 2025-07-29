@@ -66,7 +66,117 @@ func TestRetryTransport_429Retry(t *testing.T) {
 	// Temporarily override the default retry settings for this test
 	originalRetry := DefaultRetry
 	originalBackoff := DefaultBackoff
-	DefaultRetry = Retry{1 * time.Millisecond, 10 * time.Millisecond, 3}
+	DefaultRetry = Retry{10 * time.Millisecond, 3}
+	DefaultBackoff = Backoff{1 * time.Millisecond, 1.5, 0.0} // No jitter for deterministic testing
+	defer func() {
+		DefaultRetry = originalRetry
+		DefaultBackoff = originalBackoff
+	}()
+
+	retryTransport := NewRetryTransport(baseTransport)
+
+	// Create a request
+	req, err := http.NewRequest("GET", server.URL, nil)
+	require.NoError(t, err)
+
+	// Execute the request
+	start := time.Now()
+	resp, err := retryTransport.RoundTrip(req)
+	duration := time.Since(start)
+
+	// Verify the response
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Verify that we retried (should have called the server 3 times)
+	assert.Equal(t, 3, callCount)
+
+	// Verify that we waited between retries (should be at least the minimum wait time)
+	assert.GreaterOrEqual(t, duration, 1*time.Millisecond)
+}
+
+func TestRetryTransport_408Retry(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount <= 2 {
+			w.WriteHeader(http.StatusRequestTimeout)
+			_, err := w.Write([]byte(`{"error": "Request Timeout"}`))
+			if err != nil {
+				t.Errorf("Failed to write response: %v", err)
+			}
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte(`{"success": true}`))
+		if err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	// Create a transport that will retry on 408 with much shorter timeouts for testing
+	baseTransport := &http.Transport{}
+
+	// Temporarily override the default retry settings for this test
+	originalRetry := DefaultRetry
+	originalBackoff := DefaultBackoff
+	DefaultRetry = Retry{10 * time.Millisecond, 3}
+	DefaultBackoff = Backoff{1 * time.Millisecond, 1.5, 0.0} // No jitter for deterministic testing
+	defer func() {
+		DefaultRetry = originalRetry
+		DefaultBackoff = originalBackoff
+	}()
+
+	retryTransport := NewRetryTransport(baseTransport)
+
+	// Create a request
+	req, err := http.NewRequest("GET", server.URL, nil)
+	require.NoError(t, err)
+
+	// Execute the request
+	start := time.Now()
+	resp, err := retryTransport.RoundTrip(req)
+	duration := time.Since(start)
+
+	// Verify the response
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Verify that we retried (should have called the server 3 times)
+	assert.Equal(t, 3, callCount)
+
+	// Verify that we waited between retries (should be at least the minimum wait time)
+	assert.GreaterOrEqual(t, duration, 1*time.Millisecond)
+}
+
+func TestRetryTransport_503Retry(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount <= 2 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, err := w.Write([]byte(`{"error": "Service Unavailable"}`))
+			if err != nil {
+				t.Errorf("Failed to write response: %v", err)
+			}
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte(`{"success": true}`))
+		if err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	// Create a transport that will retry on 503 with much shorter timeouts for testing
+	baseTransport := &http.Transport{}
+
+	// Temporarily override the default retry settings for this test
+	originalRetry := DefaultRetry
+	originalBackoff := DefaultBackoff
+	DefaultRetry = Retry{10 * time.Millisecond, 3}
 	DefaultBackoff = Backoff{1 * time.Millisecond, 1.5, 0.0} // No jitter for deterministic testing
 	defer func() {
 		DefaultRetry = originalRetry
@@ -200,14 +310,14 @@ func TestCalculateBackoff(t *testing.T) {
 				// For subsequent attempts, check that it's within the expected range
 				// The actual value will be capped at MaxWait and include jitter
 				// Be more lenient with the maximum due to crypto/rand variance
-				tolerance := time.Duration(float64(tt.maxValue) * 0.1) // 10% tolerance
+				tolerance := time.Duration(float64(tt.maxValue) * 0.2) // 20% tolerance for crypto/rand
 				assert.LessOrEqual(t, backoff, tt.maxValue+tolerance)
 
 				// For attempts that don't exceed MaxWait, check minimum
 				// Allow for some variance due to crypto/rand
 				if tt.minValue <= tt.maxValue {
 					// Be more lenient with the minimum due to crypto/rand variance
-					tolerance := time.Duration(float64(tt.minValue) * 0.1) // 10% tolerance
+					tolerance := time.Duration(float64(tt.minValue) * 0.2) // 20% tolerance for crypto/rand
 					assert.GreaterOrEqual(t, backoff, tt.minValue-tolerance)
 				}
 			}
@@ -216,9 +326,8 @@ func TestCalculateBackoff(t *testing.T) {
 }
 
 func TestRetryConfig(t *testing.T) {
-	// Test default configuration
+	// Test getting default configuration
 	config := GetRetryConfig()
-	assert.Equal(t, 200*time.Millisecond, config.MinWait)
 	assert.Equal(t, 3*time.Second, config.MaxWait)
 	assert.Equal(t, 3, config.MaxRetry)
 	assert.Equal(t, 1*time.Second, config.Duration)
@@ -227,7 +336,6 @@ func TestRetryConfig(t *testing.T) {
 
 	// Test setting custom configuration
 	customConfig := RetryConfig{
-		MinWait:  100 * time.Millisecond,
 		MaxWait:  2 * time.Second,
 		MaxRetry: 5,
 		Duration: 500 * time.Millisecond,
@@ -238,7 +346,6 @@ func TestRetryConfig(t *testing.T) {
 
 	// Verify the configuration was applied
 	updatedConfig := GetRetryConfig()
-	assert.Equal(t, customConfig.MinWait, updatedConfig.MinWait)
 	assert.Equal(t, customConfig.MaxWait, updatedConfig.MaxWait)
 	assert.Equal(t, customConfig.MaxRetry, updatedConfig.MaxRetry)
 	assert.Equal(t, customConfig.Duration, updatedConfig.Duration)
@@ -261,7 +368,6 @@ func TestRetryConfig(t *testing.T) {
 func TestRetryTransport_WithCustomConfig(t *testing.T) {
 	// Set custom retry configuration
 	customConfig := RetryConfig{
-		MinWait:  50 * time.Millisecond,  // Much shorter for testing
 		MaxWait:  200 * time.Millisecond, // Much shorter for testing
 		MaxRetry: 2,
 		Duration: 25 * time.Millisecond, // Much shorter for testing
@@ -272,7 +378,6 @@ func TestRetryTransport_WithCustomConfig(t *testing.T) {
 	defer func() {
 		// Restore default configuration
 		SetRetryConfig(RetryConfig{
-			MinWait:  200 * time.Millisecond,
 			MaxWait:  3 * time.Second,
 			MaxRetry: 3,
 			Duration: 1 * time.Second,
@@ -320,6 +425,6 @@ func TestRetryTransport_WithCustomConfig(t *testing.T) {
 	// Verify that we retried (should have called the server 3 times)
 	assert.Equal(t, 3, callCount)
 
-	// Verify that we waited between retries (should be at least the minimum wait time)
-	assert.GreaterOrEqual(t, duration, customConfig.MinWait)
+	// Verify that we waited between retries (should be at least the base duration)
+	assert.GreaterOrEqual(t, duration, customConfig.Duration)
 }

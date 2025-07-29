@@ -62,7 +62,6 @@ var _initialize = func() {
 	policy := &retry.GenericPolicy{
 		Retryable: retry.DefaultPredicate,
 		Backoff:   backoff,
-		MinWait:   http.DefaultRetry.MinWait,
 		MaxWait:   http.DefaultRetry.MaxWait,
 		MaxRetry:  http.DefaultRetry.MaxRetry,
 	}

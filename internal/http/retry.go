@@ -18,6 +18,7 @@ package http
 
 import (
 	"crypto/rand"
+	"math"
 	"math/big"
 	"net/http"
 	"time"
@@ -25,11 +26,10 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 )
 
-var DefaultRetry = Retry{200 * time.Millisecond, 3 * time.Second, 3}
+var DefaultRetry = Retry{3 * time.Second, 3}
 
 // RetryConfig holds the configuration for retry behavior
 type RetryConfig struct {
-	MinWait  time.Duration
 	MaxWait  time.Duration
 	MaxRetry int
 	Duration time.Duration
@@ -40,7 +40,6 @@ type RetryConfig struct {
 // GetRetryConfig returns the current retry configuration
 func GetRetryConfig() RetryConfig {
 	return RetryConfig{
-		MinWait:  DefaultRetry.MinWait,
 		MaxWait:  DefaultRetry.MaxWait,
 		MaxRetry: DefaultRetry.MaxRetry,
 		Duration: DefaultBackoff.Duration,
@@ -52,7 +51,6 @@ func GetRetryConfig() RetryConfig {
 // SetRetryConfig updates the retry configuration and sets the global default transport
 func SetRetryConfig(config RetryConfig) {
 	DefaultRetry = Retry{
-		MinWait:  config.MinWait,
 		MaxWait:  config.MaxWait,
 		MaxRetry: config.MaxRetry,
 	}
@@ -72,14 +70,13 @@ func SetRetryConfig(config RetryConfig) {
 }
 
 type Retry struct {
-	MinWait  time.Duration
 	MaxWait  time.Duration
 	MaxRetry int
 }
 
-// NewRetryTransport creates a custom HTTP transport that handles 429 errors
+// NewRetryTransport creates a custom HTTP transport that handles 429, 408, and 503 errors
 // with exponential backoff. It wraps the provided transport and adds retry
-// logic specifically for rate limiting scenarios.
+// logic specifically for rate limiting, timeout, and service unavailable scenarios.
 func NewRetryTransport(base http.RoundTripper) http.RoundTripper {
 	if base == nil {
 		base = http.DefaultTransport
@@ -105,8 +102,8 @@ func (r *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			continue
 		}
 
-		// If we get a 429, retry with exponential backoff
-		if resp.StatusCode == http.StatusTooManyRequests {
+		// If we get a 429, 408, or 503, retry with exponential backoff
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode == http.StatusServiceUnavailable {
 			lastResp = resp
 			lastErr = nil
 
@@ -138,11 +135,12 @@ func (r *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 // calculateBackoff computes the exponential backoff duration with jitter
 func calculateBackoff(attempt int) time.Duration {
 	if attempt == 0 {
+		// First attempt uses the base duration
 		return DefaultBackoff.Duration
 	}
 
-	// Calculate exponential backoff
-	duration := time.Duration(float64(DefaultBackoff.Duration) * pow(DefaultBackoff.Factor, float64(attempt)))
+	// Calculate exponential backoff starting from the base duration
+	duration := time.Duration(float64(DefaultBackoff.Duration) * math.Pow(DefaultBackoff.Factor, float64(attempt)))
 
 	// Add jitter to prevent thundering herd
 	if DefaultBackoff.Jitter > 0 {
@@ -167,13 +165,4 @@ func calculateBackoff(attempt int) time.Duration {
 	}
 
 	return duration
-}
-
-// pow calculates x^y
-func pow(x, y float64) float64 {
-	result := 1.0
-	for i := 0; i < int(y); i++ {
-		result *= x
-	}
-	return result
 }
