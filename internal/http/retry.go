@@ -17,8 +17,12 @@
 package http
 
 import (
+	"crypto/rand"
+	"math/big"
 	"net/http"
 	"time"
+
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 )
 
 var DefaultRetry = Retry{200 * time.Millisecond, 3 * time.Second, 3}
@@ -45,7 +49,7 @@ func GetRetryConfig() RetryConfig {
 	}
 }
 
-// SetRetryConfig updates the retry configuration
+// SetRetryConfig updates the retry configuration and sets the global default transport
 func SetRetryConfig(config RetryConfig) {
 	DefaultRetry = Retry{
 		MinWait:  config.MinWait,
@@ -57,6 +61,14 @@ func SetRetryConfig(config RetryConfig) {
 		Factor:   config.Factor,
 		Jitter:   config.Jitter,
 	}
+
+	// Set the global default transport to use our retry transport
+	// This ensures that all HTTP requests (including auth requests) benefit from retry logic
+	http.DefaultTransport = NewRetryTransport(http.DefaultTransport)
+
+	// Also set the go-containerregistry library's default transport
+	// This ensures that authentication requests and other internal requests use our retry logic
+	remote.DefaultTransport = NewRetryTransport(remote.DefaultTransport)
 }
 
 type Retry struct {
@@ -99,54 +111,69 @@ func (r *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			lastErr = nil
 
 			// Calculate backoff duration
-			backoffDuration := calculateBackoff(attempt)
+			backoff := calculateBackoff(attempt)
 
-			// Check if we should retry
-			if attempt < DefaultRetry.MaxRetry {
-				select {
-				case <-req.Context().Done():
-					return resp, req.Context().Err()
-				case <-time.After(backoffDuration):
-					continue
-				}
+			// Check if context is cancelled
+			select {
+			case <-req.Context().Done():
+				return resp, req.Context().Err()
+			case <-time.After(backoff):
+				// Continue to next attempt
 			}
 
-			return resp, nil
+			continue
 		}
 
-		// For any other response, return immediately
-		return resp, err
+		// For any other status code, return immediately
+		return resp, nil
 	}
 
 	// If we've exhausted all retries, return the last response/error
 	if lastResp != nil {
 		return lastResp, lastErr
 	}
-
 	return nil, lastErr
 }
 
-// calculateBackoff calculates the backoff duration for the given attempt.
-// It uses exponential backoff with jitter to prevent thundering herd.
+// calculateBackoff computes the exponential backoff duration with jitter
 func calculateBackoff(attempt int) time.Duration {
 	if attempt == 0 {
-		return DefaultRetry.MinWait
+		return DefaultBackoff.Duration
 	}
 
-	// Exponential backoff: base * factor^attempt
-	backoff := DefaultBackoff.Duration
-	for i := 0; i < attempt; i++ {
-		backoff = time.Duration(float64(backoff) * DefaultBackoff.Factor)
-	}
+	// Calculate exponential backoff
+	duration := time.Duration(float64(DefaultBackoff.Duration) * pow(DefaultBackoff.Factor, float64(attempt)))
 
-	// Add jitter to prevent synchronized retries
-	jitter := time.Duration(float64(backoff) * DefaultBackoff.Jitter)
-	backoff += jitter
+	// Add jitter to prevent thundering herd
+	if DefaultBackoff.Jitter > 0 {
+		jitter := float64(duration) * DefaultBackoff.Jitter
+		// Generate random number between -1 and 1
+		randomBytes := make([]byte, 8)
+		_, err := rand.Read(randomBytes)
+		if err == nil {
+			// Convert to float64 and scale to -1 to 1
+			randomInt := new(big.Int).SetBytes(randomBytes)
+			randomFloat := new(big.Float).SetInt(randomInt)
+			randomFloat.Quo(randomFloat, new(big.Float).SetInt(new(big.Int).Lsh(big.NewInt(1), 63)))
+			randomValue, _ := randomFloat.Float64()
+			randomValue = randomValue*2 - 1 // Scale to -1 to 1
+			duration += time.Duration(jitter * randomValue)
+		}
+	}
 
 	// Cap at maximum wait time
-	if backoff > DefaultRetry.MaxWait {
-		backoff = DefaultRetry.MaxWait
+	if duration > DefaultRetry.MaxWait {
+		duration = DefaultRetry.MaxWait
 	}
 
-	return backoff
+	return duration
+}
+
+// pow calculates x^y
+func pow(x, y float64) float64 {
+	result := 1.0
+	for i := 0; i < int(y); i++ {
+		result *= x
+	}
+	return result
 }
