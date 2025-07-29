@@ -1,23 +1,43 @@
-# Pluggable Rule Filtering System
+# Unified Rule Filtering System
 
 ## Overview
-The Enterprise Contract CLI uses a flexible rule filtering system that allows you to filter Rego rules based on various criteria before evaluation. The system is designed to be extensible and composable, making it easy to add new filtering criteria.
+The Enterprise Contract CLI uses a unified rule filtering system that provides comprehensive filtering capabilities for both evaluation-time and reporting-time decisions. The system is designed to be extensible and composable, making it easy to add new filtering criteria.
 
 ## Architecture
 
 ### Core Components
-- **`RuleFilter` interface**: Defines the contract for all filters
+- **`RuleSelector` interface**: Provides unified filtering logic for both evaluation and reporting
+- **`RuleFilter` interface**: Defines the contract for package-level filters
 - **`FilterFactory` interface**: Creates filters from source configuration
+- **`UnifiedFilterFactory`**: Creates unified filters using the RuleSelector
 - **`filterNamespaces()` function**: Applies multiple filters in sequence with AND logic
-- **Individual filter implementations**: Each filter implements the `RuleFilter` interface
 
-### Current Filters
-- **`PipelineIntentionFilter`**: Filters rules based on `pipeline_intention` metadata
-- **`IncludeListFilter`**: Filters rules based on include/exclude configuration (collections, packages, rules)
+### Current Implementation
+- **`UnifiedRuleSelector`**: Implements comprehensive filtering logic including pipeline intentions, includes/excludes, and volatile exclusions
+- **`UnifiedRuleFilter`**: Package-level filter that uses the unified selector
+- **`NamespaceFilter`**: Combines multiple filters using AND logic
 
 ## Interface Definitions
 
 ```go
+// RuleSelector provides unified filtering logic for both evaluation-time and reporting-time decisions
+type RuleSelector interface {
+    // PackagesToEvaluate determines which packages should be evaluated
+    PackagesToEvaluate(allRules map[string]rule.Info) []string
+
+    // ShouldReport determines if a specific rule should be included in results
+    ShouldReport(ruleID string, imageDigest string, effectiveTime time.Time) bool
+
+    // ExplainExclusion provides human-readable explanation for why a rule/package is excluded
+    ExplainExclusion(ruleID string) string
+
+    // GetIncludedRules returns all rule IDs that should be included for a given package
+    GetIncludedRules(packageName string) []string
+
+    // SetAllRules sets the complete rule set for analysis
+    SetAllRules(allRules map[string]rule.Info)
+}
+
 // RuleFilter decides whether an entire package (namespace) should be
 // included in the evaluation set.
 type RuleFilter interface {
@@ -32,148 +52,75 @@ type FilterFactory interface {
 
 ## Current Implementation
 
-### DefaultFilterFactory
-The default factory creates filters based on source configuration:
+### UnifiedFilterFactory
+The unified factory creates filters using the RuleSelector:
 
 ```go
-type DefaultFilterFactory struct{}
-
-func NewDefaultFilterFactory() FilterFactory { 
-    return &DefaultFilterFactory{} 
+type UnifiedFilterFactory struct {
+    selector RuleSelector
 }
 
-func (f *DefaultFilterFactory) CreateFilters(source ecc.Source) []RuleFilter {
-    var filters []RuleFilter
-
-    // 1. Pipeline-intention filter
-    intentions := extractStringArrayFromRuleData(source, "pipeline_intention")
-    if len(intentions) > 0 {
-        filters = append(filters, NewPipelineIntentionFilter(intentions))
+func NewUnifiedFilterFactory(selector RuleSelector) FilterFactory {
+    return &UnifiedFilterFactory{
+        selector: selector,
     }
+}
 
-    // 2. Include list (handles @collection / pkg / pkg.rule)
-    if source.Config != nil && len(source.Config.Include) > 0 {
-        filters = append(filters, NewIncludeListFilter(source.Config.Include))
-    }
-
-    return filters
+func (f *UnifiedFilterFactory) CreateFilters(source ecc.Source) []RuleFilter {
+    return []RuleFilter{NewUnifiedRuleFilter(f.selector)}
 }
 ```
 
-### PipelineIntentionFilter
-Filters rules based on `pipeline_intention` metadata:
+### UnifiedRuleFilter
+Filters packages using the unified selector:
 
 ```go
-// If `targetIntentions` is empty, the filter is a NO-OP (includes everything).
-type PipelineIntentionFilter struct{ 
-    targetIntentions []string 
+type UnifiedRuleFilter struct {
+    selector RuleSelector
 }
 
-func NewPipelineIntentionFilter(target []string) RuleFilter {
-    return &PipelineIntentionFilter{targetIntentions: target}
-}
-
-func (f *PipelineIntentionFilter) Include(_ string, rules []rule.Info) bool {
-    if len(f.targetIntentions) == 0 {
-        return true // no filtering requested
+func NewUnifiedRuleFilter(selector RuleSelector) RuleFilter {
+    return &UnifiedRuleFilter{
+        selector: selector,
     }
-    for _, r := range rules {
-        for _, pi := range r.PipelineIntention {
-            for _, want := range f.targetIntentions {
-                if pi == want {
-                    return true
-                }
-            }
-        }
+}
+
+func (f *UnifiedRuleFilter) Include(pkg string, rules []rule.Info) bool {
+    // Convert rules to the format expected by the selector
+    allRules := make(map[string]rule.Info)
+    for _, rule := range rules {
+        allRules[rule.Code] = rule
     }
-    return false
-}
-```
 
-### IncludeListFilter
-Filters rules based on include configuration (collections, packages, rules):
-
-```go
-// Entries may be:
-//   • "@collection"         – any rule whose metadata lists that collection
-//   • "package"             – whole package
-//   • "package.rule"        – rule-scoped, still selects the whole package
-type IncludeListFilter struct{ 
-    entries []string 
-}
-
-func NewIncludeListFilter(entries []string) RuleFilter {
-    return &IncludeListFilter{entries: entries}
-}
-
-func (f *IncludeListFilter) Include(pkg string, rules []rule.Info) bool {
-    for _, entry := range f.entries {
-        switch {
-        case entry == pkg:
+    // Use the selector to determine if package should be included
+    includedPackages := f.selector.PackagesToEvaluate(allRules)
+    for _, includedPkg := range includedPackages {
+        if includedPkg == pkg {
             return true
-        case strings.HasPrefix(entry, "@"):
-            want := strings.TrimPrefix(entry, "@")
-            for _, r := range rules {
-                for _, c := range r.Collections {
-                    if c == want {
-                        return true
-                    }
-                }
-            }
-        case strings.Contains(entry, "."):
-            parts := strings.SplitN(entry, ".", 2)
-            if len(parts) == 2 && parts[0] == pkg {
-                return true
-            }
         }
     }
     return false
 }
 ```
 
-### NamespaceFilter
-Applies all filters with logical AND:
+### UnifiedRuleSelector
+Implements comprehensive filtering logic:
 
 ```go
-type NamespaceFilter struct{ 
-    filters []RuleFilter 
+type UnifiedRuleSelector struct {
+    config         *FilterConfig
+    volatileConfig *VolatileConfig
+    effectiveTime  time.Time
+    imageContext   *ImageContext
+    allRules       map[string]rule.Info
 }
 
-func NewNamespaceFilter(filters ...RuleFilter) *NamespaceFilter {
-    return &NamespaceFilter{filters: filters}
-}
-
-func (nf *NamespaceFilter) Filter(rules policyRules) []string {
-    // group rules by package
-    grouped := make(map[string][]rule.Info)
-    for fqName, r := range rules {
-        pkg := strings.SplitN(fqName, ".", 2)[0]
-        if pkg == "" {
-            pkg = fqName // fallback
-        }
-        grouped[pkg] = append(grouped[pkg], r)
-    }
-
-    var out []string
-    for pkg, pkgRules := range grouped {
-        include := true
-        for _, flt := range nf.filters {
-            ok := flt.Include(pkg, pkgRules)
-
-            // Trace line for debugging
-            log.Debugf("TRACE %-30T pkg=%-15s → %v", flt, pkg, ok)
-
-            if !ok {
-                include = false
-                break
-            }
-        }
-
-        if include {
-            out = append(out, pkg)
-        }
-    }
-    return out
+func NewUnifiedRuleSelector(source ecc.Source, policy ConfigProvider, imageContext *ImageContext) RuleSelector {
+    // Creates a unified selector with all filtering capabilities:
+    // - Pipeline intention filtering
+    // - Include/exclude list filtering  
+    // - Volatile exclusion filtering
+    // - Effective time filtering
 }
 ```
 
@@ -185,211 +132,14 @@ The filtering is integrated into the `Evaluate` method in `conftest_evaluator.go
 ```go
 func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget) ([]Outcome, error) {
     // ... existing code ...
-
-    // Filter namespaces using the new pluggable filtering system
-    filterFactory := NewDefaultFilterFactory()
+    
+    // Filter namespaces using the new unified filtering system
+    filterFactory := NewUnifiedFilterFactory(c.ruleSelector)
     filters := filterFactory.CreateFilters(c.source)
-    filteredNamespaces := filterNamespaces(rules, filters...)
-
-    // ... existing code ...
-
-    var r testRunner
-    var ok bool
-    if r, ok = ctx.Value(runnerKey).(testRunner); r == nil || !ok {
-        // Determine which namespaces to use
-        namespaceToUse := c.namespace
-
-        // If we have filtered namespaces from the filtering system, use those
-        if len(filteredNamespaces) > 0 {
-            namespaceToUse = filteredNamespaces
-        } else if len(c.namespace) == 0 {
-            // When no namespaces are specified and filtering results in empty list,
-            // use an empty namespace list to prevent any evaluation
-            namespaceToUse = []string{}
-        }
-
-        r = &conftestRunner{
-            runner.TestRunner{
-                Data:          []string{c.dataDir},
-                Policy:        []string{c.policyDir},
-                Namespace:     namespaceToUse,
-                AllNamespaces: false, // Always false to prevent bypassing filtering
-                NoFail:        true,
-                Output:        c.outputFormat,
-                Capabilities:  c.CapabilitiesPath(),
-            },
-        }
-    }
-
-    // ... rest of evaluation logic ...
-}
-```
-
-## How to Add a New Filter
-
-### Step 1: Define the Filter Structure
-Create a new struct that implements the `RuleFilter` interface:
-
-```go
-type MyCustomFilter struct {
-    targetValues []string
-}
-
-func NewMyCustomFilter(targetValues []string) RuleFilter {
-    return &MyCustomFilter{
-        targetValues: targetValues,
-    }
-}
-```
-
-### Step 2: Implement the Filtering Logic
-Implement the `Include` method:
-
-```go
-func (f *MyCustomFilter) Include(pkg string, rules []rule.Info) bool {
-    // If no target values are configured, include all packages
-    if len(f.targetValues) == 0 {
-        return true
-    }
-
-    // Include packages with rules that have matching values
-    for _, rule := range rules {
-        for _, ruleValue := range rule.YourField {
-            for _, targetValue := range f.targetValues {
-                if ruleValue == targetValue {
-                    log.Debugf("Including package %s: rule has matching value %s", pkg, targetValue)
-                    return true
-                }
-            }
-        }
-    }
+    filteredNamespaces := filterNamespaces(allRules, filters...)
     
-    log.Debugf("Excluding package %s: no rules match target values %v", pkg, f.targetValues)
-    return false
+    // ... rest of evaluation ...
 }
-```
-
-### Step 3: Update DefaultFilterFactory
-Add your filter to the `CreateFilters` method:
-
-```go
-func (f *DefaultFilterFactory) CreateFilters(source ecc.Source) []RuleFilter {
-    var filters []RuleFilter
-
-    // Existing filters...
-    intentions := extractStringArrayFromRuleData(source, "pipeline_intention")
-    if len(intentions) > 0 {
-        filters = append(filters, NewPipelineIntentionFilter(intentions))
-    }
-
-    if source.Config != nil && len(source.Config.Include) > 0 {
-        filters = append(filters, NewIncludeListFilter(source.Config.Include))
-    }
-
-    // Add your custom filter
-    myCustomValues := extractStringArrayFromRuleData(source, "your_field_name")
-    if len(myCustomValues) > 0 {
-        filters = append(filters, NewMyCustomFilter(myCustomValues))
-    }
-
-    return filters
-}
-```
-
-### Step 4: Add Metadata Field to Rule.Info (if needed)
-If your filter requires new metadata from Rego rules, add the field to `internal/opa/rule/rule.go`:
-
-```go
-type Info struct {
-    // ... existing fields ...
-    YourField []string `json:"your_field,omitempty"`
-}
-```
-
-### Step 5: Update Rego Rule Metadata
-In your Rego rules, add the metadata:
-
-```rego
-# METADATA
-# title: My Rule
-# description: This rule demonstrates custom filtering
-# custom:
-#   your_field:
-#     - value1
-#     - value2
-deny contains msg if {
-    # rule logic
-}
-```
-
-### Step 6: Write Tests
-Create comprehensive tests for your filter:
-
-```go
-func TestMyCustomFilter(t *testing.T) {
-    rules := policyRules{
-        "pkg1.rule1": rule.Info{
-            Code:     "pkg1.rule1",
-            Package:  "pkg1",
-            YourField: []string{"value1", "value2"},
-        },
-        "pkg2.rule2": rule.Info{
-            Code:     "pkg2.rule2",
-            Package:  "pkg2",
-            YourField: []string{"value3"},
-        },
-    }
-    
-    tests := []struct {
-        name                    string
-        targetValues            []string
-        expectedFilteredNamespaces []string
-    }{
-        {
-            name:                    "filters by your_field",
-            targetValues:            []string{"value1"},
-            expectedFilteredNamespaces: []string{"pkg1"},
-        },
-        {
-            name:                    "no target values - include all",
-            targetValues:            []string{},
-            expectedFilteredNamespaces: []string{"pkg1", "pkg2"},
-        },
-    }
-    
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            filter := NewMyCustomFilter(tt.targetValues)
-            filteredNamespaces := filterNamespaces(rules, filter)
-            
-            assert.Equal(t, tt.expectedFilteredNamespaces, filteredNamespaces)
-        })
-    }
-}
-```
-
-## Usage Examples
-
-### Single Filter
-```go
-pipelineFilter := NewPipelineIntentionFilter([]string{"release", "production"})
-filteredNamespaces := filterNamespaces(rules, pipelineFilter)
-```
-
-### Multiple Filters (AND logic)
-```go
-filters := []RuleFilter{
-    NewPipelineIntentionFilter([]string{"release"}),
-    NewIncludeListFilter([]string{"@security"}),
-}
-filteredNamespaces := filterNamespaces(rules, filters...)
-```
-
-### From Source Configuration
-```go
-filterFactory := NewDefaultFilterFactory()
-filters := filterFactory.CreateFilters(source)
-filteredNamespaces := filterNamespaces(rules, filters...)
 ```
 
 ## Helper Functions
@@ -429,18 +179,21 @@ func extractStringArrayFromRuleData(source ecc.Source, key string) []string {
 
 ## File Organization
 
-The filtering system is organized in the following files:
+The unified filtering system is organized in the following files:
 
 - `internal/evaluator/conftest_evaluator.go`: Main evaluator logic and the `Evaluate` method
-- `internal/evaluator/filters.go`: All filtering-related code including:
+- `internal/evaluator/filters.go`: Core filtering interfaces and helper functions:
   - `RuleFilter` interface
   - `FilterFactory` interface
-  - `PipelineIntentionFilter` implementation
-  - `IncludeListFilter` implementation
   - `NamespaceFilter` implementation
   - `filterNamespaces()` function
   - Helper functions for extracting configuration
-  - `DefaultFilterFactory` for creating filters from source configuration
+- `internal/evaluator/unified_filter.go`: Unified filtering implementation:
+  - `UnifiedFilterFactory` for creating unified filters
+  - `UnifiedRuleFilter` implementation
+- `internal/evaluator/rule_selector.go`: RuleSelector interface and implementation:
+  - `RuleSelector` interface
+  - `UnifiedRuleSelector` implementation with comprehensive filtering logic
 
 ## Best Practices
 
@@ -493,9 +246,12 @@ Update user documentation to explain the new filtering capability.
 - Test the AND logic when combining multiple filters
 
 ## Migration from Old System
-The old `filterNamespacesByPipelineIntention` method has been refactored to use the new filtering system while maintaining backward compatibility.
+The old filtering system has been completely replaced with the new unified filtering architecture. The new system provides:
 
-This extensible design makes it easy to add new filtering criteria without modifying existing code, following the Open/Closed Principle.
+1. **Unified Logic**: Single `RuleSelector` interface handles all filtering decisions
+2. **Better Performance**: More efficient filtering algorithms
+3. **Enhanced Capabilities**: Support for volatile exclusions and effective time filtering
+4. **Improved Maintainability**: Cleaner separation of concerns and better testability
 
 ## Recent Fix: Filtering Leak Prevention
 
@@ -511,24 +267,16 @@ namespaceToUse := c.namespace
 
 // If we have filtered namespaces from the filtering system, use those
 if len(filteredNamespaces) > 0 {
-    namespaceToUse = filteredNamespaces
-} else if len(c.namespace) == 0 {
-    // When no namespaces are specified and filtering results in empty list,
-    // use an empty namespace list to prevent any evaluation
-    namespaceToUse = []string{}
+    namespacesToUse = filteredNamespaces
 }
 
+// Always set AllNamespaces to false to prevent bypassing filtering
 r = &conftestRunner{
     runner.TestRunner{
-        Data:          []string{c.dataDir},
-        Policy:        []string{c.policyDir},
-        Namespace:     namespaceToUse,
+        // ... other fields ...
         AllNamespaces: false, // Always false to prevent bypassing filtering
-        NoFail:        true,
-        Output:        c.outputFormat,
-        Capabilities:  c.CapabilitiesPath(),
     },
 }
 ```
 
-This ensures that conftest is always configured with `AllNamespaces=false`, preventing any evaluation of excluded namespaces regardless of the filtering results. 
+This extensible design makes it easy to add new filtering criteria without modifying existing code, following the Open/Closed Principle. 

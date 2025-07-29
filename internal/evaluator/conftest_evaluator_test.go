@@ -1309,6 +1309,28 @@ func TestConftestEvaluatorIncludeExclude(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "collection @redhat should not generate warning when rules have @redhat collection",
+			results: []Outcome{
+				{
+					Failures: []Result{
+						{Metadata: map[string]any{"code": "security.cve", "collections": []any{"redhat"}}},
+						{Metadata: map[string]any{"code": "other.rule"}},
+					},
+				},
+			},
+			config: &ecc.EnterpriseContractPolicyConfiguration{Include: []string{"@redhat"}},
+			want: []Outcome{
+				{
+					Skipped:    []Result{},
+					Warnings:   []Result{},
+					Exceptions: []Result{},
+					Failures: []Result{
+						{Metadata: map[string]any{"code": "security.cve", "collections": []string{"redhat"}}},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1334,57 +1356,6 @@ func TestConftestEvaluatorIncludeExclude(t *testing.T) {
 			got, err := evaluator.Evaluate(ctx, inputs)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestMakeMatchers(t *testing.T) {
-	cases := []struct {
-		name string
-		code string
-		term any
-		want []string
-	}{
-		{
-			name: "valid", code: "breakfast.spam", term: "eggs",
-			want: []string{
-				"breakfast", "breakfast.*", "breakfast.spam", "breakfast:eggs", "breakfast.*:eggs",
-				"breakfast.spam:eggs", "*",
-			},
-		},
-		{
-			name: "valid with multiple terms", code: "breakfast.spam", term: []any{"eggs", "ham"},
-			want: []string{
-				"breakfast", "breakfast.*", "breakfast.spam",
-				"breakfast:eggs", "breakfast.*:eggs", "breakfast.spam:eggs",
-				"breakfast:ham", "breakfast.*:ham", "breakfast.spam:ham",
-				"*",
-			},
-		},
-		{
-			name: "valid without term", code: "breakfast.spam",
-			want: []string{"breakfast", "breakfast.*", "breakfast.spam", "*"},
-		},
-		{name: "incomplete code", code: "spam", want: []string{"*"}},
-		{name: "incomplete code with term", code: "spam", term: "eggs", want: []string{"*"}},
-		{
-			name: "extra code info ignored", code: "this.is.ignored.breakfast.spam",
-			want: []string{"breakfast", "breakfast.*", "breakfast.spam", "*"},
-		},
-		{name: "empty code", code: "", want: []string{"*"}},
-		{name: "empty code with term", code: "", term: "eggs", want: []string{"*"}},
-	}
-
-	for _, tt := range cases {
-		t.Run(tt.name, func(t *testing.T) {
-			result := Result{Metadata: map[string]any{}}
-			if tt.code != "" {
-				result.Metadata["code"] = tt.code
-			}
-			if tt.term != "" {
-				result.Metadata["term"] = tt.term
-			}
-			assert.Equal(t, tt.want, makeMatchers(result))
 		})
 	}
 }
@@ -1575,80 +1546,6 @@ func TestRuleMetadata(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			addRuleMetadata(ctx, &cases[i].result, tt.rules)
 			assert.Equal(t, tt.result, tt.want)
-		})
-	}
-}
-
-func TestNameScoring(t *testing.T) {
-	cases := []struct {
-		name  string
-		score int
-	}{
-		{
-			name:  "*",
-			score: 1,
-		},
-		{
-			name:  "*:term", // corner case
-			score: 101,
-		},
-		{
-			name:  "*.rule:term", // corner case
-			score: 201,
-		},
-		{
-			name:  "pkg",
-			score: 10,
-		},
-		{
-			name:  "pkg.",
-			score: 10,
-		},
-		{
-			name:  "pkg.*",
-			score: 10,
-		},
-		{
-			name:  "pkg.rule",
-			score: 110,
-		},
-		{
-			name:  "pkg.:term",
-			score: 110,
-		},
-		{
-			name:  "pkg.*:term",
-			score: 110,
-		},
-		{
-			name:  "pkg:term",
-			score: 110,
-		},
-		{
-			name:  "path.pkg:term",
-			score: 210,
-		},
-		{
-			name:  "path.path.pkg:term",
-			score: 220,
-		},
-		{
-			name:  "pkg.rule:term",
-			score: 210,
-		},
-		{
-			name:  "path.pkg.rule:term",
-			score: 220,
-		},
-		{
-			name:  "path.path.pkg.rule:term",
-			score: 230,
-		},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			assert.Equal(t, c.score, score(c.name))
 		})
 	}
 }

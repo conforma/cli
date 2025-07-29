@@ -49,115 +49,73 @@ type FilterFactory interface {
 }
 
 //////////////////////////////////////////////////////////////////////////////
-// DefaultFilterFactory
+// Pipeline Intention Filter Factory
 //////////////////////////////////////////////////////////////////////////////
 
-// DefaultFilterFactory creates filters based on the source configuration.
-// It handles two main filtering mechanisms:
-// 1. Pipeline intention filtering - based on rule metadata
-// 2. Include list filtering - based on explicit package/collection names
-type DefaultFilterFactory struct{}
-
-func NewDefaultFilterFactory() FilterFactory { return &DefaultFilterFactory{} }
-
-// CreateFilters builds a list of filters based on the source configuration.
+// PipelineIntentionFilterFactory creates filters specifically for pipeline intention filtering.
 //
-// The filtering logic follows these rules:
-// 1. Pipeline Intention Filtering:
+// This factory creates a filter that:
+// 1. Only evaluates packages that contain rules with pipeline_intention metadata
+// 2. Only includes rules that have pipeline_intention matching the configured values
+// 3. Excludes rules without pipeline_intention metadata when pipeline_intention is configured
+type PipelineIntentionFilterFactory struct{}
+
+func NewPipelineIntentionFilterFactory() FilterFactory {
+	return &PipelineIntentionFilterFactory{}
+}
+
+// CreateFilters creates a pipeline intention filter based on the source configuration.
+//
+// Behavior:
 //   - When pipeline_intention is set in ruleData: only include packages with rules
 //     that have matching pipeline_intention metadata
 //   - When pipeline_intention is NOT set in ruleData: only include packages with rules
 //     that have NO pipeline_intention metadata (general-purpose rules)
-//
-// 2. Include List Filtering:
-//   - When includes are specified: only include packages that match the include criteria
-//   - Supports @collection, package names, and package.rule patterns
-//
-// 3. Combined Logic:
-//   - All filters are applied with AND logic - a package must pass ALL filters
-//   - This allows fine-grained control over which rules are evaluated
-func (f *DefaultFilterFactory) CreateFilters(source ecc.Source) []RuleFilter {
-	var filters []RuleFilter
-
-	// ── 1. Pipeline‑intention ───────────────────────────────────────────────
-	intentions := extractStringArrayFromRuleData(source, "pipeline_intention")
-	hasIncludes := source.Config != nil && len(source.Config.Include) > 0
-
-	// Always add PipelineIntentionFilter to handle both cases:
-	// - When pipeline_intention is set: only include packages with matching pipeline_intention metadata
-	// - When pipeline_intention is not set: only include packages with no pipeline_intention metadata
-	filters = append(filters, NewPipelineIntentionFilter(intentions))
-
-	// ── 2. Include list (handles @collection / pkg / pkg.rule) ─────────────
-	if hasIncludes {
-		filters = append(filters, NewIncludeListFilter(source.Config.Include))
+func (f *PipelineIntentionFilterFactory) CreateFilters(source ecc.Source) []RuleFilter {
+	// Extract single pipeline_intention string from policy config
+	targetIntention := extractStringFromRuleData(source, "pipeline_intention")
+	var targetIntentions []string
+	if targetIntention != "" {
+		targetIntentions = []string{targetIntention}
 	}
-
-	return filters
-}
-
-type IncludeFilterFactory struct{}
-
-func NewIncludeFilterFactory() FilterFactory { return &IncludeFilterFactory{} }
-
-// CreateFilters builds a list of filters based on the source configuration.
-//
-// The filtering logic follows these rules:
-// 1. Pipeline Intention Filtering:
-//   - When pipeline_intention is set in ruleData: only include packages with rules
-//     that have matching pipeline_intention metadata
-//   - When pipeline_intention is NOT set in ruleData: only include packages with rules
-//     that have NO pipeline_intention metadata (general-purpose rules)
-//
-// 2. Include List Filtering:
-//   - When includes are specified: only include packages that match the include criteria
-//   - Supports @collection, package names, and package.rule patterns
-//
-// 3. Combined Logic:
-//   - All filters are applied with AND logic - a package must pass ALL filters
-//   - This allows fine-grained control over which rules are evaluated
-func (f *IncludeFilterFactory) CreateFilters(source ecc.Source) []RuleFilter {
-	var filters []RuleFilter
-
-	hasIncludes := source.Config != nil && len(source.Config.Include) > 0
-
-	// ── 1. Include list (handles @collection / pkg / pkg.rule) ─────────────
-	if hasIncludes {
-		filters = append(filters, NewIncludeListFilter(source.Config.Include))
-	}
-
-	return filters
+	return []RuleFilter{NewPipelineIntentionFilter(targetIntentions)}
 }
 
 //////////////////////////////////////////////////////////////////////////////
-// PipelineIntentionFilter
+// Pipeline Intention Filter
 //////////////////////////////////////////////////////////////////////////////
 
 // PipelineIntentionFilter filters packages based on pipeline_intention metadata.
 //
 // This filter ensures that only rules appropriate for the current pipeline context
 // are evaluated. It works by examining the pipeline_intention metadata in each rule
-// and comparing it against the configured pipeline_intention values.
+// and comparing it against the configured pipeline_intention value.
+//
+// The relationship:
+// - Policy Config: pipeline_intention is a SINGLE string (e.g., "release")
+// - Rule Metadata: pipeline_intention is a LIST of strings (e.g., ["release", "production"])
 //
 // Behavior:
-// - When targetIntentions is empty (no pipeline_intention configured):
+// - When targetIntention is empty (no pipeline_intention configured):
 //   - Only includes packages with rules that have NO pipeline_intention metadata
 //   - This allows general-purpose rules to run in default contexts
 //
-// - When targetIntentions is set (pipeline_intention configured):
-//   - Only includes packages with rules that have MATCHING pipeline_intention metadata
+// - When targetIntention is set (pipeline_intention configured):
+//   - Only includes packages with rules that have the target value in their pipeline_intention list
 //   - This ensures only pipeline-specific rules are evaluated
 //
 // Examples:
-// - Config: pipeline_intention: ["release"]
-//   - Rule with pipeline_intention: ["release", "production"] → INCLUDED
-//   - Rule with pipeline_intention: ["staging"] → EXCLUDED
+// - Config: pipeline_intention: "release"
+//   - Rule with pipeline_intention: ["release", "production"] → INCLUDED (contains "release")
+//   - Rule with pipeline_intention: ["staging"] → EXCLUDED (doesn't contain "release")
 //   - Rule with no pipeline_intention metadata → EXCLUDED
 //
 // - Config: no pipeline_intention set
 //   - Rule with pipeline_intention: ["release"] → EXCLUDED
 //   - Rule with no pipeline_intention metadata → INCLUDED
-type PipelineIntentionFilter struct{ targetIntentions []string }
+type PipelineIntentionFilter struct {
+	targetIntentions []string
+}
 
 func NewPipelineIntentionFilter(target []string) RuleFilter {
 	return &PipelineIntentionFilter{targetIntentions: target}
@@ -173,9 +131,11 @@ func (f *PipelineIntentionFilter) Include(_ string, rules []rule.Info) bool {
 		// This allows general-purpose rules (like the example fail_with_data.rego) to be evaluated
 		for _, r := range rules {
 			if len(r.PipelineIntention) > 0 {
+				log.Debugf("PipelineIntentionFilter: Excluding package with pipeline_intention metadata")
 				return false // Exclude packages with pipeline_intention metadata
 			}
 		}
+		log.Debugf("PipelineIntentionFilter: Including package with no pipeline_intention metadata")
 		return true // Include packages with no pipeline_intention metadata
 	}
 
@@ -185,67 +145,14 @@ func (f *PipelineIntentionFilter) Include(_ string, rules []rule.Info) bool {
 		for _, ruleIntention := range r.PipelineIntention {
 			for _, targetIntention := range f.targetIntentions {
 				if ruleIntention == targetIntention {
+					log.Debugf("PipelineIntentionFilter: Including package with matching pipeline_intention: %s", targetIntention)
 					return true // Include packages with matching pipeline_intention metadata
 				}
 			}
 		}
 	}
+	log.Debugf("PipelineIntentionFilter: Excluding package with no matching pipeline_intention metadata")
 	return false // Exclude packages with no matching pipeline_intention metadata
-}
-
-//////////////////////////////////////////////////////////////////////////////
-// IncludeListFilter
-//////////////////////////////////////////////////////////////////////////////
-
-// IncludeListFilter filters packages based on explicit include criteria.
-//
-// This filter provides fine-grained control over which packages are evaluated
-// by allowing explicit specification of packages, collections, or individual rules.
-//
-// Supported patterns:
-// - "@collection" - includes any package with rules that belong to the specified collection
-// - "package" - includes the entire package
-// - "package.rule" - includes the package containing the specified rule
-//
-// Examples:
-// - ["@security"] - includes packages with rules in the "security" collection
-// - ["cve"] - includes the "cve" package
-// - ["release.security_check"] - includes the "release" package (which contains the rule)
-type IncludeListFilter struct{ entries []string }
-
-func NewIncludeListFilter(entries []string) RuleFilter {
-	return &IncludeListFilter{entries: entries}
-}
-
-// Include determines whether a package should be included based on the include list criteria.
-//
-// The function checks if the package or any of its rules match the include criteria.
-// If any rule in the package matches, the entire package is included.
-func (f *IncludeListFilter) Include(pkg string, rules []rule.Info) bool {
-	for _, entry := range f.entries {
-		switch {
-		case entry == pkg:
-			// Direct package match
-			return true
-		case strings.HasPrefix(entry, "@"):
-			// Collection-based filtering
-			want := strings.TrimPrefix(entry, "@")
-			for _, r := range rules {
-				for _, c := range r.Collections {
-					if c == want {
-						return true // Package contains a rule in the specified collection
-					}
-				}
-			}
-		case strings.Contains(entry, "."):
-			// Rule-specific filtering (package.rule format)
-			parts := strings.SplitN(entry, ".", 2)
-			if len(parts) == 2 && parts[0] == pkg {
-				return true // Package contains the specified rule
-			}
-		}
-	}
-	return false // No matches found
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -257,11 +164,6 @@ func (f *IncludeListFilter) Include(pkg string, rules []rule.Info) bool {
 // This filter combines multiple RuleFilter instances and only includes packages
 // that pass ALL filters. This allows for complex filtering scenarios where
 // multiple criteria must be satisfied.
-//
-// Example: Pipeline intention + Include list
-// - Pipeline intention filter: only packages with matching pipeline_intention
-// - Include list filter: only packages in the include list
-// - Result: only packages that satisfy BOTH conditions
 type NamespaceFilter struct{ filters []RuleFilter }
 
 func NewNamespaceFilter(filters ...RuleFilter) *NamespaceFilter {
@@ -318,6 +220,31 @@ func (nf *NamespaceFilter) Filter(rules policyRules) []string {
 // and applies it to the given rules.
 func filterNamespaces(r policyRules, filters ...RuleFilter) []string {
 	return NewNamespaceFilter(filters...).Filter(r)
+}
+
+// extractStringFromRuleData extracts a single string value from the ruleData JSON.
+//
+// This function is similar to extractStringArrayFromRuleData but extracts a single
+// string value instead of an array. It's used for configuration values that are
+// single strings rather than arrays.
+func extractStringFromRuleData(src ecc.Source, key string) string {
+	if src.RuleData == nil {
+		return ""
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(src.RuleData.Raw, &data); err != nil {
+		log.Debugf("Failed to unmarshal ruleData: %v", err)
+		return ""
+	}
+
+	if value, exists := data[key]; exists {
+		if str, ok := value.(string); ok {
+			return str
+		}
+		log.Debugf("RuleData key '%s' is not a string: %T", key, value)
+	}
+	return ""
 }
 
 // extractStringArrayFromRuleData returns a string slice for `key`.

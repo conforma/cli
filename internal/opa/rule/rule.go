@@ -271,6 +271,23 @@ func dependsOn(a *ast.AnnotationsRef) []string {
 	}
 }
 
+func terms(a *ast.AnnotationsRef) []string {
+	terms := make([]string, 0, 3)
+	if a == nil || a.Annotations == nil || a.Annotations.Custom == nil {
+		return terms
+	}
+
+	if values, ok := a.Annotations.Custom["terms"].([]any); ok {
+		for _, value := range values {
+			if term, ok := value.(string); ok {
+				terms = append(terms, term)
+			}
+		}
+	}
+
+	return terms
+}
+
 type RuleKind string
 
 const (
@@ -293,6 +310,7 @@ type Info struct {
 	ShortName         string
 	Solution          string
 	Title             string
+	Terms             []string
 }
 
 func RuleInfo(a *ast.AnnotationsRef) Info {
@@ -309,5 +327,6 @@ func RuleInfo(a *ast.AnnotationsRef) Info {
 		PipelineIntention: pipelineIntention(a),
 		ShortName:         shortName(a),
 		Title:             title(a),
+		Terms:             terms(a),
 	}
 }
