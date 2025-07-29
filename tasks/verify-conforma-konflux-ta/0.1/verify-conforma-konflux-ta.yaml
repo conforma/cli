@@ -168,6 +168,36 @@ spec:
       # tar: .: Cannot change mode to rwxr-sr-x: Operation not permitted
       default: "/var/workdir/conforma"
 
+    - name: RETRY_MIN_WAIT
+      type: string
+      description: Minimum wait time between retries for 429 errors (e.g., "200ms", "1s")
+      default: "200ms"
+
+    - name: RETRY_MAX_WAIT
+      type: string
+      description: Maximum wait time between retries for 429 errors (e.g., "3s", "10s")
+      default: "3s"
+
+    - name: RETRY_MAX_RETRY
+      type: string
+      description: Maximum number of retries for 429 errors
+      default: "3"
+
+    - name: RETRY_DURATION
+      type: string
+      description: Base duration for exponential backoff calculation (e.g., "1s", "500ms")
+      default: "1s"
+
+    - name: RETRY_FACTOR
+      type: string
+      description: Factor for exponential backoff calculation (e.g., "2.0", "1.5")
+      default: "2.0"
+
+    - name: RETRY_JITTER
+      type: string
+      description: Jitter factor for backoff calculation (0.0-1.0, e.g., "0.1", "0.2")
+      default: "0.1"
+
   results:
     - name: TEST_OUTPUT
       description: Short summary of the policy evaluation for each image
@@ -263,6 +293,18 @@ spec:
         - "--show-successes"
         - "--effective-time=$(params.EFFECTIVE_TIME)"
         - "--extra-rule-data=$(params.EXTRA_RULE_DATA)"
+        - "--retry-min-wait"
+        - "$(params.RETRY_MIN_WAIT)"
+        - "--retry-max-wait"
+        - "$(params.RETRY_MAX_WAIT)"
+        - "--retry-max-retry"
+        - "$(params.RETRY_MAX_RETRY)"
+        - "--retry-duration"
+        - "$(params.RETRY_DURATION)"
+        - "--retry-factor"
+        - "$(params.RETRY_FACTOR)"
+        - "--retry-jitter"
+        - "$(params.RETRY_JITTER)"
         - "--output"
         - "text=$(params.HOMEDIR)/text-report.txt?show-successes=false"
         - "--output"

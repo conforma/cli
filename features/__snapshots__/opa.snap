@@ -25,13 +25,19 @@ Flags:
   -h, --help   help for opa
 
 Global Flags:
-      --debug                  same as verbose but also show function names and line numbers
-      --kubeconfig string      path to the Kubernetes config file to use
-      --logfile string         file to write the logging output. If not specified logging output will be written to stderr
-      --quiet                  less verbose output
-      --timeout duration       max overall execution duration (default 5m0s)
-      --trace string[="log"]   enable trace logging, set one or more comma separated values: none,all,perf,cpu,mem,opa,log (default "none")
-      --verbose                more verbose output
+      --debug                     same as verbose but also show function names and line numbers
+      --kubeconfig string         path to the Kubernetes config file to use
+      --logfile string            file to write the logging output. If not specified logging output will be written to stderr
+      --quiet                     less verbose output
+      --retry-duration duration   base duration for exponential backoff calculation (default 1s)
+      --retry-factor float        factor for exponential backoff calculation (default 2)
+      --retry-jitter float        jitter factor for backoff calculation (0.0-1.0) (default 0.1)
+      --retry-max-retry int       maximum number of retries for 429 errors (default 3)
+      --retry-max-wait duration   maximum wait time between retries for 429 errors (default 3s)
+      --retry-min-wait duration   minimum wait time between retries for 429 errors (default 200ms)
+      --timeout duration          max overall execution duration (default 5m0s)
+      --trace string[="log"]      enable trace logging, set one or more comma separated values: none,all,perf,cpu,mem,opa,log (default "none")
+      --verbose                   more verbose output
 
 Use "ec opa [command] --help" for more information about a command.
 

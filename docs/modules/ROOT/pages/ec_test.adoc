@@ -100,6 +100,12 @@ the output will include a detailed trace of how the policy was evaluated, e.g.
 --debug:: same as verbose but also show function names and line numbers (Default: false)
 --kubeconfig:: path to the Kubernetes config file to use
 --logfile:: file to write the logging output. If not specified logging output will be written to stderr
+--retry-duration:: base duration for exponential backoff calculation (Default: 1s)
+--retry-factor:: factor for exponential backoff calculation (Default: 2)
+--retry-jitter:: jitter factor for backoff calculation (0.0-1.0) (Default: 0.1)
+--retry-max-retry:: maximum number of retries for 429 errors (Default: 3)
+--retry-max-wait:: maximum wait time between retries for 429 errors (Default: 3s)
+--retry-min-wait:: minimum wait time between retries for 429 errors (Default: 200ms)
 --timeout:: max overall execution duration (Default: 5m0s)
 --verbose:: more verbose output (Default: false)
 

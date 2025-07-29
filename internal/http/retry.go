@@ -23,6 +23,42 @@ import (
 
 var DefaultRetry = Retry{200 * time.Millisecond, 3 * time.Second, 3}
 
+// RetryConfig holds the configuration for retry behavior
+type RetryConfig struct {
+	MinWait  time.Duration
+	MaxWait  time.Duration
+	MaxRetry int
+	Duration time.Duration
+	Factor   float64
+	Jitter   float64
+}
+
+// GetRetryConfig returns the current retry configuration
+func GetRetryConfig() RetryConfig {
+	return RetryConfig{
+		MinWait:  DefaultRetry.MinWait,
+		MaxWait:  DefaultRetry.MaxWait,
+		MaxRetry: DefaultRetry.MaxRetry,
+		Duration: DefaultBackoff.Duration,
+		Factor:   DefaultBackoff.Factor,
+		Jitter:   DefaultBackoff.Jitter,
+	}
+}
+
+// SetRetryConfig updates the retry configuration
+func SetRetryConfig(config RetryConfig) {
+	DefaultRetry = Retry{
+		MinWait:  config.MinWait,
+		MaxWait:  config.MaxWait,
+		MaxRetry: config.MaxRetry,
+	}
+	DefaultBackoff = Backoff{
+		Duration: config.Duration,
+		Factor:   config.Factor,
+		Jitter:   config.Jitter,
+	}
+}
+
 type Retry struct {
 	MinWait  time.Duration
 	MaxWait  time.Duration

@@ -73,6 +73,24 @@ paths can be provided by using the `:` separator.
 *TRUSTED_ARTIFACTS_EXTRACT_DIR* (`string`):: Directory to use to extract trusted artifact archive.
 +
 *Default*: `/var/workdir/conforma`
+*RETRY_MIN_WAIT* (`string`):: Minimum wait time between retries for 429 errors (e.g., "200ms", "1s")
++
+*Default*: `200ms`
+*RETRY_MAX_WAIT* (`string`):: Maximum wait time between retries for 429 errors (e.g., "3s", "10s")
++
+*Default*: `3s`
+*RETRY_MAX_RETRY* (`string`):: Maximum number of retries for 429 errors
++
+*Default*: `3`
+*RETRY_DURATION* (`string`):: Base duration for exponential backoff calculation (e.g., "1s", "500ms")
++
+*Default*: `1s`
+*RETRY_FACTOR* (`string`):: Factor for exponential backoff calculation (e.g., "2.0", "1.5")
++
+*Default*: `2.0`
+*RETRY_JITTER* (`string`):: Jitter factor for backoff calculation (0.0-1.0, e.g., "0.1", "0.2")
++
+*Default*: `0.1`
 
 == Results
 

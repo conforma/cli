@@ -28,6 +28,12 @@ kubectl apply -f https://raw.githubusercontent.com/conforma/cli/main/tasks/verif
 * **HOMEDIR**: Value for the HOME environment variable.
 * **EFFECTIVE_TIME**: Run policy checks with the provided time.
 * **WORKERS**: Number of parallel workers to use for validation.
+* **RETRY_MIN_WAIT**: Minimum wait time between retries for 429 errors (e.g., "200ms", "1s")
+* **RETRY_MAX_WAIT**: Maximum wait time between retries for 429 errors (e.g., "3s", "10s")
+* **RETRY_MAX_RETRY**: Maximum number of retries for 429 errors
+* **RETRY_DURATION**: Base duration for exponential backoff calculation (e.g., "1s", "500ms")
+* **RETRY_FACTOR**: Factor for exponential backoff calculation (e.g., "2.0", "1.5")
+* **RETRY_JITTER**: Jitter factor for backoff calculation (0.0-1.0, e.g., "0.1", "0.2")
 
 
 ## Usage
@@ -45,4 +51,31 @@ spec:
   params:
   - name: IMAGES
     value: '{"components": ["containerImage": "quay.io/example/repo:latest"]}'
+```
+
+### Example with custom retry configuration
+
+```yaml
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: verify-enterprise-contract-with-retry
+spec:
+  taskRef:
+    name: verify-enterprise-contract
+  params:
+  - name: IMAGES
+    value: '{"components": ["containerImage": "quay.io/example/repo:latest"]}'
+  - name: RETRY_MIN_WAIT
+    value: '1s'
+  - name: RETRY_MAX_WAIT
+    value: '10s'
+  - name: RETRY_MAX_RETRY
+    value: '5'
+  - name: RETRY_DURATION
+    value: '2s'
+  - name: RETRY_FACTOR
+    value: '1.5'
+  - name: RETRY_JITTER
+    value: '0.2'
 ```

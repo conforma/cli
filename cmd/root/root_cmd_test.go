@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/conforma/cli/internal/http"
 )
 
 func TestGlobalTimeout(t *testing.T) {
@@ -73,6 +75,82 @@ func TestGlobalTimeout(t *testing.T) {
 			// Verify the timeout value
 			assert.Equal(t, tt.expectedValue, globalTimeout)
 			assert.Equal(t, tt.expectedString, globalTimeout.String())
+		})
+	}
+}
+
+func TestRetryConfigurationFlags(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           []string
+		expectedConfig http.RetryConfig
+	}{
+		{
+			name: "default retry configuration",
+			args: []string{},
+			expectedConfig: http.RetryConfig{
+				MinWait:  200 * time.Millisecond,
+				MaxWait:  3 * time.Second,
+				MaxRetry: 3,
+				Duration: 1 * time.Second,
+				Factor:   2.0,
+				Jitter:   0.1,
+			},
+		},
+		{
+			name: "custom retry configuration",
+			args: []string{
+				"--retry-min-wait", "100ms",
+				"--retry-max-wait", "2s",
+				"--retry-max-retry", "5",
+				"--retry-duration", "500ms",
+				"--retry-factor", "1.5",
+				"--retry-jitter", "0.2",
+			},
+			expectedConfig: http.RetryConfig{
+				MinWait:  100 * time.Millisecond,
+				MaxWait:  2 * time.Second,
+				MaxRetry: 5,
+				Duration: 500 * time.Millisecond,
+				Factor:   1.5,
+				Jitter:   0.2,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset to default values
+			retryMinWait = 200 * time.Millisecond
+			retryMaxWait = 3 * time.Second
+			retryMaxRetry = 3
+			retryDuration = 1 * time.Second
+			retryFactor = 2.0
+			retryJitter = 0.1
+
+			cmd := NewRootCmd()
+			if len(tt.args) > 0 {
+				cmd.SetArgs(append(tt.args, "version"))
+			} else {
+				cmd.SetArgs([]string{"version"})
+			}
+
+			// Execute the command to trigger flag parsing and configuration
+			err := cmd.Execute()
+			assert.NoError(t, err)
+
+			// Verify the configuration was applied by checking the actual values
+			// The configuration is applied in PersistentPreRun, so we need to check
+			// that the flags were parsed correctly
+			if len(tt.args) > 0 {
+				// For custom configuration, verify that the flags were parsed
+				assert.Equal(t, tt.expectedConfig.MinWait, retryMinWait)
+				assert.Equal(t, tt.expectedConfig.MaxWait, retryMaxWait)
+				assert.Equal(t, tt.expectedConfig.MaxRetry, retryMaxRetry)
+				assert.Equal(t, tt.expectedConfig.Duration, retryDuration)
+				assert.Equal(t, tt.expectedConfig.Factor, retryFactor)
+				assert.Equal(t, tt.expectedConfig.Jitter, retryJitter)
+			}
 		})
 	}
 }

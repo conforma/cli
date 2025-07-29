@@ -31,6 +31,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/conforma/cli/internal/http"
 	"github.com/conforma/cli/internal/kubernetes"
 	"github.com/conforma/cli/internal/logging"
 	"github.com/conforma/cli/internal/tracing"
@@ -44,7 +45,16 @@ var (
 	enabledTraces tracing.Trace = tracing.None
 	globalTimeout               = 5 * time.Minute
 	logfile       string
-	OnExit        func() = func() {}
+
+	// Retry configuration flags
+	retryMinWait  time.Duration = 200 * time.Millisecond
+	retryMaxWait  time.Duration = 3 * time.Second
+	retryMaxRetry int           = 3
+	retryDuration time.Duration = 1 * time.Second
+	retryFactor   float64       = 2.0
+	retryJitter   float64       = 0.1
+
+	OnExit func() = func() {}
 )
 
 type customDeadlineExceededError struct{}
@@ -90,6 +100,17 @@ func NewRootCmd() *cobra.Command {
 
 		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
 			logging.InitLogging(verbose, quiet, debug, enabledTraces.Enabled(tracing.Log, tracing.Opa), logfile)
+
+			// Apply retry configuration from CLI flags
+			retryConfig := http.RetryConfig{
+				MinWait:  retryMinWait,
+				MaxWait:  retryMaxWait,
+				MaxRetry: retryMaxRetry,
+				Duration: retryDuration,
+				Factor:   retryFactor,
+				Jitter:   retryJitter,
+			}
+			http.SetRetryConfig(retryConfig)
 
 			// set a custom message for context.DeadlineExceeded error
 			context.DeadlineExceeded = customDeadlineExceededError{}
@@ -192,5 +213,14 @@ func setFlags(rootCmd *cobra.Command) {
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", debug, "same as verbose but also show function names and line numbers")
 	rootCmd.PersistentFlags().DurationVar(&globalTimeout, "timeout", globalTimeout, "max overall execution duration")
 	rootCmd.PersistentFlags().StringVar(&logfile, "logfile", "", "file to write the logging output. If not specified logging output will be written to stderr")
+
+	// Retry configuration flags
+	rootCmd.PersistentFlags().DurationVar(&retryMinWait, "retry-min-wait", retryMinWait, "minimum wait time between retries for 429 errors")
+	rootCmd.PersistentFlags().DurationVar(&retryMaxWait, "retry-max-wait", retryMaxWait, "maximum wait time between retries for 429 errors")
+	rootCmd.PersistentFlags().IntVar(&retryMaxRetry, "retry-max-retry", retryMaxRetry, "maximum number of retries for 429 errors")
+	rootCmd.PersistentFlags().DurationVar(&retryDuration, "retry-duration", retryDuration, "base duration for exponential backoff calculation")
+	rootCmd.PersistentFlags().Float64Var(&retryFactor, "retry-factor", retryFactor, "factor for exponential backoff calculation")
+	rootCmd.PersistentFlags().Float64Var(&retryJitter, "retry-jitter", retryJitter, "jitter factor for backoff calculation (0.0-1.0)")
+
 	kubernetes.AddKubeconfigFlag(rootCmd)
 }
