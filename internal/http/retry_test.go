@@ -63,17 +63,12 @@ func TestRetryTransport_429Retry(t *testing.T) {
 	// Create a transport that will retry on 429 with much shorter timeouts for testing
 	baseTransport := &http.Transport{}
 
-	// Temporarily override the default retry settings for this test
-	originalRetry := DefaultRetry
-	originalBackoff := DefaultBackoff
-	DefaultRetry = Retry{10 * time.Millisecond, 3}
-	DefaultBackoff = Backoff{1 * time.Millisecond, 1.5, 0.0} // No jitter for deterministic testing
-	defer func() {
-		DefaultRetry = originalRetry
-		DefaultBackoff = originalBackoff
-	}()
-
-	retryTransport := NewRetryTransport(baseTransport)
+	// Create a custom retry transport with test-specific settings
+	retryTransport := NewRetryTransportWithConfig(
+		baseTransport,
+		Retry{10 * time.Millisecond, 3},
+		Backoff{1 * time.Millisecond, 1.5, 0.0}, // No jitter for deterministic testing
+	)
 
 	// Create a request
 	req, err := http.NewRequest("GET", server.URL, nil)
@@ -118,17 +113,12 @@ func TestRetryTransport_408Retry(t *testing.T) {
 	// Create a transport that will retry on 408 with much shorter timeouts for testing
 	baseTransport := &http.Transport{}
 
-	// Temporarily override the default retry settings for this test
-	originalRetry := DefaultRetry
-	originalBackoff := DefaultBackoff
-	DefaultRetry = Retry{10 * time.Millisecond, 3}
-	DefaultBackoff = Backoff{1 * time.Millisecond, 1.5, 0.0} // No jitter for deterministic testing
-	defer func() {
-		DefaultRetry = originalRetry
-		DefaultBackoff = originalBackoff
-	}()
-
-	retryTransport := NewRetryTransport(baseTransport)
+	// Create a custom retry transport with test-specific settings
+	retryTransport := NewRetryTransportWithConfig(
+		baseTransport,
+		Retry{10 * time.Millisecond, 3},
+		Backoff{1 * time.Millisecond, 1.5, 0.0}, // No jitter for deterministic testing
+	)
 
 	// Create a request
 	req, err := http.NewRequest("GET", server.URL, nil)
@@ -173,17 +163,12 @@ func TestRetryTransport_503Retry(t *testing.T) {
 	// Create a transport that will retry on 503 with much shorter timeouts for testing
 	baseTransport := &http.Transport{}
 
-	// Temporarily override the default retry settings for this test
-	originalRetry := DefaultRetry
-	originalBackoff := DefaultBackoff
-	DefaultRetry = Retry{10 * time.Millisecond, 3}
-	DefaultBackoff = Backoff{1 * time.Millisecond, 1.5, 0.0} // No jitter for deterministic testing
-	defer func() {
-		DefaultRetry = originalRetry
-		DefaultBackoff = originalBackoff
-	}()
-
-	retryTransport := NewRetryTransport(baseTransport)
+	// Create a custom retry transport with test-specific settings
+	retryTransport := NewRetryTransportWithConfig(
+		baseTransport,
+		Retry{10 * time.Millisecond, 3},
+		Backoff{1 * time.Millisecond, 1.5, 0.0}, // No jitter for deterministic testing
+	)
 
 	// Create a request
 	req, err := http.NewRequest("GET", server.URL, nil)
@@ -273,6 +258,12 @@ func TestRetryTransport_ContextCancellation(t *testing.T) {
 }
 
 func TestCalculateBackoff(t *testing.T) {
+	// Create a retry transport with default settings for testing
+	rt := &retryTransport{
+		retry:   DefaultRetry,
+		backoff: DefaultBackoff,
+	}
+
 	tests := []struct {
 		name     string
 		attempt  int
@@ -301,7 +292,7 @@ func TestCalculateBackoff(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			backoff := calculateBackoff(tt.attempt)
+			backoff := rt.calculateBackoff(tt.attempt)
 
 			// For the first attempt, it should be exactly the base duration
 			if tt.attempt == 0 {
@@ -353,7 +344,11 @@ func TestRetryConfig(t *testing.T) {
 	assert.Equal(t, customConfig.Jitter, updatedConfig.Jitter)
 
 	// Test that the backoff calculation uses the new configuration
-	backoff := calculateBackoff(1)
+	rt := &retryTransport{
+		retry:   Retry{MaxWait: customConfig.MaxWait, MaxRetry: customConfig.MaxRetry},
+		backoff: Backoff{Duration: customConfig.Duration, Factor: customConfig.Factor, Jitter: customConfig.Jitter},
+	}
+	backoff := rt.calculateBackoff(1)
 	expectedBackoff := time.Duration(float64(customConfig.Duration) * customConfig.Factor)
 
 	// Test that the backoff is at least the minimum and not more than 2x the expected value

@@ -45,6 +45,12 @@ const clientContextKey contextKey = "ec.oci.client"
 
 var imgCache = sync.OnceValue(initCache)
 
+func init() {
+	// if log.IsLevelEnabled(log.TraceLevel) {
+	// 	// imageRefTransport = remote.WithTransport(echttp.NewTracingRoundTripper(remote.DefaultTransport))
+	// }
+}
+
 func initCache() cache.Cache {
 	// if a value was set and it is parsed as false, turn the cache off
 	if v, err := strconv.ParseBool(os.Getenv("EC_CACHE")); err == nil && !v {

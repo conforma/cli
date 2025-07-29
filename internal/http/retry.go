@@ -22,8 +22,6 @@ import (
 	"math/big"
 	"net/http"
 	"time"
-
-	"github.com/google/go-containerregistry/pkg/v1/remote"
 )
 
 var DefaultRetry = Retry{3 * time.Second, 3}
@@ -48,7 +46,7 @@ func GetRetryConfig() RetryConfig {
 	}
 }
 
-// SetRetryConfig updates the retry configuration and sets the global default transport
+// SetRetryConfig updates the retry configuration
 func SetRetryConfig(config RetryConfig) {
 	DefaultRetry = Retry{
 		MaxWait:  config.MaxWait,
@@ -59,19 +57,17 @@ func SetRetryConfig(config RetryConfig) {
 		Factor:   config.Factor,
 		Jitter:   config.Jitter,
 	}
-
-	// Set the global default transport to use our retry transport
-	// This ensures that all HTTP requests (including auth requests) benefit from retry logic
-	http.DefaultTransport = NewRetryTransport(http.DefaultTransport)
-
-	// Also set the go-containerregistry library's default transport
-	// This ensures that authentication requests and other internal requests use our retry logic
-	remote.DefaultTransport = NewRetryTransport(remote.DefaultTransport)
 }
 
 type Retry struct {
 	MaxWait  time.Duration
 	MaxRetry int
+}
+
+type retryTransport struct {
+	base    http.RoundTripper
+	retry   Retry
+	backoff Backoff
 }
 
 // NewRetryTransport creates a custom HTTP transport that handles 429, 408, and 503 errors
@@ -82,19 +78,29 @@ func NewRetryTransport(base http.RoundTripper) http.RoundTripper {
 		base = http.DefaultTransport
 	}
 	return &retryTransport{
-		base: base,
+		base:    base,
+		retry:   DefaultRetry,
+		backoff: DefaultBackoff,
 	}
 }
 
-type retryTransport struct {
-	base http.RoundTripper
+// NewRetryTransportWithConfig creates a retry transport with custom retry and backoff settings
+func NewRetryTransportWithConfig(base http.RoundTripper, retry Retry, backoff Backoff) http.RoundTripper {
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return &retryTransport{
+		base:    base,
+		retry:   retry,
+		backoff: backoff,
+	}
 }
 
 func (r *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var lastErr error
 	var lastResp *http.Response
 
-	for attempt := 0; attempt <= DefaultRetry.MaxRetry; attempt++ {
+	for attempt := 0; attempt <= r.retry.MaxRetry; attempt++ {
 		resp, err := r.base.RoundTrip(req)
 		if err != nil {
 			lastErr = err
@@ -108,7 +114,7 @@ func (r *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			lastErr = nil
 
 			// Calculate backoff duration
-			backoff := calculateBackoff(attempt)
+			backoff := r.calculateBackoff(attempt)
 
 			// Check if context is cancelled
 			select {
@@ -133,18 +139,18 @@ func (r *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 // calculateBackoff computes the exponential backoff duration with jitter
-func calculateBackoff(attempt int) time.Duration {
+func (r *retryTransport) calculateBackoff(attempt int) time.Duration {
 	if attempt == 0 {
 		// First attempt uses the base duration
-		return DefaultBackoff.Duration
+		return r.backoff.Duration
 	}
 
 	// Calculate exponential backoff starting from the base duration
-	duration := time.Duration(float64(DefaultBackoff.Duration) * math.Pow(DefaultBackoff.Factor, float64(attempt)))
+	duration := time.Duration(float64(r.backoff.Duration) * math.Pow(r.backoff.Factor, float64(attempt)))
 
 	// Add jitter to prevent thundering herd
-	if DefaultBackoff.Jitter > 0 {
-		jitter := float64(duration) * DefaultBackoff.Jitter
+	if r.backoff.Jitter > 0 {
+		jitter := float64(duration) * r.backoff.Jitter
 		// Generate random number between -1 and 1
 		randomBytes := make([]byte, 8)
 		_, err := rand.Read(randomBytes)
@@ -160,8 +166,8 @@ func calculateBackoff(attempt int) time.Duration {
 	}
 
 	// Cap at maximum wait time
-	if duration > DefaultRetry.MaxWait {
-		duration = DefaultRetry.MaxWait
+	if duration > r.retry.MaxWait {
+		duration = r.retry.MaxWait
 	}
 
 	return duration
