@@ -437,7 +437,7 @@ func Test_ValidateImageCommandKeyless(t *testing.T) {
 			Subject:       "my-certificate-identity",
 			IssuerRegExp:  "my-certificate-oidc-issuer-regexp",
 			SubjectRegExp: "my-certificate-identity-regexp",
-		}, p.Identity())
+		}, p.GetSignatureVerificationIdentity())
 
 		called = true
 
