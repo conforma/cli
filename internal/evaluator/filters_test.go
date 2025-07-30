@@ -29,6 +29,7 @@ import (
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	"github.com/conforma/cli/internal/opa/rule"
+	"github.com/conforma/cli/internal/policy"
 )
 
 //////////////////////////////////////////////////////////////////////////////
@@ -346,6 +347,23 @@ func TestECPolicyResolver(t *testing.T) {
 	// Verify explanations
 	assert.Contains(t, result.Explanations["cve.high_severity"], "included")
 	assert.Contains(t, result.Explanations["slsa3.provenance"], "excluded")
+}
+
+// simpleConfigProvider is a simple implementation for testing
+type simpleConfigProvider struct {
+	effectiveTime time.Time
+}
+
+func (s *simpleConfigProvider) EffectiveTime() time.Time {
+	return s.effectiveTime
+}
+
+func (s *simpleConfigProvider) SigstoreOpts() (policy.SigstoreOpts, error) {
+	return policy.SigstoreOpts{}, nil
+}
+
+func (s *simpleConfigProvider) Spec() ecc.EnterpriseContractPolicySpec {
+	return ecc.EnterpriseContractPolicySpec{}
 }
 
 func TestECPolicyResolver_DefaultBehavior(t *testing.T) {
