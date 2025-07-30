@@ -19,14 +19,18 @@ package evaluator
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
+	"github.com/conforma/cli/internal/opa/rule"
+	"github.com/conforma/cli/internal/policy"
 )
 
 //////////////////////////////////////////////////////////////////////////////
-// test scaffolding
+// test scaffolding
 //////////////////////////////////////////////////////////////////////////////
 
 func makeSource(ruleData string, includes []string) ecc.Source {
@@ -271,4 +275,262 @@ func TestFilteringWithRulesWithoutMetadata(t *testing.T) {
 			assert.ElementsMatch(t, tc.expectedPkg, got, tc.description)
 		})
 	}
+}
+
+func TestComprehensivePolicyResolver(t *testing.T) {
+	// Create a mock source with policy configuration
+	source := ecc.Source{
+		Config: &ecc.SourceConfig{
+			Include: []string{"cve", "@redhat"},
+			Exclude: []string{"slsa3", "test.test_data_found"},
+		},
+	}
+
+	// Create a simple config provider for testing
+	configProvider := &simpleConfigProvider{
+		effectiveTime: time.Now(),
+	}
+
+	// Create policy resolver
+	resolver := NewComprehensivePolicyResolver(source, configProvider)
+
+	// Create mock rules
+	rules := policyRules{
+		"cve.high_severity": rule.Info{
+			Package:     "cve",
+			Code:        "high_severity",
+			Collections: []string{"redhat"},
+		},
+		"cve.medium_severity": rule.Info{
+			Package:     "cve",
+			Code:        "medium_severity",
+			Collections: []string{"redhat"},
+		},
+		"slsa3.provenance": rule.Info{
+			Package: "slsa3",
+			Code:    "provenance",
+		},
+		"test.test_data_found": rule.Info{
+			Package: "test",
+			Code:    "test_data_found",
+		},
+		"tasks.required_tasks_found": rule.Info{
+			Package:     "tasks",
+			Code:        "required_tasks_found",
+			Collections: []string{"redhat"},
+		},
+	}
+
+	// Resolve policy
+	result := resolver.ResolvePolicy(rules, "test-target")
+
+	// Verify included rules
+	assert.True(t, result.IncludedRules["cve.high_severity"], "cve.high_severity should be included")
+	assert.True(t, result.IncludedRules["cve.medium_severity"], "cve.medium_severity should be included")
+	assert.True(t, result.IncludedRules["tasks.required_tasks_found"], "tasks.required_tasks_found should be included")
+
+	// Verify excluded rules
+	assert.True(t, result.ExcludedRules["slsa3.provenance"], "slsa3.provenance should be excluded")
+	assert.True(t, result.ExcludedRules["test.test_data_found"], "test.test_data_found should be excluded")
+
+	// Verify included packages
+	assert.True(t, result.IncludedPackages["cve"], "cve package should be included")
+	assert.True(t, result.IncludedPackages["tasks"], "tasks package should be included")
+
+	// Verify excluded packages
+	assert.True(t, result.ExcludedPackages["slsa3"], "slsa3 package should be excluded")
+	assert.True(t, result.ExcludedPackages["test"], "test package should be excluded")
+
+	// Verify explanations
+	assert.Contains(t, result.Explanations["cve.high_severity"], "included")
+	assert.Contains(t, result.Explanations["slsa3.provenance"], "excluded")
+}
+
+// simpleConfigProvider is a simple implementation for testing
+type simpleConfigProvider struct {
+	effectiveTime time.Time
+}
+
+func (s *simpleConfigProvider) EffectiveTime() time.Time {
+	return s.effectiveTime
+}
+
+func (s *simpleConfigProvider) SigstoreOpts() (policy.SigstoreOpts, error) {
+	return policy.SigstoreOpts{}, nil
+}
+
+func (s *simpleConfigProvider) Spec() ecc.EnterpriseContractPolicySpec {
+	return ecc.EnterpriseContractPolicySpec{}
+}
+
+func TestComprehensivePolicyResolver_DefaultBehavior(t *testing.T) {
+	// Create a source with no explicit includes (should default to "*")
+	source := ecc.Source{
+		Config: &ecc.SourceConfig{
+			Exclude: []string{"test.test_data_found"},
+		},
+	}
+
+	configProvider := &simpleConfigProvider{
+		effectiveTime: time.Now(),
+	}
+
+	resolver := NewComprehensivePolicyResolver(source, configProvider)
+
+	rules := policyRules{
+		"cve.high_severity": rule.Info{
+			Package: "cve",
+			Code:    "high_severity",
+		},
+		"test.test_data_found": rule.Info{
+			Package: "test",
+			Code:    "test_data_found",
+		},
+	}
+
+	result := resolver.ResolvePolicy(rules, "test-target")
+
+	// Should include everything by default except explicitly excluded
+	assert.True(t, result.IncludedRules["cve.high_severity"], "cve.high_severity should be included by default")
+	assert.True(t, result.ExcludedRules["test.test_data_found"], "test.test_data_found should be excluded")
+}
+
+func TestComprehensivePolicyResolver_PipelineIntention(t *testing.T) {
+	// Create a source with pipeline intention
+	source := ecc.Source{
+		RuleData: &extv1.JSON{Raw: json.RawMessage(`{"pipeline_intention":["build"]}`)},
+		Config: &ecc.SourceConfig{
+			Include: []string{"*"},
+		},
+	}
+
+	configProvider := &simpleConfigProvider{
+		effectiveTime: time.Now(),
+	}
+
+	resolver := NewComprehensivePolicyResolver(source, configProvider)
+
+	rules := policyRules{
+		"tasks.build_task": rule.Info{
+			Package:           "tasks",
+			Code:              "build_task",
+			PipelineIntention: []string{"build"},
+		},
+		"tasks.deploy_task": rule.Info{
+			Package:           "tasks",
+			Code:              "deploy_task",
+			PipelineIntention: []string{"deploy"},
+		},
+		"general.security_check": rule.Info{
+			Package: "general",
+			Code:    "security_check",
+			// No pipeline intention - should not be included
+		},
+	}
+
+	result := resolver.ResolvePolicy(rules, "test-target")
+
+	// Debug output
+	t.Logf("Pipeline intentions: %v", resolver.(*ComprehensivePolicyResolver).pipelineIntentions)
+	t.Logf("Included rules: %v", result.IncludedRules)
+	t.Logf("Excluded rules: %v", result.ExcludedRules)
+	t.Logf("Explanations: %v", result.Explanations)
+
+	// Pipeline intention filtering works at package level
+	// If any rule in a package matches the pipeline intention, the entire package is included
+	assert.True(t, result.IncludedRules["tasks.build_task"], "tasks.build_task should be included")
+	assert.True(t, result.IncludedRules["tasks.deploy_task"], "tasks.deploy_task should be included (same package as build_task)")
+	assert.False(t, result.IncludedRules["general.security_check"], "general.security_check should not be included")
+
+	// Check package inclusion
+	assert.True(t, result.IncludedPackages["tasks"], "tasks package should be included (has included rules)")
+	assert.False(t, result.IncludedPackages["general"], "general package should not be included (no included rules)")
+}
+
+func TestComprehensivePolicyResolver_Example(t *testing.T) {
+	// Example: Using the comprehensive policy resolver with the policy config from the user's example
+
+	// Create a source with the policy configuration from the user's example
+	source := ecc.Source{
+		Config: &ecc.SourceConfig{
+			Include: []string{
+				"cve",     // package example
+				"@redhat", // collection example
+			},
+			Exclude: []string{
+				"slsa3",                                  // exclude package example
+				"test.test_data_found",                   // exclude a rule
+				"tasks.required_tasks_found:clamav-scan", // exclude a rule with a term
+			},
+		},
+	}
+
+	configProvider := &simpleConfigProvider{
+		effectiveTime: time.Now(),
+	}
+
+	// Create mock rules that would be found in the policy
+	rules := policyRules{
+		"cve.high_severity": rule.Info{
+			Package:     "cve",
+			Code:        "high_severity",
+			Collections: []string{"redhat"},
+		},
+		"cve.medium_severity": rule.Info{
+			Package:     "cve",
+			Code:        "medium_severity",
+			Collections: []string{"redhat"},
+		},
+		"slsa3.provenance": rule.Info{
+			Package: "slsa3",
+			Code:    "provenance",
+		},
+		"test.test_data_found": rule.Info{
+			Package: "test",
+			Code:    "test_data_found",
+		},
+		"tasks.required_tasks_found": rule.Info{
+			Package:     "tasks",
+			Code:        "required_tasks_found",
+			Collections: []string{"redhat"},
+		},
+		"tasks.build_task": rule.Info{
+			Package:     "tasks",
+			Code:        "build_task",
+			Collections: []string{"redhat"},
+		},
+	}
+
+	// Use the convenience function to get comprehensive policy resolution
+	result := GetComprehensivePolicyResolution(source, configProvider, rules, "test-target")
+
+	// Verify the results
+	t.Logf("=== Comprehensive Policy Resolution Results ===")
+	t.Logf("Included Rules: %v", result.IncludedRules)
+	t.Logf("Excluded Rules: %v", result.ExcludedRules)
+	t.Logf("Included Packages: %v", result.IncludedPackages)
+	t.Logf("Excluded Packages: %v", result.ExcludedPackages)
+	t.Logf("Missing Includes: %v", result.MissingIncludes)
+	t.Logf("Explanations: %v", result.Explanations)
+
+	// Expected behavior based on the policy configuration:
+	// - cve.high_severity: included (matches "cve" package and "@redhat" collection)
+	// - cve.medium_severity: included (matches "cve" package and "@redhat" collection)
+	// - slsa3.provenance: excluded (matches "slsa3" package exclusion)
+	// - test.test_data_found: excluded (matches "test.test_data_found" rule exclusion)
+	// - tasks.required_tasks_found: included (matches "@redhat" collection)
+	// - tasks.build_task: included (matches "@redhat" collection)
+
+	assert.True(t, result.IncludedRules["cve.high_severity"], "cve.high_severity should be included")
+	assert.True(t, result.IncludedRules["cve.medium_severity"], "cve.medium_severity should be included")
+	assert.True(t, result.ExcludedRules["slsa3.provenance"], "slsa3.provenance should be excluded")
+	assert.True(t, result.ExcludedRules["test.test_data_found"], "test.test_data_found should be excluded")
+	assert.True(t, result.IncludedRules["tasks.required_tasks_found"], "tasks.required_tasks_found should be included")
+	assert.True(t, result.IncludedRules["tasks.build_task"], "tasks.build_task should be included")
+
+	// Check package inclusion
+	assert.True(t, result.IncludedPackages["cve"], "cve package should be included")
+	assert.True(t, result.IncludedPackages["tasks"], "tasks package should be included")
+	assert.True(t, result.ExcludedPackages["slsa3"], "slsa3 package should be excluded")
+	assert.True(t, result.ExcludedPackages["test"], "test package should be excluded")
 }

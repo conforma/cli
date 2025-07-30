@@ -18,6 +18,7 @@ package evaluator
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
@@ -352,4 +353,288 @@ func extractStringArrayFromRuleData(src ecc.Source, key string) []string {
 	default:
 		return nil
 	}
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Comprehensive Policy Resolution
+//////////////////////////////////////////////////////////////////////////////
+
+// PolicyResolver provides comprehensive policy resolution capabilities.
+// It can determine which rules and packages are included/excluded based on
+// the policy configuration, taking into account all criteria including
+// includes, excludes, collections, pipeline intentions, and volatile config.
+type PolicyResolver interface {
+	// ResolvePolicy determines which rules and packages are included/excluded
+	// based on the policy configuration and available rules.
+	ResolvePolicy(rules policyRules, target string) PolicyResolutionResult
+}
+
+// PolicyResolutionResult contains the comprehensive results of policy resolution.
+type PolicyResolutionResult struct {
+	// IncludedRules contains all rule IDs that are included in the policy
+	IncludedRules map[string]bool
+	// ExcludedRules contains all rule IDs that are explicitly excluded
+	ExcludedRules map[string]bool
+	// IncludedPackages contains all package names that are included
+	IncludedPackages map[string]bool
+	// ExcludedPackages contains all package names that are explicitly excluded
+	ExcludedPackages map[string]bool
+	// MissingIncludes contains include criteria that didn't match any rules
+	MissingIncludes map[string]bool
+	// Explanations provides reasons for why rules/packages were included/excluded
+	Explanations map[string]string
+}
+
+// NewPolicyResolutionResult creates a new PolicyResolutionResult with initialized maps
+func NewPolicyResolutionResult() PolicyResolutionResult {
+	return PolicyResolutionResult{
+		IncludedRules:    make(map[string]bool),
+		ExcludedRules:    make(map[string]bool),
+		IncludedPackages: make(map[string]bool),
+		ExcludedPackages: make(map[string]bool),
+		MissingIncludes:  make(map[string]bool),
+		Explanations:     make(map[string]string),
+	}
+}
+
+// ComprehensivePolicyResolver implements PolicyResolver using the existing
+// filtering logic and scoring system.
+type ComprehensivePolicyResolver struct {
+	include            *Criteria
+	exclude            *Criteria
+	pipelineIntentions []string
+}
+
+// NewComprehensivePolicyResolver creates a new PolicyResolver that uses
+// the existing filtering and scoring logic.
+func NewComprehensivePolicyResolver(source ecc.Source, p ConfigProvider) PolicyResolver {
+	include, exclude := computeIncludeExclude(source, p)
+	intentions := extractStringArrayFromRuleData(source, "pipeline_intention")
+
+	return &ComprehensivePolicyResolver{
+		include:            include,
+		exclude:            exclude,
+		pipelineIntentions: intentions,
+	}
+}
+
+// ResolvePolicy determines which rules and packages are included/excluded
+// based on the policy configuration and available rules.
+func (r *ComprehensivePolicyResolver) ResolvePolicy(rules policyRules, target string) PolicyResolutionResult {
+	result := NewPolicyResolutionResult()
+
+	// Initialize missing includes with all include criteria
+	for _, include := range r.include.get(target) {
+		result.MissingIncludes[include] = true
+	}
+
+	// Group rules by package for efficient processing
+	grouped := make(map[string][]rule.Info)
+	for fqName, ruleInfo := range rules {
+		pkg := strings.SplitN(fqName, ".", 2)[0]
+		if pkg == "" {
+			pkg = fqName // fallback
+		}
+		grouped[pkg] = append(grouped[pkg], ruleInfo)
+	}
+
+	// Process each package
+	for pkg, pkgRules := range grouped {
+		r.processPackage(pkg, pkgRules, target, &result)
+	}
+
+	return result
+}
+
+// processPackage processes a single package and its rules
+func (r *ComprehensivePolicyResolver) processPackage(pkg string, pkgRules []rule.Info, target string, result *PolicyResolutionResult) {
+	// Check if package should be included based on pipeline intentions
+	if !r.matchesPipelineIntention(pkgRules) {
+		result.Explanations[pkg] = "package does not match pipeline intention criteria"
+		return
+	}
+
+	// Process each rule in the package
+	for _, ruleInfo := range pkgRules {
+		ruleID := fmt.Sprintf("%s.%s", pkg, ruleInfo.Code)
+		r.processRule(ruleID, ruleInfo, target, result)
+	}
+
+	// Determine package inclusion based on its rules
+	r.determinePackageInclusion(pkg, pkgRules, target, result)
+}
+
+// processRule processes a single rule
+func (r *ComprehensivePolicyResolver) processRule(ruleID string, ruleInfo rule.Info, target string, result *PolicyResolutionResult) {
+	// Create matchers for this rule (similar to makeMatchers in conftest_evaluator.go)
+	matchers := r.createRuleMatchers(ruleID, ruleInfo)
+
+	// Score against include criteria
+	includeScore := r.scoreMatches(matchers, r.include.get(target), result.MissingIncludes)
+
+	// Score against exclude criteria
+	excludeScore := r.scoreMatches(matchers, r.exclude.get(target), make(map[string]bool))
+
+	// Determine inclusion based on scores
+	if includeScore > excludeScore {
+		result.IncludedRules[ruleID] = true
+		result.Explanations[ruleID] = fmt.Sprintf("included (include score: %d, exclude score: %d)", includeScore, excludeScore)
+	} else if excludeScore > 0 {
+		result.ExcludedRules[ruleID] = true
+		result.Explanations[ruleID] = fmt.Sprintf("excluded (include score: %d, exclude score: %d)", includeScore, excludeScore)
+	} else {
+		// No explicit criteria, check default behavior
+		if len(r.include.get(target)) == 0 || (len(r.include.get(target)) == 1 && r.include.get(target)[0] == "*") {
+			result.IncludedRules[ruleID] = true
+			result.Explanations[ruleID] = "included by default (no explicit includes)"
+		} else {
+			result.Explanations[ruleID] = "not explicitly included"
+		}
+	}
+}
+
+// determinePackageInclusion determines if a package should be included based on its rules
+func (r *ComprehensivePolicyResolver) determinePackageInclusion(pkg string, pkgRules []rule.Info, target string, result *PolicyResolutionResult) {
+	// Check if any rule in the package is included
+	hasIncludedRules := false
+	hasExcludedRules := false
+
+	for _, ruleInfo := range pkgRules {
+		ruleID := fmt.Sprintf("%s.%s", pkg, ruleInfo.Code)
+		if result.IncludedRules[ruleID] {
+			hasIncludedRules = true
+		}
+		if result.ExcludedRules[ruleID] {
+			hasExcludedRules = true
+		}
+	}
+
+	// Package is included if it has any included rules
+	if hasIncludedRules {
+		result.IncludedPackages[pkg] = true
+		result.Explanations[pkg] = "package has included rules"
+	} else if hasExcludedRules {
+		result.ExcludedPackages[pkg] = true
+		result.Explanations[pkg] = "package has excluded rules"
+	}
+}
+
+// matchesPipelineIntention checks if the package matches pipeline intention criteria
+func (r *ComprehensivePolicyResolver) matchesPipelineIntention(pkgRules []rule.Info) bool {
+	if len(r.pipelineIntentions) == 0 {
+		// No pipeline intention specified, only include rules without pipeline intention metadata
+		for _, rule := range pkgRules {
+			if len(rule.PipelineIntention) == 0 {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Pipeline intention specified, check if any rule matches
+	for _, rule := range pkgRules {
+		for _, intention := range rule.PipelineIntention {
+			for _, targetIntention := range r.pipelineIntentions {
+				if intention == targetIntention {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// createRuleMatchers creates matchers for a rule (similar to makeMatchers in conftest_evaluator.go)
+func (r *ComprehensivePolicyResolver) createRuleMatchers(ruleID string, ruleInfo rule.Info) []string {
+	parts := strings.Split(ruleID, ".")
+	var pkg string
+	if len(parts) >= 2 {
+		pkg = parts[len(parts)-2]
+	}
+	rule := parts[len(parts)-1]
+
+	var matchers []string
+
+	if pkg != "" {
+		matchers = append(matchers, pkg, fmt.Sprintf("%s.*", pkg), fmt.Sprintf("%s.%s", pkg, rule))
+	}
+
+	// Note: Terms are extracted from result metadata, not from rule.Info
+	// This will be handled when processing actual results, not during rule analysis
+
+	matchers = append(matchers, "*")
+
+	// Add collection matchers
+	for _, collection := range ruleInfo.Collections {
+		matchers = append(matchers, "@"+collection)
+	}
+
+	return matchers
+}
+
+// scoreMatches returns the combined score for every match between needles and haystack
+func (r *ComprehensivePolicyResolver) scoreMatches(needles, haystack []string, toBePruned map[string]bool) int {
+	var s int
+	for _, needle := range needles {
+		for _, hay := range haystack {
+			if hay == needle {
+				s += r.score(hay)
+				delete(toBePruned, hay)
+			}
+		}
+	}
+	return s
+}
+
+// score computes the specificity score for a given name (same logic as in conftest_evaluator.go)
+func (r *ComprehensivePolicyResolver) score(name string) int {
+	if strings.HasPrefix(name, "@") {
+		return 10
+	}
+	var value int
+	shortName, term, _ := strings.Cut(name, ":")
+	if term != "" {
+		value += 100
+	}
+	nameSplit := strings.Split(shortName, ".")
+	nameSplitLen := len(nameSplit)
+
+	if nameSplitLen == 1 {
+		// When there are no dots we assume the name refers to a
+		// package and any rule inside the package is matched
+		if shortName == "*" {
+			value += 1
+		} else {
+			value += 10
+		}
+	} else if nameSplitLen > 1 {
+		// When there is at least one dot we assume the last element
+		// is the rule and everything else is the package path
+		rule := nameSplit[nameSplitLen-1]
+		pkg := strings.Join(nameSplit[:nameSplitLen-1], ".")
+
+		if pkg == "*" {
+			// E.g. "*.rule", a weird edge case
+			value += 1
+		} else {
+			// E.g. "pkg.rule" or "path.pkg.rule"
+			value += 10 * (nameSplitLen - 1)
+		}
+
+		if rule != "*" && rule != "" {
+			// E.g. "pkg.rule" so a specific rule was specified
+			value += 100
+		}
+	}
+	return value
+}
+
+// GetComprehensivePolicyResolution is a convenience function that creates a PolicyResolver
+// and resolves the policy for the given rules and target.
+//
+// This function provides a simple way to get comprehensive policy resolution results
+// including all included/excluded rules and packages, with explanations.
+func GetComprehensivePolicyResolution(source ecc.Source, p ConfigProvider, rules policyRules, target string) PolicyResolutionResult {
+	resolver := NewComprehensivePolicyResolver(source, p)
+	return resolver.ResolvePolicy(rules, target)
 }
