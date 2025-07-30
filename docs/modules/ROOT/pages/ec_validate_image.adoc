@@ -115,6 +115,9 @@ Use a regular expression to match certificate attributes.
 --certificate-oidc-issuer:: URL of the certificate OIDC issuer for keyless verification
 --certificate-oidc-issuer-regexp:: Regular expresssion for the URL of the certificate OIDC issuer for keyless verification
 --color:: Enable color when using text output even when the current terminal does not support it (Default: false)
+--comprehensive-filter:: Enable the new comprehensive post-evaluation filtering system. This provides more
+detailed filtering capabilities but may change the behavior of rule inclusion/exclusion.
+Use with caution in production environments. (Default: true)
 --effective-time:: Run policy checks with the provided time. Useful for testing rules with
 effective dates in the future. The value can be "now" (default) - for
 current time, "attestation" - for time from the youngest attestation, or

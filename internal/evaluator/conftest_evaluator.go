@@ -196,17 +196,18 @@ type ConfigProvider interface {
 
 // ConftestEvaluator represents a structure which can be used to evaluate targets
 type conftestEvaluator struct {
-	policySources []source.PolicySource
-	outputFormat  string
-	workDir       string
-	dataDir       string
-	policyDir     string
-	policy        ConfigProvider
-	include       *Criteria
-	exclude       *Criteria
-	fs            afero.Fs
-	namespace     []string
-	source        ecc.Source
+	policySources        []source.PolicySource
+	outputFormat         string
+	workDir              string
+	dataDir              string
+	policyDir            string
+	policy               ConfigProvider
+	include              *Criteria
+	exclude              *Criteria
+	fs                   afero.Fs
+	namespace            []string
+	source               ecc.Source
+	postEvaluationFilter PostEvaluationFilter
 }
 
 type conftestRunner struct {
@@ -288,6 +289,21 @@ func (r conftestRunner) Run(ctx context.Context, fileList []string) (result []Ou
 // Evaluator interface
 func NewConftestEvaluator(ctx context.Context, policySources []source.PolicySource, p ConfigProvider, source ecc.Source) (Evaluator, error) {
 	return NewConftestEvaluatorWithNamespace(ctx, policySources, p, source, []string{})
+}
+
+// NewConftestEvaluatorWithPostEvaluationFilter returns initialized conftestEvaluator with a custom post-evaluation filter
+func NewConftestEvaluatorWithPostEvaluationFilter(ctx context.Context, policySources []source.PolicySource, p ConfigProvider, source ecc.Source, postEvaluationFilter PostEvaluationFilter) (Evaluator, error) {
+	evaluator, err := NewConftestEvaluatorWithNamespace(ctx, policySources, p, source, []string{})
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the post-evaluation filter
+	if conftestEval, ok := evaluator.(*conftestEvaluator); ok {
+		conftestEval.postEvaluationFilter = postEvaluationFilter
+	}
+
+	return evaluator, nil
 }
 
 // set the policy namespace
@@ -548,49 +564,118 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		exceptions := []Result{}
 		skipped := []Result{}
 
-		for i := range result.Warnings {
-			warning := result.Warnings[i]
-			addRuleMetadata(ctx, &warning, rules)
+		// Use new comprehensive post-evaluation filter if available
+		if c.postEvaluationFilter != nil {
+			// Collect all results for processing
+			allResults := []Result{}
+			allResults = append(allResults, result.Warnings...)
+			allResults = append(allResults, result.Failures...)
+			allResults = append(allResults, result.Exceptions...)
+			allResults = append(allResults, result.Skipped...)
 
-			if !c.isResultIncluded(warning, target.Target, missingIncludes) {
-				log.Debugf("Skipping result warning: %#v", warning)
-				continue
+			// Add metadata to all results
+			for j := range allResults {
+				addRuleMetadata(ctx, &allResults[j], rules)
 			}
 
-			if getSeverity(warning) == severityFailure {
-				failures = append(failures, warning)
-			} else {
-				warnings = append(warnings, warning)
+			// Filter results using the comprehensive filter
+			filteredResults, updatedMissingIncludes := c.postEvaluationFilter.FilterResults(
+				allResults, rules, target.Target, missingIncludes, effectiveTime)
+
+			// Update missing includes
+			missingIncludes = updatedMissingIncludes
+
+			// Categorize filtered results by type
+			for _, filteredResult := range filteredResults {
+				// Determine the original type and apply severity logic
+				originalType := "unknown"
+				for _, originalWarning := range result.Warnings {
+					if ExtractStringFromMetadata(originalWarning, metadataCode) == ExtractStringFromMetadata(filteredResult, metadataCode) {
+						originalType = "warning"
+						break
+					}
+				}
+				for _, originalFailure := range result.Failures {
+					if ExtractStringFromMetadata(originalFailure, metadataCode) == ExtractStringFromMetadata(filteredResult, metadataCode) {
+						originalType = "failure"
+						break
+					}
+				}
+
+				// Apply severity logic based on original type
+				switch originalType {
+				case "warning":
+					if getSeverity(filteredResult) == severityFailure {
+						failures = append(failures, filteredResult)
+					} else {
+						warnings = append(warnings, filteredResult)
+					}
+				case "failure":
+					if getSeverity(filteredResult) == severityWarning || !isResultEffective(filteredResult, effectiveTime) {
+						warnings = append(warnings, filteredResult)
+					} else {
+						failures = append(failures, filteredResult)
+					}
+				default:
+					// For exceptions and skipped, just add them as-is
+					if ExtractStringFromMetadata(filteredResult, metadataCode) != "" {
+						// This is a bit of a hack - we need to determine the original type
+						// For now, let's assume it was a warning if we can't determine
+						warnings = append(warnings, filteredResult)
+					}
+				}
 			}
-		}
 
-		for i := range result.Failures {
-			failure := result.Failures[i]
-			// log the failure
-			addRuleMetadata(ctx, &failure, rules)
+			// Add exceptions and skipped as-is (they don't go through inclusion filtering)
+			exceptions = append(exceptions, result.Exceptions...)
+			skipped = append(skipped, result.Skipped...)
 
-			if !c.isResultIncluded(failure, target.Target, missingIncludes) {
-				log.Debugf("Skipping result failure: %#v", failure)
-				continue
+		} else {
+			// Original filtering logic
+			for i := range result.Warnings {
+				warning := result.Warnings[i]
+				addRuleMetadata(ctx, &warning, rules)
+
+				if !c.isResultIncluded(warning, target.Target, missingIncludes) {
+					log.Debugf("Skipping result warning: %#v", warning)
+					continue
+				}
+
+				if getSeverity(warning) == severityFailure {
+					failures = append(failures, warning)
+				} else {
+					warnings = append(warnings, warning)
+				}
 			}
 
-			if getSeverity(failure) == severityWarning || !isResultEffective(failure, effectiveTime) {
-				warnings = append(warnings, failure)
-			} else {
-				failures = append(failures, failure)
+			for i := range result.Failures {
+				failure := result.Failures[i]
+				// log the failure
+				addRuleMetadata(ctx, &failure, rules)
+
+				if !c.isResultIncluded(failure, target.Target, missingIncludes) {
+					log.Debugf("Skipping result failure: %#v", failure)
+					continue
+				}
+
+				if getSeverity(failure) == severityWarning || !isResultEffective(failure, effectiveTime) {
+					warnings = append(warnings, failure)
+				} else {
+					failures = append(failures, failure)
+				}
 			}
-		}
 
-		for i := range result.Exceptions {
-			exception := result.Exceptions[i]
-			addRuleMetadata(ctx, &exception, rules)
-			exceptions = append(exceptions, exception)
-		}
+			for i := range result.Exceptions {
+				exception := result.Exceptions[i]
+				addRuleMetadata(ctx, &exception, rules)
+				exceptions = append(exceptions, exception)
+			}
 
-		for i := range result.Skipped {
-			skip := result.Skipped[i]
-			addRuleMetadata(ctx, &skip, rules)
-			skipped = append(skipped, skip)
+			for i := range result.Skipped {
+				skip := result.Skipped[i]
+				addRuleMetadata(ctx, &skip, rules)
+				skipped = append(skipped, skip)
+			}
 		}
 
 		result.Warnings = warnings

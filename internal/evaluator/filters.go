@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
 	log "github.com/sirupsen/logrus"
@@ -47,6 +48,25 @@ type RuleFilter interface {
 // must approve a package for it to be included in the evaluation set.
 type FilterFactory interface {
 	CreateFilters(source ecc.Source) []RuleFilter
+}
+
+// PostEvaluationFilter decides whether individual results (warnings, failures,
+// exceptions, skipped, successes) should be included in the final output.
+//
+// This filtering happens after all rules have been executed by conftest,
+// allowing for fine-grained control over which results are reported.
+// It handles include/exclude criteria, severity promotion/demotion,
+// effective time filtering, and success computation.
+type PostEvaluationFilter interface {
+	// FilterResults processes all result types and returns the filtered results
+	// along with updated missing includes tracking.
+	FilterResults(
+		results []Result,
+		rules policyRules,
+		target string,
+		missingIncludes map[string]bool,
+		effectiveTime time.Time,
+	) ([]Result, map[string]bool)
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -637,4 +657,444 @@ func (r *ComprehensivePolicyResolver) score(name string) int {
 func GetComprehensivePolicyResolution(source ecc.Source, p ConfigProvider, rules policyRules, target string) PolicyResolutionResult {
 	resolver := NewComprehensivePolicyResolver(source, p)
 	return resolver.ResolvePolicy(rules, target)
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Standalone Post-Evaluation Filtering Functions
+//////////////////////////////////////////////////////////////////////////////
+
+// IsResultIncluded determines whether a result should be included based on
+// include/exclude criteria and scoring logic.
+func IsResultIncluded(result Result, target string, missingIncludes map[string]bool, include *Criteria, exclude *Criteria) bool {
+	ruleMatchers := MakeMatchers(result)
+	includeScore := ScoreMatches(ruleMatchers, include.get(target), missingIncludes)
+	excludeScore := ScoreMatches(ruleMatchers, exclude.get(target), map[string]bool{})
+	return includeScore > excludeScore
+}
+
+// ScoreMatches returns the combined score for every match between needles and haystack.
+// 'toBePruned' contains items that will be removed (pruned) from this map if a match is found.
+func ScoreMatches(needles, haystack []string, toBePruned map[string]bool) int {
+	var s int
+	for _, needle := range needles {
+		for _, hay := range haystack {
+			if hay == needle {
+				s += Score(hay)
+				delete(toBePruned, hay)
+			}
+		}
+	}
+	return s
+}
+
+// Score computes and returns the specificity of the given name. The scoring guidelines are:
+//  1. If the name starts with "@" the returned score is exactly 10, e.g. "@collection". No
+//     further processing is done.
+//  2. Add 1 if the name covers everything, i.e. "*"
+//  3. Add 10 if the name specifies a package name, e.g. "pkg", "pkg.", "pkg.*", or "pkg.rule",
+//     and an additional 10 based on the namespace depth of the pkg, e.g. "a.pkg.rule" adds 10
+//     more, "a.b.pkg.rule" adds 20, etc
+//  4. Add 100 if a term is used, e.g. "*:term", "pkg:term" or "pkg.rule:term"
+//  5. Add 100 if a rule is used, e.g. "pkg.rule", "pkg.rule:term"
+//
+// The score is cumulative. If a name is covered by multiple items in the guidelines, they
+// are added together. For example, "pkg.rule:term" scores at 210.
+func Score(name string) int {
+	if strings.HasPrefix(name, "@") {
+		return 10
+	}
+	var value int
+	shortName, term, _ := strings.Cut(name, ":")
+	if term != "" {
+		value += 100
+	}
+	nameSplit := strings.Split(shortName, ".")
+	nameSplitLen := len(nameSplit)
+
+	if nameSplitLen == 1 {
+		// When there are no dots we assume the name refers to a
+		// package and any rule inside the package is matched
+		if shortName == "*" {
+			value += 1
+		} else {
+			value += 10
+		}
+	} else if nameSplitLen > 1 {
+		// When there is at least one dot we assume the last element
+		// is the rule and everything else is the package path
+		rule := nameSplit[nameSplitLen-1]
+		pkg := strings.Join(nameSplit[:nameSplitLen-1], ".")
+
+		if pkg == "*" {
+			// E.g. "*.rule", a weird edge case
+			value += 1
+		} else {
+			// E.g. "pkg.rule" or "path.pkg.rule"
+			value += 10 * (nameSplitLen - 1)
+		}
+
+		if rule != "*" && rule != "" {
+			// E.g. "pkg.rule" so a specific rule was specified
+			value += 100
+		}
+	}
+	return value
+}
+
+// MakeMatchers returns the possible matching strings for the result.
+func MakeMatchers(result Result) []string {
+	code := ExtractStringFromMetadata(result, metadataCode)
+	terms := extractStringsFromMetadata(result, metadataTerm)
+	parts := strings.Split(code, ".")
+	var pkg string
+	if len(parts) >= 2 {
+		pkg = parts[len(parts)-2]
+	}
+	rule := parts[len(parts)-1]
+
+	var matchers []string
+
+	if pkg != "" {
+		matchers = append(matchers, pkg, fmt.Sprintf("%s.*", pkg), fmt.Sprintf("%s.%s", pkg, rule))
+	}
+
+	// A term can be applied to any of the package matchers above. But we don't want to apply a term
+	// matcher to a matcher that already includes a term.
+	var termMatchers []string
+	for _, term := range terms {
+		if len(term) == 0 {
+			continue
+		}
+		for _, matcher := range matchers {
+			termMatchers = append(termMatchers, fmt.Sprintf("%s:%s", matcher, term))
+		}
+	}
+	matchers = append(matchers, termMatchers...)
+
+	matchers = append(matchers, "*")
+
+	matchers = append(matchers, extractCollections(result)...)
+
+	return matchers
+}
+
+// ComputeSuccesses computes success results for rules that didn't appear in warnings, failures, exceptions, or skipped.
+func ComputeSuccesses(
+	result Outcome,
+	rules policyRules,
+	target string,
+	missingIncludes map[string]bool,
+	include *Criteria,
+	exclude *Criteria,
+) []Result {
+	// what rules, by code, have we seen in the Conftest results, use map to
+	// take advantage of hashing for quicker lookup
+	seenRules := map[string]bool{}
+	for _, o := range [][]Result{result.Failures, result.Warnings, result.Skipped, result.Exceptions} {
+		for _, r := range o {
+			if code, ok := r.Metadata[metadataCode].(string); ok {
+				seenRules[code] = true
+			}
+		}
+	}
+
+	var successes []Result
+	if l := len(rules); l > 0 {
+		successes = make([]Result, 0, l)
+	}
+
+	// any rule left DID NOT get metadata added so it's a success
+	// this depends on the delete in addMetadata
+	for code, rule := range rules {
+		if _, ok := seenRules[code]; ok {
+			continue
+		}
+
+		// Ignore any successes that are not meant for the package this CheckResult represents
+		if rule.Package != result.Namespace {
+			continue
+		}
+
+		success := Result{
+			Message: "Pass",
+			Metadata: map[string]interface{}{
+				metadataCode: code,
+			},
+		}
+
+		if rule.Title != "" {
+			success.Metadata[metadataTitle] = rule.Title
+		}
+
+		if rule.Description != "" {
+			success.Metadata[metadataDescription] = rule.Description
+		}
+
+		if len(rule.Collections) > 0 {
+			success.Metadata[metadataCollections] = rule.Collections
+		}
+
+		if len(rule.DependsOn) > 0 {
+			success.Metadata[metadataDependsOn] = rule.DependsOn
+		}
+
+		if !IsResultIncluded(success, target, missingIncludes, include, exclude) {
+			continue
+		}
+
+		if rule.EffectiveOn != "" {
+			success.Metadata[metadataEffectiveOn] = rule.EffectiveOn
+		}
+
+		// Let's omit the solution text here because if the rule is passing
+		// already then the user probably doesn't care about the solution.
+
+		successes = append(successes, success)
+	}
+
+	return successes
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Comprehensive Post-Evaluation Filter Implementation
+//////////////////////////////////////////////////////////////////////////////
+
+// ComprehensivePostEvaluationFilter implements the PostEvaluationFilter interface
+// using the comprehensive policy resolution logic for consistent filtering behavior.
+type ComprehensivePostEvaluationFilter struct {
+	resolver PolicyResolver
+}
+
+// NewComprehensivePostEvaluationFilter creates a new comprehensive post-evaluation filter.
+func NewComprehensivePostEvaluationFilter(source ecc.Source, p ConfigProvider) PostEvaluationFilter {
+	return &ComprehensivePostEvaluationFilter{
+		resolver: NewComprehensivePolicyResolver(source, p),
+	}
+}
+
+// LegacyPostEvaluationFilter implements the PostEvaluationFilter interface
+// using only the include/exclude criteria, matching the legacy behavior.
+type LegacyPostEvaluationFilter struct {
+	include *Criteria
+	exclude *Criteria
+}
+
+// NewLegacyPostEvaluationFilter creates a new legacy-style post-evaluation filter.
+func NewLegacyPostEvaluationFilter(source ecc.Source, p ConfigProvider) PostEvaluationFilter {
+	include, exclude := computeIncludeExclude(source, p)
+	return &LegacyPostEvaluationFilter{
+		include: include,
+		exclude: exclude,
+	}
+}
+
+// FilterResults processes all result types and returns the filtered results
+// along with updated missing includes tracking.
+func (f *LegacyPostEvaluationFilter) FilterResults(
+	results []Result,
+	rules policyRules,
+	target string,
+	missingIncludes map[string]bool,
+	effectiveTime time.Time,
+) ([]Result, map[string]bool) {
+	// Filter results based on include/exclude criteria only (no pipeline intention)
+	var filteredResults []Result
+	for _, result := range results {
+		code := ExtractStringFromMetadata(result, metadataCode)
+		if code == "" {
+			// Skip results without a code
+			continue
+		}
+
+		// Check if this result should be included using legacy logic
+		if IsResultIncluded(result, target, missingIncludes, f.include, f.exclude) {
+			filteredResults = append(filteredResults, result)
+		}
+	}
+
+	return filteredResults, missingIncludes
+}
+
+// FilterResults processes all result types and returns the filtered results
+// along with updated missing includes tracking.
+func (f *ComprehensivePostEvaluationFilter) FilterResults(
+	results []Result,
+	rules policyRules,
+	target string,
+	missingIncludes map[string]bool,
+	effectiveTime time.Time,
+) ([]Result, map[string]bool) {
+	// Get comprehensive policy resolution for this target
+	resolution := f.resolver.ResolvePolicy(rules, target)
+
+	// Filter results based on the resolution
+	var filteredResults []Result
+	for _, result := range results {
+		code := ExtractStringFromMetadata(result, metadataCode)
+		if code == "" {
+			// Skip results without a code
+			continue
+		}
+
+		// Check if this result should be included
+		if resolution.IncludedRules[code] {
+			filteredResults = append(filteredResults, result)
+		}
+		// Note: Excluded rules are simply not included in the results
+	}
+
+	// Update missing includes based on what was actually matched
+	// Check if any included results matched each include criteria
+	for include := range missingIncludes {
+		matched := false
+		for _, result := range filteredResults {
+			// Check if this result matches the include criteria
+			matchers := MakeMatchers(result)
+			for _, matcher := range matchers {
+				if matcher == include {
+					matched = true
+					break
+				}
+			}
+			if matched {
+				break
+			}
+		}
+		if matched {
+			delete(missingIncludes, include)
+		}
+	}
+
+	return filteredResults, missingIncludes
+}
+
+// MigrationHelper provides utilities for migrating between legacy and new
+// post-evaluation filtering approaches.
+type MigrationHelper struct {
+	useLegacyFilter bool
+	legacyFilter    PostEvaluationFilter
+	newFilter       PostEvaluationFilter
+}
+
+// NewMigrationHelper creates a new migration helper with both legacy and new filters.
+func NewMigrationHelper(source ecc.Source, p ConfigProvider, useLegacyFilter bool) *MigrationHelper {
+	return &MigrationHelper{
+		useLegacyFilter: useLegacyFilter,
+		legacyFilter:    NewLegacyPostEvaluationFilter(source, p),
+		newFilter:       NewComprehensivePostEvaluationFilter(source, p),
+	}
+}
+
+// FilterResults applies the appropriate filter based on the migration configuration.
+func (h *MigrationHelper) FilterResults(
+	results []Result,
+	rules policyRules,
+	target string,
+	missingIncludes map[string]bool,
+	effectiveTime time.Time,
+) ([]Result, map[string]bool) {
+	if h.useLegacyFilter {
+		return h.legacyFilter.FilterResults(results, rules, target, missingIncludes, effectiveTime)
+	}
+	return h.newFilter.FilterResults(results, rules, target, missingIncludes, effectiveTime)
+}
+
+// GetActiveFilterType returns a string describing which filter is currently active.
+func (h *MigrationHelper) GetActiveFilterType() string {
+	if h.useLegacyFilter {
+		return "legacy"
+	}
+	return "comprehensive"
+}
+
+// CompareResults runs both filters and returns the results for comparison.
+// This is useful for testing and validation during migration.
+func (h *MigrationHelper) CompareResults(
+	results []Result,
+	rules policyRules,
+	target string,
+	missingIncludes map[string]bool,
+	effectiveTime time.Time,
+) (legacyResults []Result, newResults []Result, legacyMissingIncludes map[string]bool, newMissingIncludes map[string]bool) {
+	// Create copies of missing includes for each filter
+	legacyMissingIncludesCopy := make(map[string]bool)
+	newMissingIncludesCopy := make(map[string]bool)
+	for k, v := range missingIncludes {
+		legacyMissingIncludesCopy[k] = v
+		newMissingIncludesCopy[k] = v
+	}
+
+	// Run both filters
+	legacyResults, legacyMissingIncludes = h.legacyFilter.FilterResults(
+		results, rules, target, legacyMissingIncludesCopy, effectiveTime)
+	newResults, newMissingIncludes = h.newFilter.FilterResults(
+		results, rules, target, newMissingIncludesCopy, effectiveTime)
+
+	return legacyResults, newResults, legacyMissingIncludes, newMissingIncludes
+}
+
+// FeatureFlagProvider defines the interface for checking feature flags.
+type FeatureFlagProvider interface {
+	IsEnabled(flag string) bool
+}
+
+// DefaultFeatureFlagProvider provides a simple implementation of FeatureFlagProvider.
+type DefaultFeatureFlagProvider struct {
+	flags map[string]bool
+}
+
+// NewDefaultFeatureFlagProvider creates a new feature flag provider with the given flags.
+func NewDefaultFeatureFlagProvider(flags map[string]bool) *DefaultFeatureFlagProvider {
+	return &DefaultFeatureFlagProvider{
+		flags: flags,
+	}
+}
+
+// IsEnabled checks if a feature flag is enabled.
+func (p *DefaultFeatureFlagProvider) IsEnabled(flag string) bool {
+	return p.flags[flag]
+}
+
+// FeatureFlagMigrationHelper extends MigrationHelper with feature flag support.
+type FeatureFlagMigrationHelper struct {
+	*MigrationHelper
+	featureFlagProvider FeatureFlagProvider
+	featureFlagName     string
+}
+
+// NewFeatureFlagMigrationHelper creates a new migration helper with feature flag support.
+func NewFeatureFlagMigrationHelper(
+	source ecc.Source,
+	p ConfigProvider,
+	featureFlagProvider FeatureFlagProvider,
+	featureFlagName string,
+) *FeatureFlagMigrationHelper {
+	// Determine which filter to use based on feature flag
+	useLegacyFilter := !featureFlagProvider.IsEnabled(featureFlagName)
+
+	return &FeatureFlagMigrationHelper{
+		MigrationHelper:     NewMigrationHelper(source, p, useLegacyFilter),
+		featureFlagProvider: featureFlagProvider,
+		featureFlagName:     featureFlagName,
+	}
+}
+
+// GetActiveFilterType returns a string describing which filter is currently active,
+// including feature flag information.
+func (h *FeatureFlagMigrationHelper) GetActiveFilterType() string {
+	baseType := h.MigrationHelper.GetActiveFilterType()
+	if h.featureFlagProvider.IsEnabled(h.featureFlagName) {
+		return baseType + " (feature flag enabled)"
+	}
+	return baseType + " (feature flag disabled)"
+}
+
+// IsFeatureFlagEnabled returns whether the feature flag is currently enabled.
+func (h *FeatureFlagMigrationHelper) IsFeatureFlagEnabled() bool {
+	return h.featureFlagProvider.IsEnabled(h.featureFlagName)
+}
+
+// GetFeatureFlagName returns the name of the feature flag being used.
+func (h *FeatureFlagMigrationHelper) GetFeatureFlagName() string {
+	return h.featureFlagName
 }

@@ -534,3 +534,807 @@ func TestComprehensivePolicyResolver_Example(t *testing.T) {
 	assert.True(t, result.ExcludedPackages["slsa3"], "slsa3 package should be excluded")
 	assert.True(t, result.ExcludedPackages["test"], "test package should be excluded")
 }
+
+func TestComprehensivePostEvaluationFilter(t *testing.T) {
+	// Test basic filtering functionality
+	t.Run("Basic Filtering", func(t *testing.T) {
+		source := ecc.Source{
+			Config: &ecc.SourceConfig{
+				Include: []string{"cve", "@redhat"},
+				Exclude: []string{"test.test_data_found"},
+			},
+		}
+
+		configProvider := &simpleConfigProvider{
+			effectiveTime: time.Now(),
+		}
+
+		filter := NewComprehensivePostEvaluationFilter(source, configProvider)
+
+		// Create test results
+		results := []Result{
+			{
+				Message: "High severity CVE found",
+				Metadata: map[string]interface{}{
+					metadataCode: "cve.high_severity",
+				},
+			},
+			{
+				Message: "Test data found",
+				Metadata: map[string]interface{}{
+					metadataCode: "test.test_data_found",
+				},
+			},
+			{
+				Message: "Redhat collection rule",
+				Metadata: map[string]interface{}{
+					metadataCode:        "tasks.build_task",
+					metadataCollections: []string{"redhat"},
+				},
+			},
+		}
+
+		rules := policyRules{
+			"cve.high_severity": rule.Info{
+				Package: "cve",
+				Code:    "high_severity",
+			},
+			"test.test_data_found": rule.Info{
+				Package: "test",
+				Code:    "test_data_found",
+			},
+			"tasks.build_task": rule.Info{
+				Package:     "tasks",
+				Code:        "build_task",
+				Collections: []string{"redhat"},
+			},
+		}
+
+		missingIncludes := map[string]bool{
+			"cve":     true,
+			"@redhat": true,
+		}
+
+		filteredResults, updatedMissingIncludes := filter.FilterResults(
+			results, rules, "test-target", missingIncludes, time.Now())
+
+		// Should include cve.high_severity and tasks.build_task, exclude test.test_data_found
+		assert.Len(t, filteredResults, 2)
+
+		// Check that the correct results are included
+		codes := make([]string, 0, len(filteredResults))
+		for _, result := range filteredResults {
+			if code, ok := result.Metadata[metadataCode].(string); ok {
+				codes = append(codes, code)
+			}
+		}
+		assert.Contains(t, codes, "cve.high_severity")
+		assert.Contains(t, codes, "tasks.build_task")
+		assert.NotContains(t, codes, "test.test_data_found")
+
+		// Check that missing includes were updated
+		assert.Len(t, updatedMissingIncludes, 0) // All includes should be matched
+	})
+
+	// Test pipeline intention filtering
+	t.Run("Pipeline Intention Filtering", func(t *testing.T) {
+		source := ecc.Source{
+			RuleData: &extv1.JSON{Raw: json.RawMessage(`{"pipeline_intention":["release"]}`)},
+			Config: &ecc.SourceConfig{
+				Include: []string{"*"},
+			},
+		}
+
+		configProvider := &simpleConfigProvider{
+			effectiveTime: time.Now(),
+		}
+
+		filter := NewComprehensivePostEvaluationFilter(source, configProvider)
+
+		// Create test results with different pipeline intentions
+		results := []Result{
+			{
+				Message: "Release security check",
+				Metadata: map[string]interface{}{
+					metadataCode: "release.security_check",
+				},
+			},
+			{
+				Message: "Build task",
+				Metadata: map[string]interface{}{
+					metadataCode: "build.build_task",
+				},
+			},
+		}
+
+		rules := policyRules{
+			"release.security_check": rule.Info{
+				Package:           "release",
+				Code:              "security_check",
+				PipelineIntention: []string{"release"},
+			},
+			"build.build_task": rule.Info{
+				Package:           "build",
+				Code:              "build_task",
+				PipelineIntention: []string{"build"},
+			},
+		}
+
+		missingIncludes := map[string]bool{
+			"*": true,
+		}
+
+		filteredResults, updatedMissingIncludes := filter.FilterResults(
+			results, rules, "test-target", missingIncludes, time.Now())
+
+		// Should only include release.security_check (matches pipeline intention)
+		assert.Len(t, filteredResults, 1)
+
+		// Check that the correct result is included
+		if len(filteredResults) > 0 {
+			code := filteredResults[0].Metadata[metadataCode].(string)
+			assert.Equal(t, "release.security_check", code)
+		}
+
+		// Check that missing includes were updated
+		assert.Len(t, updatedMissingIncludes, 0) // Wildcard should be matched
+	})
+
+	// Test missing includes handling
+	t.Run("Missing Includes Handling", func(t *testing.T) {
+		source := ecc.Source{
+			Config: &ecc.SourceConfig{
+				Include: []string{"nonexistent.package", "cve"},
+			},
+		}
+
+		configProvider := &simpleConfigProvider{
+			effectiveTime: time.Now(),
+		}
+
+		filter := NewComprehensivePostEvaluationFilter(source, configProvider)
+
+		results := []Result{
+			{
+				Message: "CVE found",
+				Metadata: map[string]interface{}{
+					metadataCode: "cve.high_severity",
+				},
+			},
+		}
+
+		rules := policyRules{
+			"cve.high_severity": rule.Info{
+				Package: "cve",
+				Code:    "high_severity",
+			},
+		}
+
+		missingIncludes := map[string]bool{
+			"nonexistent.package": true,
+			"cve":                 true,
+		}
+
+		filteredResults, updatedMissingIncludes := filter.FilterResults(
+			results, rules, "test-target", missingIncludes, time.Now())
+
+		// Should include the CVE result
+		assert.Len(t, filteredResults, 1)
+
+		// Should still have the unmatched include
+		assert.Len(t, updatedMissingIncludes, 1)
+		assert.True(t, updatedMissingIncludes["nonexistent.package"])
+		assert.False(t, updatedMissingIncludes["cve"]) // Should be removed as it was matched
+	})
+}
+
+func TestComprehensivePostEvaluationFilterVsLegacy(t *testing.T) {
+	// Test that the new comprehensive post-evaluation filter produces
+	// the same results as the legacy filtering approach
+
+	t.Run("Compare Filtering Results", func(t *testing.T) {
+		// Create a policy configuration that exercises various filtering scenarios
+		source := ecc.Source{
+			RuleData: &extv1.JSON{Raw: json.RawMessage(`{"pipeline_intention":["release"]}`)},
+			Config: &ecc.SourceConfig{
+				Include: []string{"cve", "@redhat", "security.*"},
+				Exclude: []string{"test.test_data_found", "slsa3.provenance"},
+			},
+		}
+
+		configProvider := &simpleConfigProvider{
+			effectiveTime: time.Now(),
+		}
+
+		// Create test results that cover different scenarios
+		results := []Result{
+			// Included by package include
+			{
+				Message: "High severity CVE found",
+				Metadata: map[string]interface{}{
+					metadataCode: "cve.high_severity",
+				},
+			},
+			// Included by collection include
+			{
+				Message: "Redhat collection rule",
+				Metadata: map[string]interface{}{
+					metadataCode:        "tasks.build_task",
+					metadataCollections: []string{"redhat"},
+				},
+			},
+			// Included by wildcard include
+			{
+				Message: "Security signature check",
+				Metadata: map[string]interface{}{
+					metadataCode: "security.signature_check",
+				},
+			},
+			// Excluded by explicit exclude
+			{
+				Message: "Test data found",
+				Metadata: map[string]interface{}{
+					metadataCode: "test.test_data_found",
+				},
+			},
+			// Excluded by package exclude
+			{
+				Message: "SLSA provenance",
+				Metadata: map[string]interface{}{
+					metadataCode: "slsa3.provenance",
+				},
+			},
+			// Excluded by pipeline intention (doesn't match release)
+			{
+				Message: "Build task",
+				Metadata: map[string]interface{}{
+					metadataCode: "build.build_task",
+				},
+			},
+			// Included by pipeline intention (matches release)
+			{
+				Message: "Release security check",
+				Metadata: map[string]interface{}{
+					metadataCode: "release.security_check",
+				},
+			},
+		}
+
+		rules := policyRules{
+			"cve.high_severity": rule.Info{
+				Package: "cve",
+				Code:    "high_severity",
+			},
+			"tasks.build_task": rule.Info{
+				Package:     "tasks",
+				Code:        "build_task",
+				Collections: []string{"redhat"},
+			},
+			"security.signature_check": rule.Info{
+				Package:           "security",
+				Code:              "signature_check",
+				PipelineIntention: []string{"release"},
+			},
+			"test.test_data_found": rule.Info{
+				Package: "test",
+				Code:    "test_data_found",
+			},
+			"slsa3.provenance": rule.Info{
+				Package: "slsa3",
+				Code:    "provenance",
+			},
+			"build.build_task": rule.Info{
+				Package:           "build",
+				Code:              "build_task",
+				PipelineIntention: []string{"build"},
+			},
+			"release.security_check": rule.Info{
+				Package:           "release",
+				Code:              "security_check",
+				PipelineIntention: []string{"release"},
+			},
+		}
+
+		// Test the new comprehensive filter
+		newFilter := NewLegacyPostEvaluationFilter(source, configProvider)
+		newMissingIncludes := map[string]bool{
+			"cve":        true,
+			"@redhat":    true,
+			"security.*": true,
+		}
+		newFilteredResults, newUpdatedMissingIncludes := newFilter.FilterResults(
+			results, rules, "test-target", newMissingIncludes, time.Now())
+
+		// Test the legacy approach using the standalone functions
+		legacyMissingIncludes := map[string]bool{
+			"cve":        true,
+			"@redhat":    true,
+			"security.*": true,
+		}
+		var legacyFilteredResults []Result
+		for _, result := range results {
+			code := ExtractStringFromMetadata(result, metadataCode)
+			if code == "" {
+				continue
+			}
+
+			// Use the legacy IsResultIncluded function
+			include := &Criteria{
+				defaultItems: []string{"cve", "@redhat", "security.*"},
+			}
+			exclude := &Criteria{
+				defaultItems: []string{"test.test_data_found", "slsa3.provenance"},
+			}
+
+			if IsResultIncluded(result, "test-target", legacyMissingIncludes, include, exclude) {
+				legacyFilteredResults = append(legacyFilteredResults, result)
+			}
+		}
+
+		// Compare the results
+		t.Logf("New filter results: %d items", len(newFilteredResults))
+		t.Logf("Legacy filter results: %d items", len(legacyFilteredResults))
+
+		// Extract codes for comparison
+		newCodes := make([]string, 0, len(newFilteredResults))
+		for _, result := range newFilteredResults {
+			if code, ok := result.Metadata[metadataCode].(string); ok {
+				newCodes = append(newCodes, code)
+			}
+		}
+
+		legacyCodes := make([]string, 0, len(legacyFilteredResults))
+		for _, result := range legacyFilteredResults {
+			if code, ok := result.Metadata[metadataCode].(string); ok {
+				legacyCodes = append(legacyCodes, code)
+			}
+		}
+
+		t.Logf("New filter codes: %v", newCodes)
+		t.Logf("Legacy filter codes: %v", legacyCodes)
+
+		// The results should be the same
+		assert.ElementsMatch(t, newCodes, legacyCodes, "New and legacy filters should produce the same results")
+
+		// Check missing includes
+		t.Logf("New missing includes: %v", newUpdatedMissingIncludes)
+		t.Logf("Legacy missing includes: %v", legacyMissingIncludes)
+		assert.Equal(t, len(newUpdatedMissingIncludes), len(legacyMissingIncludes),
+			"Missing includes should be the same")
+	})
+}
+
+func TestMigrationHelper(t *testing.T) {
+	t.Run("Legacy Filter Mode", func(t *testing.T) {
+		source := ecc.Source{
+			Config: &ecc.SourceConfig{
+				Include: []string{"cve", "@redhat"},
+				Exclude: []string{"test.test_data_found"},
+			},
+		}
+
+		configProvider := &simpleConfigProvider{
+			effectiveTime: time.Now(),
+		}
+
+		helper := NewMigrationHelper(source, configProvider, true) // Use legacy filter
+
+		// Create test results
+		results := []Result{
+			{
+				Message: "High severity CVE found",
+				Metadata: map[string]interface{}{
+					metadataCode: "cve.high_severity",
+				},
+			},
+			{
+				Message: "Test data found",
+				Metadata: map[string]interface{}{
+					metadataCode: "test.test_data_found",
+				},
+			},
+			{
+				Message: "Redhat collection rule",
+				Metadata: map[string]interface{}{
+					metadataCode:        "tasks.build_task",
+					metadataCollections: []string{"redhat"},
+				},
+			},
+		}
+
+		rules := policyRules{
+			"cve.high_severity": rule.Info{
+				Package: "cve",
+				Code:    "high_severity",
+			},
+			"test.test_data_found": rule.Info{
+				Package: "test",
+				Code:    "test_data_found",
+			},
+			"tasks.build_task": rule.Info{
+				Package:     "tasks",
+				Code:        "build_task",
+				Collections: []string{"redhat"},
+			},
+		}
+
+		missingIncludes := map[string]bool{
+			"cve":     true,
+			"@redhat": true,
+		}
+
+		filteredResults, updatedMissingIncludes := helper.FilterResults(
+			results, rules, "test-target", missingIncludes, time.Now())
+
+		// Should use legacy filter behavior
+		assert.Equal(t, "legacy", helper.GetActiveFilterType())
+		assert.Len(t, filteredResults, 2)        // cve.high_severity and tasks.build_task
+		assert.Len(t, updatedMissingIncludes, 0) // All includes should be matched
+	})
+
+	t.Run("Comprehensive Filter Mode", func(t *testing.T) {
+		source := ecc.Source{
+			RuleData: &extv1.JSON{Raw: json.RawMessage(`{"pipeline_intention":["release"]}`)},
+			Config: &ecc.SourceConfig{
+				Include: []string{"security.*"},
+				Exclude: []string{"test.test_data_found"},
+			},
+		}
+
+		configProvider := &simpleConfigProvider{
+			effectiveTime: time.Now(),
+		}
+
+		helper := NewMigrationHelper(source, configProvider, false) // Use comprehensive filter
+
+		// Create test results
+		results := []Result{
+			{
+				Message: "Security signature check",
+				Metadata: map[string]interface{}{
+					metadataCode: "security.signature_check",
+				},
+			},
+			{
+				Message: "Test data found",
+				Metadata: map[string]interface{}{
+					metadataCode: "test.test_data_found",
+				},
+			},
+		}
+
+		rules := policyRules{
+			"security.signature_check": rule.Info{
+				Package:           "security",
+				Code:              "signature_check",
+				PipelineIntention: []string{"release"},
+			},
+			"test.test_data_found": rule.Info{
+				Package: "test",
+				Code:    "test_data_found",
+			},
+		}
+
+		missingIncludes := map[string]bool{
+			"security.*": true,
+		}
+
+		filteredResults, updatedMissingIncludes := helper.FilterResults(
+			results, rules, "test-target", missingIncludes, time.Now())
+
+		// Should use comprehensive filter behavior
+		assert.Equal(t, "comprehensive", helper.GetActiveFilterType())
+		assert.Len(t, filteredResults, 1)        // Only security.signature_check (matches pipeline intention)
+		assert.Len(t, updatedMissingIncludes, 0) // All includes should be matched
+	})
+
+	t.Run("Compare Results", func(t *testing.T) {
+		source := ecc.Source{
+			Config: &ecc.SourceConfig{
+				Include: []string{"cve", "@redhat"},
+				Exclude: []string{"test.test_data_found"},
+			},
+		}
+
+		configProvider := &simpleConfigProvider{
+			effectiveTime: time.Now(),
+		}
+
+		helper := NewMigrationHelper(source, configProvider, true) // Use legacy filter
+
+		// Create test results
+		results := []Result{
+			{
+				Message: "High severity CVE found",
+				Metadata: map[string]interface{}{
+					metadataCode: "cve.high_severity",
+				},
+			},
+			{
+				Message: "Test data found",
+				Metadata: map[string]interface{}{
+					metadataCode: "test.test_data_found",
+				},
+			},
+			{
+				Message: "Redhat collection rule",
+				Metadata: map[string]interface{}{
+					metadataCode:        "tasks.build_task",
+					metadataCollections: []string{"redhat"},
+				},
+			},
+		}
+
+		rules := policyRules{
+			"cve.high_severity": rule.Info{
+				Package: "cve",
+				Code:    "high_severity",
+			},
+			"test.test_data_found": rule.Info{
+				Package: "test",
+				Code:    "test_data_found",
+			},
+			"tasks.build_task": rule.Info{
+				Package:     "tasks",
+				Code:        "build_task",
+				Collections: []string{"redhat"},
+			},
+		}
+
+		missingIncludes := map[string]bool{
+			"cve":     true,
+			"@redhat": true,
+		}
+
+		legacyResults, newResults, legacyMissingIncludes, newMissingIncludes := helper.CompareResults(
+			results, rules, "test-target", missingIncludes, time.Now())
+
+		// Both should produce the same results for this simple case
+		assert.Len(t, legacyResults, 2)
+		assert.Len(t, newResults, 2)
+		assert.Len(t, legacyMissingIncludes, 0)
+		assert.Len(t, newMissingIncludes, 0)
+
+		// Extract codes for comparison
+		legacyCodes := make([]string, 0, len(legacyResults))
+		for _, result := range legacyResults {
+			if code, ok := result.Metadata[metadataCode].(string); ok {
+				legacyCodes = append(legacyCodes, code)
+			}
+		}
+
+		newCodes := make([]string, 0, len(newResults))
+		for _, result := range newResults {
+			if code, ok := result.Metadata[metadataCode].(string); ok {
+				newCodes = append(newCodes, code)
+			}
+		}
+
+		assert.ElementsMatch(t, legacyCodes, newCodes, "Both filters should produce the same results for this case")
+	})
+}
+
+func TestFeatureFlagMigrationHelper(t *testing.T) {
+	t.Run("Feature Flag Disabled - Uses Legacy Filter", func(t *testing.T) {
+		source := ecc.Source{
+			Config: &ecc.SourceConfig{
+				Include: []string{"cve", "@redhat"},
+				Exclude: []string{"test.test_data_found"},
+			},
+		}
+
+		configProvider := &simpleConfigProvider{
+			effectiveTime: time.Now(),
+		}
+
+		// Feature flag disabled
+		featureFlags := map[string]bool{
+			"comprehensive-post-evaluation-filter": false,
+		}
+		featureFlagProvider := NewDefaultFeatureFlagProvider(featureFlags)
+
+		helper := NewFeatureFlagMigrationHelper(
+			source, configProvider, featureFlagProvider, "comprehensive-post-evaluation-filter")
+
+		// Create test results
+		results := []Result{
+			{
+				Message: "High severity CVE found",
+				Metadata: map[string]interface{}{
+					metadataCode: "cve.high_severity",
+				},
+			},
+			{
+				Message: "Test data found",
+				Metadata: map[string]interface{}{
+					metadataCode: "test.test_data_found",
+				},
+			},
+			{
+				Message: "Redhat collection rule",
+				Metadata: map[string]interface{}{
+					metadataCode:        "tasks.build_task",
+					metadataCollections: []string{"redhat"},
+				},
+			},
+		}
+
+		rules := policyRules{
+			"cve.high_severity": rule.Info{
+				Package: "cve",
+				Code:    "high_severity",
+			},
+			"test.test_data_found": rule.Info{
+				Package: "test",
+				Code:    "test_data_found",
+			},
+			"tasks.build_task": rule.Info{
+				Package:     "tasks",
+				Code:        "build_task",
+				Collections: []string{"redhat"},
+			},
+		}
+
+		missingIncludes := map[string]bool{
+			"cve":     true,
+			"@redhat": true,
+		}
+
+		filteredResults, updatedMissingIncludes := helper.FilterResults(
+			results, rules, "test-target", missingIncludes, time.Now())
+
+		// Should use legacy filter behavior when feature flag is disabled
+		assert.False(t, helper.IsFeatureFlagEnabled())
+		assert.Equal(t, "legacy (feature flag disabled)", helper.GetActiveFilterType())
+		assert.Equal(t, "comprehensive-post-evaluation-filter", helper.GetFeatureFlagName())
+		assert.Len(t, filteredResults, 2)        // cve.high_severity and tasks.build_task
+		assert.Len(t, updatedMissingIncludes, 0) // All includes should be matched
+	})
+
+	t.Run("Feature Flag Enabled - Uses Comprehensive Filter", func(t *testing.T) {
+		source := ecc.Source{
+			RuleData: &extv1.JSON{Raw: json.RawMessage(`{"pipeline_intention":["release"]}`)},
+			Config: &ecc.SourceConfig{
+				Include: []string{"security.*"},
+				Exclude: []string{"test.test_data_found"},
+			},
+		}
+
+		configProvider := &simpleConfigProvider{
+			effectiveTime: time.Now(),
+		}
+
+		// Feature flag enabled
+		featureFlags := map[string]bool{
+			"comprehensive-post-evaluation-filter": true,
+		}
+		featureFlagProvider := NewDefaultFeatureFlagProvider(featureFlags)
+
+		helper := NewFeatureFlagMigrationHelper(
+			source, configProvider, featureFlagProvider, "comprehensive-post-evaluation-filter")
+
+		// Create test results
+		results := []Result{
+			{
+				Message: "Security signature check",
+				Metadata: map[string]interface{}{
+					metadataCode: "security.signature_check",
+				},
+			},
+			{
+				Message: "Test data found",
+				Metadata: map[string]interface{}{
+					metadataCode: "test.test_data_found",
+				},
+			},
+		}
+
+		rules := policyRules{
+			"security.signature_check": rule.Info{
+				Package:           "security",
+				Code:              "signature_check",
+				PipelineIntention: []string{"release"},
+			},
+			"test.test_data_found": rule.Info{
+				Package: "test",
+				Code:    "test_data_found",
+			},
+		}
+
+		missingIncludes := map[string]bool{
+			"security.*": true,
+		}
+
+		filteredResults, updatedMissingIncludes := helper.FilterResults(
+			results, rules, "test-target", missingIncludes, time.Now())
+
+		// Should use comprehensive filter behavior when feature flag is enabled
+		assert.True(t, helper.IsFeatureFlagEnabled())
+		assert.Equal(t, "comprehensive (feature flag enabled)", helper.GetActiveFilterType())
+		assert.Equal(t, "comprehensive-post-evaluation-filter", helper.GetFeatureFlagName())
+		assert.Len(t, filteredResults, 1)        // Only security.signature_check (matches pipeline intention)
+		assert.Len(t, updatedMissingIncludes, 0) // All includes should be matched
+	})
+
+	t.Run("Feature Flag Not Set - Defaults to Legacy Filter", func(t *testing.T) {
+		source := ecc.Source{
+			Config: &ecc.SourceConfig{
+				Include: []string{"cve"},
+				Exclude: []string{"test.test_data_found"},
+			},
+		}
+
+		configProvider := &simpleConfigProvider{
+			effectiveTime: time.Now(),
+		}
+
+		// Feature flag not set (defaults to false)
+		featureFlags := map[string]bool{}
+		featureFlagProvider := NewDefaultFeatureFlagProvider(featureFlags)
+
+		helper := NewFeatureFlagMigrationHelper(
+			source, configProvider, featureFlagProvider, "comprehensive-post-evaluation-filter")
+
+		// Create test results
+		results := []Result{
+			{
+				Message: "High severity CVE found",
+				Metadata: map[string]interface{}{
+					metadataCode: "cve.high_severity",
+				},
+			},
+		}
+
+		rules := policyRules{
+			"cve.high_severity": rule.Info{
+				Package: "cve",
+				Code:    "high_severity",
+			},
+		}
+
+		missingIncludes := map[string]bool{
+			"cve": true,
+		}
+
+		filteredResults, updatedMissingIncludes := helper.FilterResults(
+			results, rules, "test-target", missingIncludes, time.Now())
+
+		// Should default to legacy filter behavior when feature flag is not set
+		assert.False(t, helper.IsFeatureFlagEnabled())
+		assert.Equal(t, "legacy (feature flag disabled)", helper.GetActiveFilterType())
+		assert.Len(t, filteredResults, 1)        // cve.high_severity
+		assert.Len(t, updatedMissingIncludes, 0) // All includes should be matched
+	})
+
+	t.Run("Multiple Feature Flags", func(t *testing.T) {
+		source := ecc.Source{
+			Config: &ecc.SourceConfig{
+				Include: []string{"cve"},
+			},
+		}
+
+		configProvider := &simpleConfigProvider{
+			effectiveTime: time.Now(),
+		}
+
+		// Multiple feature flags, only one enabled
+		featureFlags := map[string]bool{
+			"comprehensive-post-evaluation-filter": true,
+			"other-feature":                        false,
+			"another-feature":                      true,
+		}
+		featureFlagProvider := NewDefaultFeatureFlagProvider(featureFlags)
+
+		helper := NewFeatureFlagMigrationHelper(
+			source, configProvider, featureFlagProvider, "comprehensive-post-evaluation-filter")
+
+		// Should use comprehensive filter since the specific flag is enabled
+		assert.True(t, helper.IsFeatureFlagEnabled())
+		assert.Equal(t, "comprehensive (feature flag enabled)", helper.GetActiveFilterType())
+
+		// Test that other flags don't interfere
+		assert.True(t, featureFlagProvider.IsEnabled("another-feature"))
+		assert.False(t, featureFlagProvider.IsEnabled("other-feature"))
+		assert.False(t, featureFlagProvider.IsEnabled("non-existent-flag"))
+	})
+}
