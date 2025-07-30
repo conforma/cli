@@ -103,13 +103,13 @@ func trim(results *[]Outcome) {
 
 	addNote := func(results []Result) []Result {
 		for i := range results {
-			var description, code string
-			var ok bool
-			if description, ok = results[i].Metadata[metadataDescription].(string); !ok {
+			description, ok := results[i].Metadata[metadataDescription].(string)
+			if !ok {
 				continue
 			}
 
-			if code, ok = results[i].Metadata[metadataCode].(string); !ok {
+			code, ok := results[i].Metadata[metadataCode].(string)
+			if !ok {
 				continue
 			}
 
@@ -197,17 +197,19 @@ type ConfigProvider interface {
 
 // ConftestEvaluator represents a structure which can be used to evaluate targets
 type conftestEvaluator struct {
-	policySources []source.PolicySource
-	outputFormat  string
-	workDir       string
-	dataDir       string
-	policyDir     string
-	policy        ConfigProvider
-	include       *Criteria
-	exclude       *Criteria
-	fs            afero.Fs
-	namespace     []string
-	source        ecc.Source
+	policySources        []source.PolicySource
+	outputFormat         string
+	workDir              string
+	dataDir              string
+	policyDir            string
+	policy               ConfigProvider
+	include              *Criteria
+	exclude              *Criteria
+	fs                   afero.Fs
+	namespace            []string
+	source               ecc.Source
+	postEvaluationFilter PostEvaluationFilter
+	policyResolver       PolicyResolver // Unified policy resolver for both pre and post-evaluation filtering
 }
 
 type conftestRunner struct {
@@ -280,14 +282,12 @@ func (r conftestRunner) Run(ctx context.Context, fileList []string) (result []Ou
 
 	ids := []string{} // everything
 
-	var d any
-	d, err = store.Read(ctx, txn, ids)
+	d, err := store.Read(ctx, txn, ids)
 	if err != nil {
 		return
 	}
 
-	var ok bool
-	if _, ok = d.(map[string]any); !ok {
+	if _, ok := d.(map[string]any); !ok {
 		err = fmt.Errorf("could not retrieve data from the policy engine: Data is: %v", d)
 	}
 
@@ -298,6 +298,21 @@ func (r conftestRunner) Run(ctx context.Context, fileList []string) (result []Ou
 // Evaluator interface
 func NewConftestEvaluator(ctx context.Context, policySources []source.PolicySource, p ConfigProvider, source ecc.Source) (Evaluator, error) {
 	return NewConftestEvaluatorWithNamespace(ctx, policySources, p, source, []string{})
+}
+
+// NewConftestEvaluatorWithPostEvaluationFilter returns initialized conftestEvaluator with a custom post-evaluation filter
+func NewConftestEvaluatorWithPostEvaluationFilter(ctx context.Context, policySources []source.PolicySource, p ConfigProvider, source ecc.Source, postEvaluationFilter PostEvaluationFilter) (Evaluator, error) {
+	evaluator, err := NewConftestEvaluatorWithNamespace(ctx, policySources, p, source, []string{})
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the post-evaluation filter
+	if conftestEval, ok := evaluator.(*conftestEvaluator); ok {
+		conftestEval.postEvaluationFilter = postEvaluationFilter
+	}
+
+	return evaluator, nil
 }
 
 // set the policy namespace
@@ -317,7 +332,13 @@ func NewConftestEvaluatorWithNamespace(ctx context.Context, policySources []sour
 		source:        source,
 	}
 
-	c.include, c.exclude = computeIncludeExclude(source, p)
+	// Initialize the unified policy resolver for both pre and post-evaluation filtering
+	c.policyResolver = NewIncludeExcludePolicyResolver(source, p)
+
+	// Extract include/exclude criteria from the policy resolver to maintain backward compatibility
+	// for the legacy isResultIncluded method
+	c.include = c.policyResolver.Includes()
+	c.exclude = c.policyResolver.Excludes()
 
 	dir, err := utils.CreateWorkDir(fs)
 	if err != nil {
@@ -455,11 +476,17 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 						}
 					}
 
-					// Extract short name from the rule head
-					shortName := ruleRef.Head.Name.String()
+					// Try to extract code from rule body first, fallback to rule name
+					code := extractCodeFromRuleBody(ruleRef)
 
-					// Generate code for filtering purposes
-					code := fmt.Sprintf("%s.%s", packageName, shortName)
+					// If no code found in body, use rule name
+					if code == "" {
+						shortName := ruleRef.Head.Name.String()
+						code = fmt.Sprintf("%s.%s", packageName, shortName)
+					}
+
+					// Debug: Print non-annotated rule processing
+					log.Debugf("Non-annotated rule: packageName=%s, code=%s", packageName, code)
 
 					// Track for filtering but don't add to rules map for success computation
 					nonAnnotatedRules[code] = true
@@ -468,9 +495,7 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		}
 	}
 
-	// Filter namespaces using the new pluggable filtering system
-	filterFactory := NewIncludeFilterFactory()
-	filters := filterFactory.CreateFilters(c.source)
+	// Prepare all rules for policy resolution (both annotated and non-annotated)
 	// Combine annotated and non-annotated rules for filtering
 	allRules := make(policyRules)
 	for code, rule := range rules {
@@ -489,21 +514,50 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 			}
 		}
 	}
-	filteredNamespaces := filterNamespaces(allRules, filters...)
 
-	var r testRunner
-	var ok bool
-	if r, ok = ctx.Value(runnerKey).(testRunner); r == nil || !ok {
+	var filteredNamespaces []string
+	if c.policyResolver != nil {
+		// IMPLEMENTATION: Option A - Unified Policy Resolution
+		// Use the same PolicyResolver for both pre-evaluation and post-evaluation filtering
+		// This ensures consistent logic and eliminates duplication
+		policyResolution := c.policyResolver.ResolvePolicy(allRules, target.Target)
+
+		// Extract included package names for conftest evaluation
+		for pkg := range policyResolution.IncludedPackages {
+			filteredNamespaces = append(filteredNamespaces, pkg)
+		}
+
+		log.Debugf("Policy resolution: %d packages included, %d packages excluded",
+			len(policyResolution.IncludedPackages), len(policyResolution.ExcludedPackages))
+		log.Debugf("Policy resolution details: included=%v, excluded=%v",
+			policyResolution.IncludedPackages, policyResolution.ExcludedPackages)
+	} else {
+		// Legacy filtering approach - use the old namespace filtering logic
+		// This ensures backward compatibility with existing tests
+		log.Debugf("Using legacy filtering approach")
+		// For legacy tests, we don't filter namespaces at the conftest level
+		// Instead, we evaluate all namespaces and filter results afterward
+	}
+
+	r, ok := ctx.Value(runnerKey).(testRunner)
+	if r == nil || !ok {
 
 		// Determine which namespaces to use
 		namespacesToUse := c.namespace
+		allNamespaces := false
 
 		// If we have filtered namespaces from the filtering system, use those
 		if len(filteredNamespaces) > 0 {
 			namespacesToUse = filteredNamespaces
+
+		} else if len(namespacesToUse) == 0 {
+			// For new filtering with empty namespaces, also evaluate all namespaces
+			// This ensures backward compatibility with tests that don't specify namespaces
+			allNamespaces = true
 		}
 
-		log.Debugf("Namespaces to use: %v", namespacesToUse)
+		// log the namespaces to use
+		log.Debugf("Namespaces to use: %v, allNamespaces: %v", namespacesToUse, allNamespaces)
 
 		// Prepare the list of data dirs
 		dataDirs, err := c.prepareDataDirs(ctx)
@@ -518,7 +572,7 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 				Data:          dataDirs,
 				Policy:        []string{c.policyDir},
 				Namespace:     namespacesToUse,
-				AllNamespaces: false, // Always false to prevent bypassing filtering
+				AllNamespaces: allNamespaces, // Use all namespaces for legacy filtering
 				NoFail:        true,
 				Output:        c.outputFormat,
 				Capabilities:  c.CapabilitiesPath(),
@@ -559,57 +613,33 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 
 	// loop over each policy (namespace) evaluation
 	// effectively replacing the results returned from conftest
-	for i, result := range runResults {
-		log.Debugf("Evaluation result at %d: %#v", i, result)
-		warnings := []Result{}
-		failures := []Result{}
-		exceptions := []Result{}
-		skipped := []Result{}
+	for _, result := range runResults {
+		// Use unified post-evaluation filter for consistent filtering logic
 
-		for i := range result.Warnings {
-			warning := result.Warnings[i]
-			addRuleMetadata(ctx, &warning, rules)
+		unifiedFilter := NewUnifiedPostEvaluationFilter(c.policyResolver)
 
-			if !c.isResultIncluded(warning, target.Target, missingIncludes) {
-				log.Debugf("Skipping result warning: %#v", warning)
-				continue
-			}
+		// Collect all results for processing
+		allResults := []Result{}
+		allResults = append(allResults, result.Warnings...)
+		allResults = append(allResults, result.Failures...)
+		allResults = append(allResults, result.Exceptions...)
+		allResults = append(allResults, result.Skipped...)
 
-			if getSeverity(warning) == severityFailure {
-				failures = append(failures, warning)
-			} else {
-				warnings = append(warnings, warning)
-			}
+		// Add metadata to all results
+		for j := range allResults {
+			addRuleMetadata(ctx, &allResults[j], rules)
 		}
 
-		for i := range result.Failures {
-			failure := result.Failures[i]
-			// log the failure
-			addRuleMetadata(ctx, &failure, rules)
+		// Filter results using the unified filter
+		filteredResults, updatedMissingIncludes := unifiedFilter.FilterResults(
+			allResults, allRules, target.Target, missingIncludes, effectiveTime)
 
-			if !c.isResultIncluded(failure, target.Target, missingIncludes) {
-				log.Debugf("Skipping result failure: %#v", failure)
-				continue
-			}
+		// Update missing includes
+		missingIncludes = updatedMissingIncludes
 
-			if getSeverity(failure) == severityWarning || !isResultEffective(failure, effectiveTime) {
-				warnings = append(warnings, failure)
-			} else {
-				failures = append(failures, failure)
-			}
-		}
-
-		for i := range result.Exceptions {
-			exception := result.Exceptions[i]
-			addRuleMetadata(ctx, &exception, rules)
-			exceptions = append(exceptions, exception)
-		}
-
-		for i := range result.Skipped {
-			skip := result.Skipped[i]
-			addRuleMetadata(ctx, &skip, rules)
-			skipped = append(skipped, skip)
-		}
+		// Categorize results using the unified filter
+		warnings, failures, exceptions, skipped := unifiedFilter.CategorizeResults(
+			filteredResults, result, effectiveTime)
 
 		result.Warnings = warnings
 		result.Failures = failures
@@ -793,6 +823,7 @@ func addRuleMetadata(ctx context.Context, result *Result, rules policyRules) {
 	if ok {
 		addMetadataToResults(ctx, result, rules[code])
 	}
+	// Results without codes are handled by the filtering logic using wildcard matchers
 }
 
 func addMetadataToResults(ctx context.Context, r *Result, rule rule.Info) {
@@ -805,6 +836,7 @@ func addMetadataToResults(ctx context.Context, r *Result, rule rule.Info) {
 	if r.Metadata == nil {
 		return
 	}
+
 	// normalize collection to []string
 	if v, ok := r.Metadata[metadataCollections]; ok {
 		switch vals := v.(type) {
@@ -1145,7 +1177,8 @@ func extractCollections(result Result) []string {
 				collections = append(collections, "@"+c)
 			}
 		} else {
-			panic(fmt.Sprintf("Unsupported collections set in Metadata, expecting []string got: %v", maybeCollections))
+			// Log the error instead of panicking
+			log.Errorf("Unsupported collections set in Metadata, expecting []string got: %v", maybeCollections)
 		}
 	}
 	return collections
@@ -1222,4 +1255,45 @@ func strictCapabilities(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return string(blob), nil
+}
+
+// extractCodeFromRuleBody extracts the code value from a rule's body expressions.
+// It looks for assignments like `result := { "code": "...", ... }` in the rule body.
+func extractCodeFromRuleBody(ruleRef *ast.Rule) string {
+	if ruleRef.Body == nil {
+		return ""
+	}
+
+	for _, expr := range ruleRef.Body {
+		if !expr.IsAssignment() {
+			continue
+		}
+
+		if len(expr.Operands()) < 2 {
+			continue
+		}
+
+		term, ok := expr.Operands()[1].Value.(ast.Object)
+		if !ok {
+			continue
+		}
+
+		var code string
+		if err := term.Iter(func(key, value *ast.Term) error {
+			if keyStr, ok := key.Value.(ast.String); ok && keyStr == "code" {
+				if valueStr, ok := value.Value.(ast.String); ok {
+					code = string(valueStr)
+				}
+			}
+			return nil
+		}); err != nil {
+			log.Warnf("Error iterating over term: %v", err)
+		}
+
+		if code != "" {
+			return code
+		}
+	}
+
+	return ""
 }
