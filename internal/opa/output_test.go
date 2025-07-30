@@ -218,3 +218,201 @@ func TestTextOutputIsSorted(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "# Source: A\n\n\n(No annotations found)\n--\n# Source: B\n\n\n(No annotations found)\n--\n# Source: C\n\n\n(No annotations found)\n--\n", buffy.String())
 }
+
+func TestOutputText(t *testing.T) {
+	cases := []struct {
+		name      string
+		allData   map[string][]*ast.AnnotationsRef
+		template  string
+		expected  string
+		expectErr bool
+		errMsg    string
+	}{
+		{
+			name: "successful output with multiple sources",
+			allData: map[string][]*ast.AnnotationsRef{
+				"source1": {
+					{
+						Path: ast.Ref{
+							ast.VarTerm("data"),
+							ast.StringTerm("policy"),
+							ast.StringTerm("test"),
+							ast.StringTerm("deny"),
+						},
+						Annotations: &ast.Annotations{
+							Scope:       "rule",
+							Title:       "Test Rule",
+							Description: "Test Description",
+						},
+					},
+				},
+				"source2": {
+					{
+						Path: ast.Ref{
+							ast.VarTerm("data"),
+							ast.StringTerm("policy"),
+							ast.StringTerm("warn"),
+						},
+						Annotations: &ast.Annotations{
+							Scope: "rule",
+							Title: "Warning Rule",
+						},
+					},
+				},
+			},
+			template:  "text",
+			expected:  "# Source: source1\n\npolicy.test. (deny)\nTest Rule\nTest Description\n--\n# Source: source2\n\npolicy. (warn)\nWarning Rule\n\n--\n",
+			expectErr: false,
+		},
+		{
+			name: "successful output with no annotations",
+			allData: map[string][]*ast.AnnotationsRef{
+				"source1": {
+					{
+						Path: ast.Ref{
+							ast.VarTerm("data"),
+							ast.StringTerm("policy"),
+							ast.StringTerm("test"),
+							ast.StringTerm("deny"),
+						},
+						// No annotations
+					},
+				},
+			},
+			template:  "text",
+			expected:  "# Source: source1\n\npolicy.test.deny\n(No annotations found)\n--\n",
+			expectErr: false,
+		},
+		{
+			name: "failed output with invalid template",
+			allData: map[string][]*ast.AnnotationsRef{
+				"source1": {
+					{
+						Path: ast.Ref{
+							ast.VarTerm("data"),
+							ast.StringTerm("policy"),
+							ast.StringTerm("test"),
+							ast.StringTerm("deny"),
+						},
+						Annotations: &ast.Annotations{
+							Scope: "rule",
+							Title: "Test Rule",
+						},
+					},
+				},
+			},
+			template:  "invalid-template",
+			expected:  "",
+			expectErr: true,
+			errMsg:    "no template",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			buf := new(bytes.Buffer)
+			err := OutputText(buf, c.allData, c.template)
+
+			if c.expectErr {
+				assert.Error(t, err, "Expected error for invalid input")
+				if c.errMsg != "" {
+					assert.Contains(t, err.Error(), c.errMsg, "Error message should contain expected text")
+				}
+			} else {
+				assert.NoError(t, err, "Expected no error for valid input")
+				assert.Equal(t, c.expected, buf.String(), "Output should match expected")
+			}
+		})
+	}
+}
+
+func TestRenderAnn(t *testing.T) {
+	cases := []struct {
+		name        string
+		annotations *ast.AnnotationsRef
+		tmplName    string
+		expected    string
+		expectErr   bool
+		errMsg      string
+	}{
+		{
+			name: "successful render with text template",
+			annotations: &ast.AnnotationsRef{
+				Path: ast.Ref{
+					ast.VarTerm("data"),
+					ast.StringTerm("policy"),
+					ast.StringTerm("test"),
+					ast.StringTerm("deny"),
+				},
+				Annotations: &ast.Annotations{
+					Scope:       "rule",
+					Title:       "Test Rule",
+					Description: "Test Description",
+					Custom: map[string]interface{}{
+						"short_name": "test_rule",
+					},
+				},
+			},
+			tmplName:  "text",
+			expected:  "policy.test.test_rule (deny)\nhttps://conforma.dev/docs/policy/packages/release_test.html#test__test_rule\nTest Rule\nTest Description\n--\n",
+			expectErr: false,
+		},
+		{
+			name: "successful render with names template",
+			annotations: &ast.AnnotationsRef{
+				Path: ast.Ref{
+					ast.VarTerm("data"),
+					ast.StringTerm("policy"),
+					ast.StringTerm("test"),
+					ast.StringTerm("warn"),
+				},
+				Annotations: &ast.Annotations{
+					Scope: "rule",
+					Title: "Warning Rule",
+					Custom: map[string]interface{}{
+						"short_name": "warning_rule",
+					},
+				},
+			},
+			tmplName:  "names",
+			expected:  "policy.test.warning_rule\n",
+			expectErr: false,
+		},
+		{
+			name: "failed render with invalid template",
+			annotations: &ast.AnnotationsRef{
+				Path: ast.Ref{
+					ast.VarTerm("data"),
+					ast.StringTerm("policy"),
+					ast.StringTerm("test"),
+					ast.StringTerm("deny"),
+				},
+				Annotations: &ast.Annotations{
+					Scope: "rule",
+					Title: "Test Rule",
+				},
+			},
+			tmplName:  "invalid-template",
+			expected:  "",
+			expectErr: true,
+			errMsg:    "no template",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			buf := new(bytes.Buffer)
+			err := renderAnn(buf, c.annotations, c.tmplName)
+
+			if c.expectErr {
+				assert.Error(t, err, "Expected error for invalid template")
+				if c.errMsg != "" {
+					assert.Contains(t, err.Error(), c.errMsg, "Error message should contain expected text")
+				}
+			} else {
+				assert.NoError(t, err, "Expected no error for valid template")
+				assert.Equal(t, c.expected, buf.String(), "Output should match expected")
+			}
+		})
+	}
+}

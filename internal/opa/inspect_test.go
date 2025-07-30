@@ -27,6 +27,7 @@ import (
 
 	hd "github.com/MakeNowJust/heredoc"
 	"github.com/gkampitakis/go-snaps/snaps"
+	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -239,6 +240,48 @@ func TestCheckRules(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestHasAnnotations(t *testing.T) {
+	cases := []struct {
+		name           string
+		rule           *ast.AnnotationsRef
+		expectedResult bool
+		description    string
+	}{
+		{
+			name: "rule with annotations",
+			rule: &ast.AnnotationsRef{
+				Annotations: &ast.Annotations{
+					Scope: "rule",
+					Title: "Test Rule",
+				},
+			},
+			expectedResult: true,
+			description:    "Should return true when rule has annotations",
+		},
+		{
+			name: "rule with empty annotations",
+			rule: &ast.AnnotationsRef{
+				Annotations: &ast.Annotations{},
+			},
+			expectedResult: true,
+			description:    "Should return true when rule has empty annotations object",
+		},
+		{
+			name:           "rule without annotations",
+			rule:           &ast.AnnotationsRef{},
+			expectedResult: false,
+			description:    "Should return false when rule has no annotations",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			result := hasAnnotations(c.rule)
+			assert.Equal(t, c.expectedResult, result, c.description)
 		})
 	}
 }
