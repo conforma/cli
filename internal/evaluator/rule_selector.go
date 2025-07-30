@@ -92,6 +92,10 @@ func NewUnifiedRuleSelector(source ecc.Source, policy ConfigProvider, imageConte
 		Exclude: source.Config.Exclude,
 	}
 
+	if len(config.Include) == 0 {
+		config.Include = []string{"*"}
+	}
+
 	var volatileConfig *VolatileConfig
 	if source.VolatileConfig != nil {
 		volatileConfig = &VolatileConfig{
