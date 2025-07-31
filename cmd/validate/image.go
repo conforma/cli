@@ -360,6 +360,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 					}
 
 					log.Debugf("Worker %d got a component %q", id, comp.ContainerImage)
+					log.Debugf("DEBUG: Starting validation for component %q", comp.ContainerImage)
 					out, err := validate(ctx, comp, data.spec, data.policy, evaluators, data.info)
 					res := result{
 						err: err,
@@ -371,6 +372,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 
 					// Skip on err to not panic. Error is return on routine completion.
 					if err == nil {
+						log.Debugf("DEBUG: Validation succeeded for %q, processing results", comp.ContainerImage)
 						res.component.Violations = out.Violations()
 						res.component.Warnings = out.Warnings()
 
@@ -392,6 +394,8 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 						}
 						res.component.ContainerImage = out.ImageURL
 						res.policyInput = out.PolicyInput
+					} else {
+						log.Errorf("DEBUG: Validation failed for %q: %v", comp.ContainerImage, err)
 					}
 					res.component.Success = err == nil && len(res.component.Violations) == 0
 
@@ -451,13 +455,19 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 
 			report, err := applicationsnapshot.NewReport(data.snapshot, components, data.policy, manyPolicyInput, showSuccesses)
 			if err != nil {
+				log.Errorf("DEBUG: Failed to create report: %v", err)
 				return err
 			}
+			log.Debugf("DEBUG: Created report with %d components", len(components))
+
 			p := format.NewTargetParser(applicationsnapshot.JSON, format.Options{ShowSuccesses: showSuccesses}, cmd.OutOrStdout(), utils.FS(cmd.Context()))
 			utils.SetColorEnabled(data.noColor, data.forceColor)
+			log.Debugf("DEBUG: Writing output with formats: %v", data.output)
 			if err := report.WriteAll(data.output, p); err != nil {
+				log.Errorf("DEBUG: Failed to write output: %v", err)
 				return err
 			}
+			log.Debugf("DEBUG: Output generation completed successfully")
 
 			if data.vsaEnabled {
 				signer, err := vsa.NewSigner(data.vsaSigningKey, utils.FS(cmd.Context()))

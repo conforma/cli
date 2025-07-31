@@ -247,6 +247,7 @@ spec:
       args:
         - validate
         - image
+        - "--debug"
         - "--images"
         - "/tekton/home/snapshot.json"
         - "--policy"

@@ -28,6 +28,7 @@ import (
 
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
 	app "github.com/konflux-ci/application-api/api/v1alpha1"
+	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/yaml"
 
 	"github.com/conforma/cli/internal/evaluator"
@@ -162,12 +163,15 @@ func NewReport(snapshot string, components []Component, policy policy.Policy, po
 
 // WriteAll writes the report to all the given targets.
 func (r Report) WriteAll(targets []string, p format.TargetParser) (allErrors error) {
+	log.Debugf("DEBUG: WriteAll called with %d targets: %v", len(targets), targets)
 	if len(targets) == 0 {
 		targets = append(targets, Text)
 	}
 	for _, targetName := range targets {
+		log.Debugf("DEBUG: Processing target: %s", targetName)
 		target, err := p.Parse(targetName)
 		if err != nil {
+			log.Errorf("DEBUG: Failed to parse target %s: %v", targetName, err)
 			allErrors = errors.Join(allErrors, err)
 			continue
 		}
@@ -175,6 +179,7 @@ func (r Report) WriteAll(targets []string, p format.TargetParser) (allErrors err
 
 		data, err := r.toFormat(target.Format)
 		if err != nil {
+			log.Errorf("DEBUG: Failed to format target %s: %v", targetName, err)
 			allErrors = errors.Join(allErrors, err)
 			continue
 		}
@@ -184,7 +189,10 @@ func (r Report) WriteAll(targets []string, p format.TargetParser) (allErrors err
 		}
 
 		if _, err := target.Write(data); err != nil {
+			log.Errorf("DEBUG: Failed to write target %s: %v", targetName, err)
 			allErrors = errors.Join(allErrors, err)
+		} else {
+			log.Debugf("DEBUG: Successfully wrote target: %s", targetName)
 		}
 	}
 	return
@@ -192,28 +200,40 @@ func (r Report) WriteAll(targets []string, p format.TargetParser) (allErrors err
 
 // toFormat converts the report into the given format.
 func (r *Report) toFormat(format string) (data []byte, err error) {
+	log.Debugf("DEBUG: toFormat called with format: %s", format)
 	switch format {
 	case JSON:
+		log.Debugf("DEBUG: Generating JSON format")
 		data, err = json.Marshal(r)
 	case YAML:
+		log.Debugf("DEBUG: Generating YAML format")
 		data, err = yaml.Marshal(r)
 	case Text:
+		log.Debugf("DEBUG: Generating Text format")
 		data, err = generateTextReport(r)
 	case AppStudio, HACBS:
+		log.Debugf("DEBUG: Generating Appstudio format")
 		data, err = json.Marshal(r.toAppstudioReport())
 	case Summary:
+		log.Debugf("DEBUG: Generating Summary format")
 		data, err = json.Marshal(r.toSummary())
 	case SummaryMarkdown:
+		log.Debugf("DEBUG: Generating Markdown format")
 		data, err = generateMarkdownSummary(r)
 	case JUnit:
+		log.Debugf("DEBUG: Generating XML format")
 		data, err = xml.Marshal(r.toJUnit())
 	case Attestation:
+		log.Debugf("DEBUG: Generating Attestation format")
 		data, err = r.renderAttestations()
 	case PolicyInput:
+		log.Debugf("DEBUG: Generating PolicyInput format")
 		data = bytes.Join(r.PolicyInput, []byte("\n"))
 	case VSA:
+		log.Debugf("DEBUG: Generating VSA format")
 		data, err = r.toVSA()
 	default:
+		log.Errorf("DEBUG: Unknown format: %s", format)
 		return nil, fmt.Errorf("%q is not a valid report format", format)
 	}
 	return
@@ -340,6 +360,7 @@ func writeMarkdownField(buffer *bytes.Buffer, name string, value any, icon strin
 // toAppstudioReport returns a version of the report that conforms to the
 // TEST_OUTPUT format, usually written to the TEST_OUTPUT Tekton task result
 func (r *Report) toAppstudioReport() TestReport {
+	log.Debugf("DEBUG: Generating appstudio report for %d components", len(r.Components))
 	result := TestReport{
 		Timestamp: fmt.Sprint(r.created.UTC().Unix()),
 		// EC generally runs with the AllNamespaces flag set to true
@@ -349,7 +370,9 @@ func (r *Report) toAppstudioReport() TestReport {
 	}
 
 	hasFailures := false
-	for _, component := range r.toSummary().Components {
+	for i, component := range r.toSummary().Components {
+		log.Debugf("DEBUG: Processing component %d: %s (success: %t, violations: %d, warnings: %d, successes: %d)",
+			i, component.Name, component.Success, component.TotalViolations, component.TotalWarnings, component.TotalSuccesses)
 		result.Failures += component.TotalViolations
 		result.Warnings += component.TotalWarnings
 		result.Successes += component.TotalSuccesses
@@ -358,10 +381,14 @@ func (r *Report) toAppstudioReport() TestReport {
 			// It is possible, although quite unusual, that a component has no
 			// listed violations but is still marked as not successful.
 			hasFailures = true
+			log.Debugf("DEBUG: Component %s marked as unsuccessful", component.Name)
 		}
 	}
 
+	log.Debugf("DEBUG: Final appstudio report - successes: %d, failures: %d, warnings: %d, hasFailures: %t",
+		result.Successes, result.Failures, result.Warnings, hasFailures)
 	result.DeriveResult(hasFailures)
+	log.Debugf("DEBUG: Appstudio report result: %s", result.Result)
 	return result
 }
 

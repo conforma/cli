@@ -49,34 +49,46 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 	a, err := application_snapshot_image.NewApplicationSnapshotImage(ctx, comp, p, *snap)
 	if err != nil {
 		log.Debug("Failed to create application snapshot image!")
+		log.Errorf("DEBUG: NewApplicationSnapshotImage failed for %s: %v", comp.ContainerImage, err)
 		return nil, err
 	}
 
+	log.Debugf("DEBUG: Checking image accessibility for %s", comp.ContainerImage)
 	out.SetImageAccessibleCheckFromError(a.ValidateImageAccess(ctx))
 	if !out.ImageAccessibleCheck.Passed {
+		log.Errorf("DEBUG: Image not accessible for %s", comp.ContainerImage)
 		return out, nil
 	}
 
 	if resolved, err := resolveAndSetImageUrl(ctx, comp.ContainerImage, a); err != nil {
+		log.Errorf("DEBUG: Failed to resolve image URL for %s: %v", comp.ContainerImage, err)
 		return nil, err
 	} else {
 		out.ImageURL = resolved
+		log.Debugf("DEBUG: Resolved image URL to %s", resolved)
 	}
 
+	log.Debugf("DEBUG: Fetching image config for %s", comp.ContainerImage)
 	if err := a.FetchImageConfig(ctx); err != nil {
 		log.Debugf("Unable to fetch image config: %s", err)
+		log.Errorf("DEBUG: FetchImageConfig failed for %s: %v", comp.ContainerImage, err)
 	}
 	if err := a.FetchParentImageConfig(ctx); err != nil {
 		log.Debugf("Unable to fetch parent's image config: %s", err)
+		log.Errorf("DEBUG: FetchParentImageConfig failed for %s: %v", comp.ContainerImage, err)
 	}
 	if err := a.FetchImageFiles(ctx); err != nil {
 		log.Debugf("Unable to fetch image manifests: %s", err)
+		log.Errorf("DEBUG: FetchImageFiles failed for %s: %v", comp.ContainerImage, err)
 	}
 
+	log.Debugf("DEBUG: Validating image signature for %s", comp.ContainerImage)
 	out.SetImageSignatureCheckFromError(a.ValidateImageSignature(ctx))
 
+	log.Debugf("DEBUG: Validating attestation signature for %s", comp.ContainerImage)
 	out.SetAttestationSignatureCheckFromError(a.ValidateAttestationSignature(ctx))
 	if !out.AttestationSignatureCheck.Passed {
+		log.Errorf("DEBUG: Attestation signature check failed for %s", comp.ContainerImage)
 		return out, nil
 	}
 
@@ -84,6 +96,7 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 
 	out.Attestations = a.Attestations()
 
+	log.Debugf("DEBUG: Validating attestation syntax for %s", comp.ContainerImage)
 	out.SetAttestationSyntaxCheckFromError(a.ValidateAttestationSyntax(ctx))
 
 	if attestationTime := determineAttestationTime(ctx, a.Attestations()); attestationTime != nil {
@@ -95,6 +108,7 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 	out.Attestations = att
 	log.Debugf("Found %d attestations", attCount)
 	if attCount == 0 {
+		log.Errorf("DEBUG: No attestations found for %s", comp.ContainerImage)
 		// This is very much a corner case.
 		out.SetPolicyCheck([]evaluator.Outcome{
 			{
@@ -106,19 +120,23 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 		return out, nil
 	}
 
+	log.Debugf("DEBUG: Writing input file for %s", comp.ContainerImage)
 	inputPath, inputJSON, err := a.WriteInputFile(ctx)
 	if err != nil {
 		log.Debug("Problem writing input files!")
+		log.Errorf("DEBUG: WriteInputFile failed for %s: %v", comp.ContainerImage, err)
 		return nil, err
 	}
 
 	var allResults []evaluator.Outcome
 
+	log.Debugf("DEBUG: Running policy evaluation for %s", comp.ContainerImage)
 	for _, e := range evaluators {
 		// Todo maybe: Handle each one concurrently
 		target := evaluator.EvaluationTarget{Inputs: []string{inputPath}}
 		if ref := a.ImageReference(ctx); ref == "" {
 			log.Debug("Problem getting image reference")
+			log.Errorf("DEBUG: ImageReference is empty for %s", comp.ContainerImage)
 		} else {
 			target.Target = ref
 		}
@@ -128,6 +146,7 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 
 		if err != nil {
 			log.Debug("Problem running conftest policy check!")
+			log.Errorf("DEBUG: Policy evaluation failed for %s: %v", comp.ContainerImage, err)
 			return nil, err
 		}
 		allResults = append(allResults, results...)
@@ -136,8 +155,10 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 	out.PolicyInput = inputJSON
 
 	log.Debug("Conftest policy check complete")
+	log.Debugf("DEBUG: Setting policy check results for %s", comp.ContainerImage)
 	out.SetPolicyCheck(allResults)
 
+	log.Debugf("DEBUG: Validation complete for %s", comp.ContainerImage)
 	return out, nil
 }
 
