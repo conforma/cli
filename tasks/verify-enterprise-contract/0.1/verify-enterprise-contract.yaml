@@ -247,7 +247,6 @@ spec:
       args:
         - validate
         - image
-        - "--debug"
         - "--images"
         - "/tekton/home/snapshot.json"
         - "--policy"
@@ -270,8 +269,6 @@ spec:
         - "--show-successes"
         - "--effective-time=$(params.EFFECTIVE_TIME)"
         - "--extra-rule-data=$(params.EXTRA_RULE_DATA)"
-        - "--retry-min-wait"
-        - "$(params.RETRY_MIN_WAIT)"
         - "--retry-max-wait"
         - "$(params.RETRY_MAX_WAIT)"
         - "--retry-max-retry"
