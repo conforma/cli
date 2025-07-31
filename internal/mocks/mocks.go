@@ -27,6 +27,9 @@ type HttpTransportMockFailure struct{}
 type HttpTransportTimeoutFailure struct {
 	CallCount int
 }
+type HttpTransportTooManyRequestsFailure struct {
+	CallCount int
+}
 
 func (h *HttpTransportMockSuccess) RoundTrip(_ *http.Request) (*http.Response, error) {
 	return &http.Response{
@@ -54,6 +57,23 @@ func (h *HttpTransportTimeoutFailure) RoundTrip(req *http.Request) (*http.Respon
 		return &http.Response{
 			StatusCode: http.StatusRequestTimeout,
 			Body:       io.NopCloser(bytes.NewBufferString(`{"error": "Gateway Timeout"}`)),
+		}, nil
+	}
+	return &http.Response{
+		StatusCode: 200,
+		Header: http.Header{
+			"Content-Type":          {"application/json"},
+			"Docker-Content-Digest": {"sha256:11db66166c3d16c8251134e538b794ec08dfbe5f11bcc8066c6fe50e3282d6ed"},
+		},
+	}, nil
+}
+
+func (h *HttpTransportTooManyRequestsFailure) RoundTrip(req *http.Request) (*http.Response, error) {
+	h.CallCount++
+	if h.CallCount <= 2 {
+		return &http.Response{
+			StatusCode: http.StatusTooManyRequests,
+			Body:       io.NopCloser(bytes.NewBufferString(`{"error": "Too Many Requests"}`)),
 		}, nil
 	}
 	return &http.Response{
