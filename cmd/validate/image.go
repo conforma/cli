@@ -79,6 +79,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 		vsaEnabled                  bool
 		vsaSigningKey               string
 		vsaUpload                   string
+		comprehensiveFilterEnabled  bool
 	}{
 		strict:  true,
 		workers: 5,
@@ -333,7 +334,27 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				if utils.IsOpaEnabled() {
 					c, err = newOPAEvaluator()
 				} else {
-					c, err = newConftestEvaluator(cmd.Context(), policySources, data.policy, sourceGroup)
+					// If comprehensive filter is enabled, use the new constructor with post-evaluation filter
+					if data.comprehensiveFilterEnabled {
+						// Create feature flag provider
+						featureFlags := map[string]bool{
+							"comprehensive-post-evaluation-filter": true,
+						}
+						featureFlagProvider := evaluator.NewDefaultFeatureFlagProvider(featureFlags)
+
+						// Create migration helper for this source group
+						migrationHelper := evaluator.NewFeatureFlagMigrationHelper(
+							sourceGroup, data.policy, featureFlagProvider, "comprehensive-post-evaluation-filter")
+
+						// Log which filter is being used
+						log.Debugf("Using %s for source %s", migrationHelper.GetActiveFilterType(), sourceGroup.Name)
+
+						// Use the new constructor with the migration helper
+						c, err = evaluator.NewConftestEvaluatorWithPostEvaluationFilter(
+							cmd.Context(), policySources, data.policy, sourceGroup, migrationHelper)
+					} else {
+						c, err = newConftestEvaluator(cmd.Context(), policySources, data.policy, sourceGroup)
+					}
 				}
 
 				if err != nil {
@@ -594,6 +615,11 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 	cmd.Flags().BoolVar(&data.vsaEnabled, "vsa", false, "Generate a Verification Summary Attestation (VSA) for each validated image.")
 	cmd.Flags().StringVar(&data.vsaSigningKey, "vsa-signing-key", "", "Path to the private key for signing the VSA.")
 	cmd.Flags().StringVar(&data.vsaUpload, "vsa-upload", "oci", "Where to upload the VSA attestation: oci, rekor, none")
+
+	cmd.Flags().BoolVar(&data.comprehensiveFilterEnabled, "comprehensive-filter", true, hd.Doc(`
+		Enable the new comprehensive post-evaluation filtering system. This provides more
+		detailed filtering capabilities but may change the behavior of rule inclusion/exclusion.
+		Use with caution in production environments.`))
 
 	if len(data.input) > 0 || len(data.filePath) > 0 || len(data.images) > 0 {
 		if err := cmd.MarkFlagRequired("image"); err != nil {
