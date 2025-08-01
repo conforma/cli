@@ -29,6 +29,12 @@ import (
 
 // Determine policyConfig
 func GetPolicyConfig(ctx context.Context, policyConfiguration string) (string, error) {
+	// If the input starts with a JSON object, treat it as a JSON string
+	if len(policyConfiguration) > 0 && policyConfiguration[0] == '{' {
+		log.Debugf("Treating input as JSON string (length: %d)", len(policyConfiguration))
+		return policyConfiguration, nil
+	}
+
 	// If policyConfiguration is not detected as a file and is detected as a git URL,
 	// or if policyConfiguration is an https URL try to download a config file from
 	// the provided source. If successful we read its contents and return it.

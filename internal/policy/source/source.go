@@ -78,6 +78,11 @@ type PolicyUrl struct {
 // downloadCache is a concurrent map used to cache downloaded files.
 var downloadCache sync.Map
 
+// ClearDownloadCache clears the download cache. This is primarily used for testing.
+func ClearDownloadCache() {
+	downloadCache = sync.Map{}
+}
+
 type cacheContent struct {
 	sourceUrl string
 	metadata  metadata.Metadata
