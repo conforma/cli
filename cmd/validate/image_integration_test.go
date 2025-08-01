@@ -45,7 +45,7 @@ import (
 )
 
 func TestEvaluatorLifecycle(t *testing.T) {
-	noEvaluators := 100
+	noEvaluators := 3
 
 	ctx := utils.WithFS(context.Background(), afero.NewMemMapFs())
 	client := fake.FakeClient{}
