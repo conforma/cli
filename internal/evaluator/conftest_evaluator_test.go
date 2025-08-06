@@ -298,9 +298,9 @@ func TestConftestEvaluatorEvaluateSeverity(t *testing.T) {
 	assert.NoError(t, err)
 
 	src := testPolicySource{}
-	evaluator, err := NewConftestEvaluatorWithLegacyFiltering(ctx, []source.PolicySource{
+	evaluator, err := NewConftestEvaluatorWithNamespace(ctx, []source.PolicySource{
 		src,
-	}, pol, ecc.Source{})
+	}, pol, ecc.Source{}, []string{})
 
 	assert.NoError(t, err)
 	actualResults, err := evaluator.Evaluate(ctx, inputs)
@@ -338,9 +338,9 @@ func TestConftestEvaluatorCapabilities(t *testing.T) {
 	p, err := policy.NewOfflinePolicy(ctx, policy.Now)
 	assert.NoError(t, err)
 
-	evaluator, err := NewConftestEvaluatorWithLegacyFiltering(ctx, []source.PolicySource{
+	evaluator, err := NewConftestEvaluatorWithNamespace(ctx, []source.PolicySource{
 		testPolicySource{},
-	}, p, ecc.Source{})
+	}, p, ecc.Source{}, []string{})
 	assert.NoError(t, err)
 
 	blob, err := afero.ReadFile(fs, evaluator.CapabilitiesPath())
@@ -409,9 +409,9 @@ func TestConftestEvaluatorEvaluateNoSuccessWarningsOrFailures(t *testing.T) {
 			p, err := policy.NewOfflinePolicy(ctx, policy.Now)
 			assert.NoError(t, err)
 
-			evaluator, err := NewConftestEvaluator(ctx, []source.PolicySource{
+			evaluator, err := NewConftestEvaluatorWithNamespace(ctx, []source.PolicySource{
 				testPolicySource{},
-			}, p, ecc.Source{Config: tt.sourceConfig})
+			}, p, ecc.Source{Config: tt.sourceConfig}, []string{})
 
 			assert.NoError(t, err)
 			actualResults, err := evaluator.Evaluate(ctx, inputs)
@@ -1335,9 +1335,9 @@ func TestConftestEvaluatorIncludeExclude(t *testing.T) {
 				},
 			}
 
-			evaluator, err := NewConftestEvaluatorWithLegacyFiltering(ctx, []source.PolicySource{
+			evaluator, err := NewConftestEvaluatorWithNamespace(ctx, []source.PolicySource{
 				testPolicySource{},
-			}, p, sourceConfig)
+			}, p, sourceConfig, []string{})
 
 			assert.NoError(t, err)
 			got, err := evaluator.Evaluate(ctx, inputs)

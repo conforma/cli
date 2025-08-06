@@ -1258,6 +1258,14 @@ func (f *UnifiedPostEvaluationFilter) CategorizeResults(
 	exceptions = append(exceptions, originalResult.Exceptions...)
 	skipped = append(skipped, originalResult.Skipped...)
 
+	// Ensure we return empty slices instead of nil slices for consistency
+	if exceptions == nil {
+		exceptions = []Result{}
+	}
+	if skipped == nil {
+		skipped = []Result{}
+	}
+
 	return warnings, failures, exceptions, skipped
 }
 
@@ -1291,23 +1299,7 @@ func (f *UnifiedPostEvaluationFilter) determineOriginalType(filteredResult Resul
 		}
 	}
 
-	// For results without codes, try to determine the type based on other criteria
-	// Check if the result has an effective_on field, which suggests it was originally a failure
-	if _, hasEffectiveOn := filteredResult.Metadata[metadataEffectiveOn]; hasEffectiveOn {
-		// Results with effective_on are typically failures that might be demoted to warnings
-		// Check if there are any failures in the original result that might match
-		for _, originalFailure := range originalResult.Failures {
-			// Try to match by message content as a fallback
-			if originalFailure.Message == filteredResult.Message {
-				return "failure"
-			}
-		}
-		// If no exact match found but it has effective_on, assume it was originally a failure
-		// The effective time logic will determine if it should be demoted to warning
-		return "failure"
-	}
-
-	// For other results without codes, check if they match any original results by message
+	// For results without codes, check if they match any original results by message first
 	for _, originalWarning := range originalResult.Warnings {
 		if originalWarning.Message == filteredResult.Message {
 			return "warning"
@@ -1327,6 +1319,13 @@ func (f *UnifiedPostEvaluationFilter) determineOriginalType(filteredResult Resul
 		if originalSkipped.Message == filteredResult.Message {
 			return "skipped"
 		}
+	}
+
+	// If no message match found, check if the result has an effective_on field, which suggests it was originally a failure
+	if _, hasEffectiveOn := filteredResult.Metadata[metadataEffectiveOn]; hasEffectiveOn {
+		// Results with effective_on are typically failures that might be demoted to warnings
+		// The effective time logic will determine if it should be demoted to warning
+		return "failure"
 	}
 
 	return "unknown"
