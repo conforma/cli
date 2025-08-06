@@ -414,6 +414,7 @@ crd-docs: $(wildcard $(CRD_DEF)/*.go) ## Generate CRD documentation
 crd-test: crd-manifests crd-generate ## Run CRD tests.
 	KUBEBUILDER_ASSETS="$$($(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile crd_cover.out
 	cd api && go test ./... -coverprofile ../api_cover.out
+	cd ../schema && go test ./... -coverprofile ../schema_cover.out
 
 .PHONY: crd-export-schema
 crd-export-schema: crd-generate ## Export the CRD schema to the schema directory as a json-store.org schema.

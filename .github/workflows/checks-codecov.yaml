@@ -69,6 +69,9 @@ jobs:
       - name: Generate
         run: make generate
 
+      - name: Generate CRD manifests
+        run: make crd-generate
+
       # Possibly useful for debugging if the next step produces an error
       - name: Show diff after `make generate`
         run: git diff --stat --patch
@@ -84,6 +87,9 @@ jobs:
 
       - name: Test
         run: make test
+
+      - name: Test CRDs
+        run: make crd-test
 
       - name: Upload unit test coverage report
         uses: codecov/codecov-action@0565863a31f2c772f9f0395002a31e3f06189574 # v5.4.0
@@ -108,6 +114,30 @@ jobs:
         with:
           files: ./coverage-integration.out
           flags: integration
+
+      - name: Upload CRD test coverage report
+        uses: codecov/codecov-action@0565863a31f2c772f9f0395002a31e3f06189574 # v5.4.0
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          files: ./crd_cover.out
+          flags: crd
+
+      - name: Upload CRD API test coverage report
+        uses: codecov/codecov-action@0565863a31f2c772f9f0395002a31e3f06189574 # v5.4.0
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          files: ./api_cover.out
+          flags: crd-api
+
+      - name: Upload CRD schema test coverage report
+        uses: codecov/codecov-action@0565863a31f2c772f9f0395002a31e3f06189574 # v5.4.0
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          files: ./schema_cover.out
+          flags: crd-schema
 
   Acceptance:
     runs-on: ubuntu-latest
