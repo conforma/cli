@@ -403,6 +403,12 @@ type PolicyResolver interface {
 	// ResolvePolicy determines which rules and packages are included/excluded
 	// based on the policy configuration and available rules.
 	ResolvePolicy(rules policyRules, target string) PolicyResolutionResult
+
+	// Includes returns the include criteria used by this policy resolver
+	Includes() *Criteria
+
+	// Excludes returns the exclude criteria used by this policy resolver
+	Excludes() *Criteria
 }
 
 // PolicyResolutionResult contains the comprehensive results of policy resolution.
@@ -580,6 +586,16 @@ func (r *IncludeExcludePolicyResolver) evaluateRuleInclusion(ruleID string, rule
 // (same logic as ECPolicyResolver).
 func (r *IncludeExcludePolicyResolver) determinePackageInclusion(pkg string, pkgRules []rule.Info, target string, result *PolicyResolutionResult) {
 	r.baseDeterminePackageInclusion(pkg, pkgRules, target, result)
+}
+
+// Includes returns the include criteria used by this policy resolver
+func (r *IncludeExcludePolicyResolver) Includes() *Criteria {
+	return r.include
+}
+
+// Excludes returns the exclude criteria used by this policy resolver
+func (r *IncludeExcludePolicyResolver) Excludes() *Criteria {
+	return r.exclude
 }
 
 // baseEvaluateRuleInclusion contains the shared logic for evaluating rule inclusion
@@ -840,6 +856,16 @@ func (r *ECPolicyResolver) matchesPipelineIntention(pkgRules []rule.Info) bool {
 		}
 	}
 	return false
+}
+
+// Includes returns the include criteria used by this policy resolver
+func (r *ECPolicyResolver) Includes() *Criteria {
+	return r.include
+}
+
+// Excludes returns the exclude criteria used by this policy resolver
+func (r *ECPolicyResolver) Excludes() *Criteria {
+	return r.exclude
 }
 
 // GetECPolicyResolution is a convenience function that creates a PolicyResolver
@@ -1201,7 +1227,7 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 		// use legacy filtering logic to maintain backward compatibility
 		if len(rules) == 0 {
 			// Use legacy filtering logic for all results
-			if IsResultIncluded(result, target, missingIncludes, f.policyResolver.(*IncludeExcludePolicyResolver).include, f.policyResolver.(*IncludeExcludePolicyResolver).exclude) {
+			if IsResultIncluded(result, target, missingIncludes, f.policyResolver.Includes(), f.policyResolver.Excludes()) {
 				filteredResults = append(filteredResults, result)
 			}
 			continue

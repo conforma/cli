@@ -2450,12 +2450,12 @@ warn contains result if {
 	config.On("SigstoreOpts").Return(policy.SigstoreOpts{}, nil)
 	config.On("Spec").Return(ecc.EnterpriseContractPolicySpec{})
 
-	evaluator, err := NewConftestEvaluatorWithLegacyFiltering(ctx, []source.PolicySource{
+	evaluator, err := NewConftestEvaluatorWithNamespace(ctx, []source.PolicySource{
 		&source.PolicyUrl{
 			Url:  tempDir,
 			Kind: source.PolicyKind,
 		},
-	}, config, ecc.Source{})
+	}, config, ecc.Source{}, []string{})
 	require.NoError(t, err)
 
 	// Evaluate the policy
@@ -2530,12 +2530,12 @@ warn contains result if {
 	config.On("SigstoreOpts").Return(policy.SigstoreOpts{}, nil)
 	config.On("Spec").Return(ecc.EnterpriseContractPolicySpec{})
 
-	evaluator, err := NewConftestEvaluatorWithLegacyFiltering(ctx, []source.PolicySource{
+	evaluator, err := NewConftestEvaluatorWithNamespace(ctx, []source.PolicySource{
 		&source.PolicyUrl{
 			Url:  tempDir,
 			Kind: source.PolicyKind,
 		},
-	}, config, ecc.Source{})
+	}, config, ecc.Source{}, []string{})
 	require.NoError(t, err)
 
 	// Evaluate the policy

@@ -307,56 +307,6 @@ func NewConftestEvaluatorWithPostEvaluationFilter(ctx context.Context, policySou
 	return evaluator, nil
 }
 
-// NewConftestEvaluatorWithLegacyFiltering creates a new ConftestEvaluator that uses
-// the legacy filtering approach for backward compatibility with existing tests.
-func NewConftestEvaluatorWithLegacyFiltering(ctx context.Context, policySources []source.PolicySource, p ConfigProvider, source ecc.Source) (Evaluator, error) {
-	if trace.IsEnabled() {
-		r := trace.StartRegion(ctx, "ec:conftest-create-evaluator")
-		defer r.End()
-	}
-
-	fs := utils.FS(ctx)
-	c := conftestEvaluator{
-		policySources: policySources,
-		outputFormat:  "json",
-		policy:        p,
-		fs:            fs,
-		namespace:     []string{},
-		source:        source,
-	}
-
-	c.include, c.exclude = computeIncludeExclude(source, p)
-
-	// For legacy filtering, don't use the unified policy resolver
-	// This ensures backward compatibility with existing tests
-
-	dir, err := utils.CreateWorkDir(fs)
-	if err != nil {
-		log.Debug("Failed to create work dir!")
-		return nil, err
-	}
-	c.workDir = dir
-	c.policyDir = filepath.Join(c.workDir, "policy")
-	c.dataDir = filepath.Join(c.workDir, "data")
-
-	if err := c.createDataDirectory(ctx); err != nil {
-		return nil, err
-	}
-
-	log.Debugf("Created work dir %s", dir)
-
-	if err := c.createCapabilitiesFile(ctx); err != nil {
-		return nil, err
-	}
-
-	log.Debug("Conftest test runner created")
-
-	// Set up legacy post-evaluation filter
-	c.postEvaluationFilter = NewLegacyPostEvaluationFilter(source, p)
-
-	return c, nil
-}
-
 // set the policy namespace
 func NewConftestEvaluatorWithNamespace(ctx context.Context, policySources []source.PolicySource, p ConfigProvider, source ecc.Source, namespace []string) (Evaluator, error) {
 	if trace.IsEnabled() {
@@ -374,10 +324,13 @@ func NewConftestEvaluatorWithNamespace(ctx context.Context, policySources []sour
 		source:        source,
 	}
 
-	c.include, c.exclude = computeIncludeExclude(source, p)
-
 	// Initialize the unified policy resolver for both pre and post-evaluation filtering
 	c.policyResolver = NewIncludeExcludePolicyResolver(source, p)
+
+	// Extract include/exclude criteria from the policy resolver to maintain backward compatibility
+	// for the legacy isResultIncluded method
+	c.include = c.policyResolver.Includes()
+	c.exclude = c.policyResolver.Excludes()
 
 	dir, err := utils.CreateWorkDir(fs)
 	if err != nil {
@@ -578,11 +531,8 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		}
 	}
 
-	// Determine which filtering approach to use
-	useLegacyFiltering := c.postEvaluationFilter != nil
-
 	var filteredNamespaces []string
-	if c.policyResolver != nil && !useLegacyFiltering {
+	if c.policyResolver != nil {
 		// IMPLEMENTATION: Option A - Unified Policy Resolution
 		// Use the same PolicyResolver for both pre-evaluation and post-evaluation filtering
 		// This ensures consistent logic and eliminates duplication
@@ -616,9 +566,7 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		// If we have filtered namespaces from the filtering system, use those
 		if len(filteredNamespaces) > 0 {
 			namespacesToUse = filteredNamespaces
-		} else if useLegacyFiltering {
-			// For legacy filtering, evaluate all namespaces and filter results afterward
-			allNamespaces = true
+
 		} else if len(namespacesToUse) == 0 {
 			// For new filtering with empty namespaces, also evaluate all namespaces
 			// This ensures backward compatibility with tests that don't specify namespaces
@@ -681,79 +629,31 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		skipped := []Result{}
 
 		// Use unified post-evaluation filter for consistent filtering logic
-		if c.policyResolver != nil && !useLegacyFiltering {
-			unifiedFilter := NewUnifiedPostEvaluationFilter(c.policyResolver)
 
-			// Collect all results for processing
-			allResults := []Result{}
-			allResults = append(allResults, result.Warnings...)
-			allResults = append(allResults, result.Failures...)
-			allResults = append(allResults, result.Exceptions...)
-			allResults = append(allResults, result.Skipped...)
+		unifiedFilter := NewUnifiedPostEvaluationFilter(c.policyResolver)
 
-			// Add metadata to all results
-			for j := range allResults {
-				addRuleMetadata(ctx, &allResults[j], rules)
-			}
+		// Collect all results for processing
+		allResults := []Result{}
+		allResults = append(allResults, result.Warnings...)
+		allResults = append(allResults, result.Failures...)
+		allResults = append(allResults, result.Exceptions...)
+		allResults = append(allResults, result.Skipped...)
 
-			// Filter results using the unified filter
-			filteredResults, updatedMissingIncludes := unifiedFilter.FilterResults(
-				allResults, allRules, target.Target, missingIncludes, effectiveTime)
-
-			// Update missing includes
-			missingIncludes = updatedMissingIncludes
-
-			// Categorize results using the unified filter
-			warnings, failures, exceptions, skipped = unifiedFilter.CategorizeResults(
-				filteredResults, result, effectiveTime)
-
-		} else if c.postEvaluationFilter != nil || useLegacyFiltering {
-			// Original filtering logic
-			for i := range result.Warnings {
-				warning := result.Warnings[i]
-				addRuleMetadata(ctx, &warning, rules)
-
-				if !c.isResultIncluded(warning, target.Target, missingIncludes) {
-					log.Debugf("Skipping result warning: %#v", warning)
-					continue
-				}
-
-				if getSeverity(warning) == severityFailure {
-					failures = append(failures, warning)
-				} else {
-					warnings = append(warnings, warning)
-				}
-			}
-
-			for i := range result.Failures {
-				failure := result.Failures[i]
-				// log the failure
-				addRuleMetadata(ctx, &failure, rules)
-
-				if !c.isResultIncluded(failure, target.Target, missingIncludes) {
-					log.Debugf("Skipping result failure: %#v", failure)
-					continue
-				}
-
-				if getSeverity(failure) == severityWarning || !isResultEffective(failure, effectiveTime) {
-					warnings = append(warnings, failure)
-				} else {
-					failures = append(failures, failure)
-				}
-			}
-
-			for i := range result.Exceptions {
-				exception := result.Exceptions[i]
-				addRuleMetadata(ctx, &exception, rules)
-				exceptions = append(exceptions, exception)
-			}
-
-			for i := range result.Skipped {
-				skip := result.Skipped[i]
-				addRuleMetadata(ctx, &skip, rules)
-				skipped = append(skipped, skip)
-			}
+		// Add metadata to all results
+		for j := range allResults {
+			addRuleMetadata(ctx, &allResults[j], rules)
 		}
+
+		// Filter results using the unified filter
+		filteredResults, updatedMissingIncludes := unifiedFilter.FilterResults(
+			allResults, allRules, target.Target, missingIncludes, effectiveTime)
+
+		// Update missing includes
+		missingIncludes = updatedMissingIncludes
+
+		// Categorize results using the unified filter
+		warnings, failures, exceptions, skipped = unifiedFilter.CategorizeResults(
+			filteredResults, result, effectiveTime)
 
 		result.Warnings = warnings
 		result.Failures = failures
