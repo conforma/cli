@@ -1,6 +1,6 @@
 module github.com/conforma/cli/schema
 
-go 1.23.6
+go 1.24.4
 
 require (
 	github.com/conforma/cli/api v0.0.0-00010101000000-000000000000

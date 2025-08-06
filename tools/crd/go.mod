@@ -1,6 +1,6 @@
 module github.com/conforma/cli/tools/crd
 
-go 1.23.6
+go 1.24.4
 
 require (
 	github.com/elastic/crd-ref-docs v0.1.0
