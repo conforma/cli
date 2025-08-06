@@ -1,0 +1,229 @@
+// Generated documentation. Please do not edit.
+:anchor_prefix: k8s-api
+
+[id="api-reference"]
+= API Reference
+
+.Packages
+- xref:{anchor_prefix}-appstudio-redhat-com-v1alpha1[$$appstudio.redhat.com/v1alpha1$$]
+
+
+[id="{anchor_prefix}-appstudio-redhat-com-v1alpha1"]
+== appstudio.redhat.com/v1alpha1
+
+Package v1alpha1 contains API Schema definitions for the appstudio.redhat.com v1alpha1 API group
+
+.Resource Types
+- xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicy[$$EnterpriseContractPolicy$$]
+- xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicylist[$$EnterpriseContractPolicyList$$]
+
+
+
+[id="{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicy"]
+=== EnterpriseContractPolicy
+
+EnterpriseContractPolicy is the Schema for the enterprisecontractpolicies API
+
+[quote]
+Appears In: xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicylist[$$EnterpriseContractPolicyList$$]
+
+[cols="25a,75a", options="header"]
+|===
+| Field | Description
+| *`apiVersion`* __string__ | `appstudio.redhat.com/v1alpha1`
+| *`kind`* __string__ | `EnterpriseContractPolicy`
+| *`kind`* __string__ | Kind is a string value representing the REST resource this object represents. +
+Servers may infer this from the endpoint the client submits requests to. +
+Cannot be updated. +
+In CamelCase. +
+More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +
+| *`apiVersion`* __string__ | APIVersion defines the versioned schema of this representation of an object. +
+Servers should convert recognized schemas to the latest internal value, and +
+may reject unrecognized values. +
+More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources +
+| *`metadata`* __link:https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#objectmeta-v1-meta[$$ObjectMeta$$]__ | Refer to Kubernetes API documentation for fields of `metadata`.
+
+| *`spec`* __xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicyspec[$$EnterpriseContractPolicySpec$$]__ | 
+| *`status`* __xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicystatus[$$EnterpriseContractPolicyStatus$$]__ | 
+|===
+
+
+[id="{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicyconfiguration"]
+=== EnterpriseContractPolicyConfiguration
+
+EnterpriseContractPolicyConfiguration configuration of modifications to policy evaluation.
+DEPRECATED: Use the config for a policy source instead.
+
+[quote]
+Appears In: xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicyspec[$$EnterpriseContractPolicySpec$$]
+
+[cols="25a,75a", options="header"]
+|===
+| Field | Description
+| *`exclude`* __string array__ | Exclude set of policy exclusions that, in case of failure, do not block +
+the success of the outcome. +
+| *`include`* __string array__ | Include set of policy inclusions that are added to the policy evaluation. +
+These override excluded rules. +
+| *`collections`* __string array__ | Collections set of predefined rules.  DEPRECATED: Collections can be listed in include +
+with the "@" prefix. +
+|===
+
+
+[id="{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicylist"]
+=== EnterpriseContractPolicyList
+
+EnterpriseContractPolicyList contains a list of EnterpriseContractPolicy
+
+
+
+[cols="25a,75a", options="header"]
+|===
+| Field | Description
+| *`apiVersion`* __string__ | `appstudio.redhat.com/v1alpha1`
+| *`kind`* __string__ | `EnterpriseContractPolicyList`
+| *`kind`* __string__ | Kind is a string value representing the REST resource this object represents. +
+Servers may infer this from the endpoint the client submits requests to. +
+Cannot be updated. +
+In CamelCase. +
+More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds +
+| *`apiVersion`* __string__ | APIVersion defines the versioned schema of this representation of an object. +
+Servers should convert recognized schemas to the latest internal value, and +
+may reject unrecognized values. +
+More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources +
+| *`metadata`* __link:https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#listmeta-v1-meta[$$ListMeta$$]__ | Refer to Kubernetes API documentation for fields of `metadata`.
+
+| *`items`* __xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicy[$$EnterpriseContractPolicy$$] array__ | 
+|===
+
+
+[id="{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicyspec"]
+=== EnterpriseContractPolicySpec
+
+EnterpriseContractPolicySpec is used to configure the Enterprise Contract Policy
+
+[quote]
+Appears In: xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicy[$$EnterpriseContractPolicy$$]
+
+[cols="25a,75a", options="header"]
+|===
+| Field | Description
+| *`name`* __string__ | Optional name of the policy +
+| *`description`* __string__ | Description of the policy or its intended use +
+| *`sources`* __xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-source[$$Source$$] array__ | One or more groups of policy rules +
+| *`configuration`* __xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicyconfiguration[$$EnterpriseContractPolicyConfiguration$$]__ | Configuration handles policy modification configuration (exclusions and inclusions) +
+| *`rekorUrl`* __string__ | URL of the Rekor instance. Empty string disables Rekor integration +
+| *`publicKey`* __string__ | Public key used to validate the signature of images and attestations +
+| *`identity`* __xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-identity[$$Identity$$]__ | Identity to be used for keyless verification. This is an experimental feature. +
+|===
+
+
+[id="{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicystatus"]
+=== EnterpriseContractPolicyStatus
+
+EnterpriseContractPolicyStatus defines the observed state of EnterpriseContractPolicy
+
+[quote]
+Appears In: xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicy[$$EnterpriseContractPolicy$$]
+
+
+
+[id="{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-identity"]
+=== Identity
+
+Identity defines the allowed identity for keyless signing.
+
+[quote]
+Appears In: xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicyspec[$$EnterpriseContractPolicySpec$$]
+
+[cols="25a,75a", options="header"]
+|===
+| Field | Description
+| *`subject`* __string__ | Subject is the URL of the certificate identity for keyless verification. +
+| *`subjectRegExp`* __string__ | SubjectRegExp is a regular expression to match the URL of the certificate identity for +
+keyless verification. +
+| *`issuer`* __string__ | Issuer is the URL of the certificate OIDC issuer for keyless verification. +
+| *`issuerRegExp`* __string__ | IssuerRegExp is a regular expression to match the URL of the certificate OIDC issuer for +
+keyless verification. +
+|===
+
+
+[id="{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-source"]
+=== Source
+
+Source defines policies and data that are evaluated together
+
+[quote]
+Appears In: xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-enterprisecontractpolicyspec[$$EnterpriseContractPolicySpec$$]
+
+[cols="25a,75a", options="header"]
+|===
+| Field | Description
+| *`name`* __string__ | Optional name for the source +
+| *`policy`* __string array__ | List of go-getter style policy source urls +
+| *`data`* __string array__ | List of go-getter style policy data source urls +
+| *`ruleData`* __link:https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#json-v1-apiextensions-k8s-io[$$JSON$$]__ | Arbitrary rule data that will be visible to policy rules +
+| *`config`* __xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-sourceconfig[$$SourceConfig$$]__ | Config specifies which policy rules are included, or excluded, from the +
+provided policy source urls. +
+| *`volatileConfig`* __xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-volatilesourceconfig[$$VolatileSourceConfig$$]__ | Specifies volatile configuration that can include or exclude policy rules +
+based on effective time. +
+|===
+
+
+[id="{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-sourceconfig"]
+=== SourceConfig
+
+SourceConfig specifies config options for a policy source.
+
+[quote]
+Appears In: xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-source[$$Source$$]
+
+[cols="25a,75a", options="header"]
+|===
+| Field | Description
+| *`exclude`* __string array__ | Exclude is a set of policy exclusions that, in case of failure, do not block +
+the success of the outcome. +
+| *`include`* __string array__ | Include is a set of policy inclusions that are added to the policy evaluation. +
+These take precedence over policy exclusions. +
+|===
+
+
+[id="{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-volatilecriteria"]
+=== VolatileCriteria
+
+VolatileCriteria includes or excludes a policy rule with effective dates as an option.
+
+[quote]
+Appears In: xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-volatilesourceconfig[$$VolatileSourceConfig$$]
+
+[cols="25a,75a", options="header"]
+|===
+| Field | Description
+| *`value`* __string__ | 
+| *`effectiveOn`* __string__ | 
+| *`effectiveUntil`* __string__ | 
+| *`imageRef`* __string__ | DEPRECATED: Use ImageDigest instead +
+ImageRef is used to specify an image by its digest. +
+| *`imageDigest`* __string__ | ImageDigest is used to specify an image by its digest. +
+| *`imageUrl`* __string__ | ImageUrl is used to specify an image by its URL without a tag. +
+| *`reference`* __string__ | Reference is used to include a link to related information such as a Jira issue URL. +
+|===
+
+
+[id="{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-volatilesourceconfig"]
+=== VolatileSourceConfig
+
+VolatileSourceConfig specifies volatile configuration for a policy source.
+
+[quote]
+Appears In: xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-source[$$Source$$]
+
+[cols="25a,75a", options="header"]
+|===
+| Field | Description
+| *`exclude`* __xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-volatilecriteria[$$VolatileCriteria$$] array__ | Exclude is a set of policy exclusions that, in case of failure, do not block +
+the success of the outcome. +
+| *`include`* __xref:{anchor_prefix}-github-com-conforma-cli-api-v1alpha1-volatilecriteria[$$VolatileCriteria$$] array__ | Include is a set of policy inclusions that are added to the policy evaluation. +
+These take precedence over policy exclusions. +
+|===
+
+

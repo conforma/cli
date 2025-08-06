@@ -1,0 +1,5 @@
+# Kustomization for CRD resources
+resources:
+- bases/appstudio.redhat.com_enterprisecontractpolicies.yaml
+
+patches: []

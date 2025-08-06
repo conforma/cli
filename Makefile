@@ -375,3 +375,59 @@ bump-minor-version:
 	  git commit $(VERSION_FILE) \
 	    -m "Bump minor version to $$(cat $(VERSION_FILE))" \
 	    -m 'Commit generated with `make bump-minor-version`'
+
+##@ CRD Management
+
+# CRD-related variables
+CRD_ROOT = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+CONTROLLER_GEN = go run -modfile $(CRD_ROOT)tools/crd/go.mod sigs.k8s.io/controller-tools/cmd/controller-gen
+KUSTOMIZE = go run -modfile $(CRD_ROOT)tools/crd/go.mod sigs.k8s.io/kustomize/kustomize/v5
+ENVTEST = go run -modfile $(CRD_ROOT)tools/crd/go.mod sigs.k8s.io/controller-runtime/tools/setup-envtest
+CRD_DEF = ./api/v1alpha1
+
+CRD_GEN_DEPS=\
+ api/v1alpha1/enterprisecontractpolicy_types.go \
+ api/v1alpha1/groupversion_info.go \
+ tools/crd/go.sum
+
+config/crd/bases/%.yaml: $(CRD_GEN_DEPS)
+	$(CONTROLLER_GEN) rbac:roleName=enterprise-contract-role crd webhook paths=./api/... output:crd:artifacts:config=config/crd/bases
+	yq -i 'del(.metadata.annotations["controller-gen.kubebuilder.io/version"])' $@
+
+api/config/%.yaml: config/crd/bases/%.yaml
+	@mkdir -p api/config
+	@cp $< $@
+
+.PHONY: crd-manifests
+crd-manifests: api/config/appstudio.redhat.com_enterprisecontractpolicies.yaml ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+
+.PHONY: crd-generate
+crd-generate: $(CRD_GEN_DEPS) ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths=./api/...
+	cd api && go generate ./...
+
+.PHONY: crd-docs
+crd-docs: $(wildcard $(CRD_DEF)/*.go) ## Generate CRD documentation
+	@go run -modfile tools/crd/go.mod github.com/elastic/crd-ref-docs --max-depth 50 --config=docs/crd/config.yaml --source-path=$(CRD_DEF) --templates-dir=docs/crd/templates --output-path=docs/modules/ROOT/pages/crd-reference.adoc
+
+.PHONY: crd-test
+crd-test: crd-manifests crd-generate ## Run CRD tests.
+	KUBEBUILDER_ASSETS="$$($(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile crd_cover.out
+	cd api && go test ./... -coverprofile ../api_cover.out
+
+.PHONY: crd-export-schema
+crd-export-schema: crd-generate ## Export the CRD schema to the schema directory as a json-store.org schema.
+	@mkdir -p dist
+	cp api/v1alpha1/policy_spec.json dist/
+
+ifndef ignore-not-found
+  ignore-not-found = false
+endif
+
+.PHONY: crd-install
+crd-install: crd-manifests ## Install CRDs into the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/crd | kubectl apply -f -
+
+.PHONY: crd-uninstall
+crd-uninstall: crd-manifests ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
+	$(KUSTOMIZE) build config/crd | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
