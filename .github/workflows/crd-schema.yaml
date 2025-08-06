@@ -64,6 +64,7 @@ jobs:
 
       - name: Download CRD dependencies
         run: |
+          go mod download
           (cd tools/crd && go mod download)
           (cd api && go mod download)
           (cd schema && go mod download)
@@ -82,11 +83,11 @@ jobs:
 
       - name: Check for uncommitted changes
         run: |
-          if ! git diff --exit-code -s; then
-            for f in $(git diff --exit-code --name-only); do
-              echo "::error file=$f,line=1,col=1,endColumn=1::CRD file was modified during build"
-              echo -e "\033[1;33mHint:\033[0m Maybe you need to run \033[1;32mmake crd-generate\033[0m or \033[1;32mmake crd-docs\033[0m"
-            done
+          git status --porcelain
+          if ! git diff --exit-code; then
+            echo "::error::CRD files were modified during build"
+            echo -e "\033[1;33mHint:\033[0m Maybe you need to run \033[1;32mmake crd-generate\033[0m or \033[1;32mmake crd-docs\033[0m"
+            git diff --name-only
             exit 1
           fi
 
