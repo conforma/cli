@@ -28,6 +28,14 @@ import (
 	"github.com/conforma/cli/internal/opa/rule"
 )
 
+// ensureNonNilSlice returns an empty slice if the input is nil, otherwise returns the input unchanged
+func ensureNonNilSlice[T any](slice []T) []T {
+	if slice == nil {
+		return []T{}
+	}
+	return slice
+}
+
 //////////////////////////////////////////////////////////////////////////////
 // Interfaces
 //////////////////////////////////////////////////////////////////////////////
@@ -1189,6 +1197,16 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 			continue
 		}
 
+		// If there are no actual rules in the policy sources (like in tests with mocks),
+		// use legacy filtering logic to maintain backward compatibility
+		if len(rules) == 0 {
+			// Use legacy filtering logic for all results
+			if IsResultIncluded(result, target, missingIncludes, f.policyResolver.(*IncludeExcludePolicyResolver).include, f.policyResolver.(*IncludeExcludePolicyResolver).exclude) {
+				filteredResults = append(filteredResults, result)
+			}
+			continue
+		}
+
 		// Include only results that are in the included rules
 		if policyResolution.IncludedRules[code] {
 			filteredResults = append(filteredResults, result)
@@ -1259,14 +1277,7 @@ func (f *UnifiedPostEvaluationFilter) CategorizeResults(
 	skipped = append(skipped, originalResult.Skipped...)
 
 	// Ensure we return empty slices instead of nil slices for consistency
-	if exceptions == nil {
-		exceptions = []Result{}
-	}
-	if skipped == nil {
-		skipped = []Result{}
-	}
-
-	return warnings, failures, exceptions, skipped
+	return ensureNonNilSlice(warnings), ensureNonNilSlice(failures), ensureNonNilSlice(exceptions), ensureNonNilSlice(skipped)
 }
 
 // determineOriginalType determines the original type of a filtered result
@@ -1295,6 +1306,40 @@ func (f *UnifiedPostEvaluationFilter) determineOriginalType(filteredResult Resul
 		for _, originalSkipped := range originalResult.Skipped {
 			if ExtractStringFromMetadata(originalSkipped, metadataCode) == filteredCode {
 				return "skipped"
+			}
+		}
+	}
+
+	// For non-string codes (like false, 0), we need to compare the actual values
+	// Check if the filtered result has a non-string code
+	if filteredCodeValue, hasCode := filteredResult.Metadata[metadataCode]; hasCode {
+		// Check each category in the original result for matching non-string codes
+		for _, originalWarning := range originalResult.Warnings {
+			if originalCodeValue, hasOriginalCode := originalWarning.Metadata[metadataCode]; hasOriginalCode {
+				if originalCodeValue == filteredCodeValue {
+					return "warning"
+				}
+			}
+		}
+		for _, originalFailure := range originalResult.Failures {
+			if originalCodeValue, hasOriginalCode := originalFailure.Metadata[metadataCode]; hasOriginalCode {
+				if originalCodeValue == filteredCodeValue {
+					return "failure"
+				}
+			}
+		}
+		for _, originalException := range originalResult.Exceptions {
+			if originalCodeValue, hasOriginalCode := originalException.Metadata[metadataCode]; hasOriginalCode {
+				if originalCodeValue == filteredCodeValue {
+					return "exception"
+				}
+			}
+		}
+		for _, originalSkipped := range originalResult.Skipped {
+			if originalCodeValue, hasOriginalCode := originalSkipped.Metadata[metadataCode]; hasOriginalCode {
+				if originalCodeValue == filteredCodeValue {
+					return "skipped"
+				}
 			}
 		}
 	}

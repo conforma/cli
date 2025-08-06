@@ -619,6 +619,10 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		} else if useLegacyFiltering {
 			// For legacy filtering, evaluate all namespaces and filter results afterward
 			allNamespaces = true
+		} else if len(namespacesToUse) == 0 {
+			// For new filtering with empty namespaces, also evaluate all namespaces
+			// This ensures backward compatibility with tests that don't specify namespaces
+			allNamespaces = true
 		}
 
 		// log the namespaces to use

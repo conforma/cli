@@ -1894,12 +1894,12 @@ func TestConftestEvaluatorEvaluate(t *testing.T) {
 	}, nil)
 	config.On("Spec").Return(ecc.EnterpriseContractPolicySpec{})
 
-	evaluator, err := NewConftestEvaluatorWithLegacyFiltering(ctx, []source.PolicySource{
+	evaluator, err := NewConftestEvaluatorWithNamespace(ctx, []source.PolicySource{
 		&source.PolicyUrl{
 			Url:  rules,
 			Kind: source.PolicyKind,
 		},
-	}, config, ecc.Source{})
+	}, config, ecc.Source{}, []string{})
 	require.NoError(t, err)
 
 	results, err := evaluator.Evaluate(ctx, EvaluationTarget{Inputs: []string{path.Join(dir, "inputs")}})
@@ -1957,12 +1957,12 @@ func TestUnconformingRule(t *testing.T) {
 	p, err := policy.NewInertPolicy(ctx, "")
 	require.NoError(t, err)
 
-	evaluator, err := NewConftestEvaluator(ctx, []source.PolicySource{
+	evaluator, err := NewConftestEvaluatorWithNamespace(ctx, []source.PolicySource{
 		&source.PolicyUrl{
 			Url:  rules,
 			Kind: source.PolicyKind,
 		},
-	}, p, ecc.Source{})
+	}, p, ecc.Source{}, []string{})
 	require.NoError(t, err)
 
 	_, err = evaluator.Evaluate(ctx, EvaluationTarget{Inputs: []string{path.Join(dir, "inputs")}})
@@ -2034,12 +2034,12 @@ deny contains result if {
 	config.On("SigstoreOpts").Return(policy.SigstoreOpts{}, nil)
 	config.On("Spec").Return(ecc.EnterpriseContractPolicySpec{})
 
-	evaluator, err := NewConftestEvaluator(ctx, []source.PolicySource{
+	evaluator, err := NewConftestEvaluatorWithNamespace(ctx, []source.PolicySource{
 		&source.PolicyUrl{
 			Url:  archivePath,
 			Kind: source.PolicyKind,
 		},
-	}, config, ecc.Source{})
+	}, config, ecc.Source{}, []string{})
 	require.NoError(t, err)
 
 	results, err := evaluator.Evaluate(ctx, EvaluationTarget{Inputs: []string{path.Join(dir, "inputs")}})
@@ -2154,12 +2154,12 @@ deny contains result if {
 	config.On("SigstoreOpts").Return(policy.SigstoreOpts{}, nil)
 	config.On("Spec").Return(ecc.EnterpriseContractPolicySpec{})
 
-	evaluator, err := NewConftestEvaluator(ctx, []source.PolicySource{
+	evaluator, err := NewConftestEvaluatorWithNamespace(ctx, []source.PolicySource{
 		&source.PolicyUrl{
 			Url:  archivePath,
 			Kind: source.PolicyKind,
 		},
-	}, config, ecc.Source{})
+	}, config, ecc.Source{}, []string{})
 	require.NoError(t, err)
 
 	results, err := evaluator.Evaluate(ctx, EvaluationTarget{Inputs: []string{path.Join(dir, "inputs")}})
@@ -2262,12 +2262,12 @@ deny contains result if {
 		},
 	})
 
-	evaluator, err := NewConftestEvaluator(ctx, []source.PolicySource{
+	evaluator, err := NewConftestEvaluatorWithNamespace(ctx, []source.PolicySource{
 		&source.PolicyUrl{
 			Url:  archivePath,
 			Kind: source.PolicyKind,
 		},
-	}, config, ecc.Source{})
+	}, config, ecc.Source{}, []string{})
 	require.NoError(t, err)
 
 	results, err := evaluator.Evaluate(ctx, EvaluationTarget{Inputs: []string{path.Join(dir, "inputs")}})
