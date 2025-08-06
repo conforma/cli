@@ -623,10 +623,6 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 	// effectively replacing the results returned from conftest
 	for i, result := range runResults {
 		log.Debugf("Evaluation result at %d: %#v", i, result)
-		warnings := []Result{}
-		failures := []Result{}
-		exceptions := []Result{}
-		skipped := []Result{}
 
 		// Use unified post-evaluation filter for consistent filtering logic
 
@@ -652,7 +648,7 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		missingIncludes = updatedMissingIncludes
 
 		// Categorize results using the unified filter
-		warnings, failures, exceptions, skipped = unifiedFilter.CategorizeResults(
+		warnings, failures, exceptions, skipped := unifiedFilter.CategorizeResults(
 			filteredResults, result, effectiveTime)
 
 		result.Warnings = warnings
