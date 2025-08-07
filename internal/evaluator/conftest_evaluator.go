@@ -469,31 +469,7 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 					}
 
 					// Try to extract code from rule body first, fallback to rule name
-					code := ""
-
-					// Look for result assignment with code in the rule body
-					if ruleRef.Body != nil {
-						for _, expr := range ruleRef.Body {
-							if expr.IsAssignment() {
-								// Check if this is a result assignment
-								if len(expr.Operands()) >= 2 {
-									// Look for result := { "code": "...", ... }
-									if term, ok := expr.Operands()[1].Value.(ast.Object); ok {
-										if err := term.Iter(func(key, value *ast.Term) error {
-											if keyStr, ok := key.Value.(ast.String); ok && keyStr == "code" {
-												if valueStr, ok := value.Value.(ast.String); ok {
-													code = string(valueStr)
-												}
-											}
-											return nil
-										}); err != nil {
-											log.Warnf("Error iterating over term: %v", err)
-										}
-									}
-								}
-							}
-						}
-					}
+					code := extractCodeFromRuleBody(ruleRef)
 
 					// If no code found in body, use rule name
 					if code == "" {
@@ -1196,4 +1172,45 @@ func strictCapabilities(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return string(blob), nil
+}
+
+// extractCodeFromRuleBody extracts the code value from a rule's body expressions.
+// It looks for assignments like `result := { "code": "...", ... }` in the rule body.
+func extractCodeFromRuleBody(ruleRef *ast.Rule) string {
+	if ruleRef.Body == nil {
+		return ""
+	}
+
+	for _, expr := range ruleRef.Body {
+		if !expr.IsAssignment() {
+			continue
+		}
+
+		if len(expr.Operands()) < 2 {
+			continue
+		}
+
+		term, ok := expr.Operands()[1].Value.(ast.Object)
+		if !ok {
+			continue
+		}
+
+		var code string
+		if err := term.Iter(func(key, value *ast.Term) error {
+			if keyStr, ok := key.Value.(ast.String); ok && keyStr == "code" {
+				if valueStr, ok := value.Value.(ast.String); ok {
+					code = string(valueStr)
+				}
+			}
+			return nil
+		}); err != nil {
+			log.Warnf("Error iterating over term: %v", err)
+		}
+
+		if code != "" {
+			return code
+		}
+	}
+
+	return ""
 }
