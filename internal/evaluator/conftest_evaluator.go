@@ -103,13 +103,13 @@ func trim(results *[]Outcome) {
 
 	addNote := func(results []Result) []Result {
 		for i := range results {
-			var description, code string
-			var ok bool
-			if description, ok = results[i].Metadata[metadataDescription].(string); !ok {
+			description, ok := results[i].Metadata[metadataDescription].(string)
+			if !ok {
 				continue
 			}
 
-			if code, ok = results[i].Metadata[metadataCode].(string); !ok {
+			code, ok := results[i].Metadata[metadataCode].(string)
+			if !ok {
 				continue
 			}
 
@@ -272,14 +272,12 @@ func (r conftestRunner) Run(ctx context.Context, fileList []string) (result []Ou
 
 	ids := []string{} // everything
 
-	var d any
-	d, err = store.Read(ctx, txn, ids)
+	d, err := store.Read(ctx, txn, ids)
 	if err != nil {
 		return
 	}
 
-	var ok bool
-	if _, ok = d.(map[string]any); !ok {
+	if _, ok := d.(map[string]any); !ok {
 		err = fmt.Errorf("could not retrieve data from the policy engine: Data is: %v", d)
 	}
 
@@ -531,9 +529,8 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		// Instead, we evaluate all namespaces and filter results afterward
 	}
 
-	var r testRunner
-	var ok bool
-	if r, ok = ctx.Value(runnerKey).(testRunner); r == nil || !ok {
+	r, ok := ctx.Value(runnerKey).(testRunner)
+	if r == nil || !ok {
 
 		// Determine which namespaces to use
 		namespacesToUse := c.namespace
@@ -1095,7 +1092,8 @@ func extractCollections(result Result) []string {
 				collections = append(collections, "@"+c)
 			}
 		} else {
-			panic(fmt.Sprintf("Unsupported collections set in Metadata, expecting []string got: %v", maybeCollections))
+			// Log the error instead of panicking
+			log.Errorf("Unsupported collections set in Metadata, expecting []string got: %v", maybeCollections)
 		}
 	}
 	return collections

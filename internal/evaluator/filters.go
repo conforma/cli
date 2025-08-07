@@ -651,7 +651,7 @@ func (r *basePolicyResolver) baseDeterminePackageInclusion(pkg string, pkgRules 
 // createRuleMatchers creates matchers for a rule (same logic for both resolvers).
 func (r *basePolicyResolver) createRuleMatchers(ruleID string, ruleInfo rule.Info) []string {
 	parts := strings.Split(ruleID, ".")
-	var pkg string
+	pkg := ""
 	if len(parts) >= 2 {
 		pkg = parts[len(parts)-2]
 	}
@@ -679,7 +679,7 @@ func (r *basePolicyResolver) createRuleMatchers(ruleID string, ruleInfo rule.Inf
 // scoreMatches returns the combined score for every match between needles and haystack
 // (same logic for both resolvers).
 func (r *basePolicyResolver) scoreMatches(needles, haystack []string, toBePruned map[string]bool) int {
-	var s int
+	s := 0
 	for _, needle := range needles {
 		for _, hay := range haystack {
 			if hay == needle {
@@ -696,7 +696,7 @@ func (r *basePolicyResolver) score(name string) int {
 	if strings.HasPrefix(name, "@") {
 		return 10
 	}
-	var value int
+	value := 0
 	shortName, term, _ := strings.Cut(name, ":")
 	if term != "" {
 		value += 100
@@ -867,7 +867,7 @@ func IsResultIncluded(result Result, target string, missingIncludes map[string]b
 // ScoreMatches returns the combined score for every match between needles and haystack.
 // 'toBePruned' contains items that will be removed (pruned) from this map if a match is found.
 func ScoreMatches(needles, haystack []string, toBePruned map[string]bool) int {
-	var s int
+	s := 0
 	for _, needle := range needles {
 		for _, hay := range haystack {
 			if hay == needle {
@@ -895,7 +895,7 @@ func Score(name string) int {
 	if strings.HasPrefix(name, "@") {
 		return 10
 	}
-	var value int
+	value := 0
 	shortName, term, _ := strings.Cut(name, ":")
 	if term != "" {
 		value += 100
@@ -938,7 +938,7 @@ func MakeMatchers(result Result) []string {
 	code := ExtractStringFromMetadata(result, metadataCode)
 	terms := extractStringsFromMetadata(result, metadataTerm)
 	parts := strings.Split(code, ".")
-	var pkg string
+	pkg := ""
 	if len(parts) >= 2 {
 		pkg = parts[len(parts)-2]
 	}
