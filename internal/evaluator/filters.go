@@ -855,23 +855,24 @@ func GetIncludeExcludePolicyResolution(source ecc.Source, p ConfigProvider, rule
 // Standalone Post-Evaluation Filtering Functions
 //////////////////////////////////////////////////////////////////////////////
 
-// IsResultIncluded determines whether a result should be included based on
-// include/exclude criteria and scoring logic.
-func IsResultIncluded(result Result, target string, missingIncludes map[string]bool, include *Criteria, exclude *Criteria) bool {
-	ruleMatchers := MakeMatchers(result)
-	includeScore := ScoreMatches(ruleMatchers, include.get(target), missingIncludes)
-	excludeScore := ScoreMatches(ruleMatchers, exclude.get(target), map[string]bool{})
+// LegacyIsResultIncluded determines whether a result should be included based on
+// include/exclude criteria and scoring logic. This is the legacy filtering function.
+func LegacyIsResultIncluded(result Result, target string, missingIncludes map[string]bool, include *Criteria, exclude *Criteria) bool {
+	ruleMatchers := LegacyMakeMatchers(result)
+	includeScore := LegacyScoreMatches(ruleMatchers, include.get(target), missingIncludes)
+	excludeScore := LegacyScoreMatches(ruleMatchers, exclude.get(target), map[string]bool{})
 	return includeScore > excludeScore
 }
 
-// ScoreMatches returns the combined score for every match between needles and haystack.
+// LegacyScoreMatches returns the combined score for every match between needles and haystack.
 // 'toBePruned' contains items that will be removed (pruned) from this map if a match is found.
-func ScoreMatches(needles, haystack []string, toBePruned map[string]bool) int {
+// This is the legacy scoring function.
+func LegacyScoreMatches(needles, haystack []string, toBePruned map[string]bool) int {
 	s := 0
 	for _, needle := range needles {
 		for _, hay := range haystack {
 			if hay == needle {
-				s += Score(hay)
+				s += LegacyScore(hay)
 				delete(toBePruned, hay)
 			}
 		}
@@ -879,7 +880,7 @@ func ScoreMatches(needles, haystack []string, toBePruned map[string]bool) int {
 	return s
 }
 
-// Score computes and returns the specificity of the given name. The scoring guidelines are:
+// LegacyScore computes and returns the specificity of the given name. The scoring guidelines are:
 //  1. If the name starts with "@" the returned score is exactly 10, e.g. "@collection". No
 //     further processing is done.
 //  2. Add 1 if the name covers everything, i.e. "*"
@@ -891,7 +892,8 @@ func ScoreMatches(needles, haystack []string, toBePruned map[string]bool) int {
 //
 // The score is cumulative. If a name is covered by multiple items in the guidelines, they
 // are added together. For example, "pkg.rule:term" scores at 210.
-func Score(name string) int {
+// This is the legacy scoring function.
+func LegacyScore(name string) int {
 	if strings.HasPrefix(name, "@") {
 		return 10
 	}
@@ -933,8 +935,9 @@ func Score(name string) int {
 	return value
 }
 
-// MakeMatchers returns the possible matching strings for the result.
-func MakeMatchers(result Result) []string {
+// LegacyMakeMatchers returns the possible matching strings for the result.
+// This is the legacy matcher function.
+func LegacyMakeMatchers(result Result) []string {
 	code := ExtractStringFromMetadata(result, metadataCode)
 	terms := extractStringsFromMetadata(result, metadataTerm)
 	parts := strings.Split(code, ".")
@@ -1018,8 +1021,8 @@ func (f *LegacyPostEvaluationFilter) FilterResults(
 	var filteredResults []Result
 	for _, result := range results {
 		// Check if this result should be included using legacy logic
-		// Results without codes are handled by IsResultIncluded using wildcard matchers
-		if IsResultIncluded(result, target, missingIncludes, f.include, f.exclude) {
+		// Results without codes are handled by LegacyIsResultIncluded using wildcard matchers
+		if LegacyIsResultIncluded(result, target, missingIncludes, f.include, f.exclude) {
 			filteredResults = append(filteredResults, result)
 		}
 	}
@@ -1112,7 +1115,7 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 		// use legacy filtering logic to maintain backward compatibility
 		if len(rules) == 0 {
 			// Use legacy filtering logic for all results
-			if IsResultIncluded(result, target, missingIncludes, f.policyResolver.Includes(), f.policyResolver.Excludes()) {
+			if LegacyIsResultIncluded(result, target, missingIncludes, f.policyResolver.Includes(), f.policyResolver.Excludes()) {
 				filteredResults = append(filteredResults, result)
 			}
 			continue
@@ -1128,7 +1131,7 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 	for include := range missingIncludes {
 		matched := false
 		for _, result := range filteredResults {
-			matchers := MakeMatchers(result)
+			matchers := LegacyMakeMatchers(result)
 			for _, matcher := range matchers {
 				if matcher == include {
 					matched = true

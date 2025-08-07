@@ -867,7 +867,7 @@ func TestUnifiedPostEvaluationFilterVsLegacy(t *testing.T) {
 				defaultItems: []string{"test.test_data_found", "slsa3.provenance"},
 			}
 
-			if IsResultIncluded(result, "test-target", legacyMissingIncludes, include, exclude) {
+			if LegacyIsResultIncluded(result, "test-target", legacyMissingIncludes, include, exclude) {
 				legacyFilteredResults = append(legacyFilteredResults, result)
 			}
 		}
