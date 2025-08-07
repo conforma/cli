@@ -568,24 +568,12 @@ func (r *IncludeExcludePolicyResolver) processPackage(pkg string, pkgRules []rul
 	// Evaluate each rule in the package and determine if it should be included or excluded
 	for _, ruleInfo := range pkgRules {
 		ruleID := ruleInfo.Code
-		r.evaluateRuleInclusion(ruleID, ruleInfo, target, result)
+		r.baseEvaluateRuleInclusion(ruleID, ruleInfo, target, result)
 	}
 
 	// Phase 3: Package-Level Determination
 	// Determine package inclusion based on its rules
-	r.determinePackageInclusion(pkg, pkgRules, target, result)
-}
-
-// evaluateRuleInclusion processes a single rule and determines whether it should be included or excluded
-// based on the policy configuration (same logic as ECPolicyResolver).
-func (r *IncludeExcludePolicyResolver) evaluateRuleInclusion(ruleID string, ruleInfo rule.Info, target string, result *PolicyResolutionResult) {
-	r.baseEvaluateRuleInclusion(ruleID, ruleInfo, target, result)
-}
-
-// determinePackageInclusion aggregates rule-level decisions to determine package-level inclusion
-// (same logic as ECPolicyResolver).
-func (r *IncludeExcludePolicyResolver) determinePackageInclusion(pkg string, pkgRules []rule.Info, target string, result *PolicyResolutionResult) {
-	r.baseDeterminePackageInclusion(pkg, pkgRules, target, result)
+	r.baseDeterminePackageInclusion(pkg, pkgRules, result)
 }
 
 // Includes returns the include criteria used by this policy resolver
@@ -635,7 +623,7 @@ func (r *basePolicyResolver) baseEvaluateRuleInclusion(ruleID string, ruleInfo r
 }
 
 // baseDeterminePackageInclusion contains the shared logic for determining package inclusion
-func (r *basePolicyResolver) baseDeterminePackageInclusion(pkg string, pkgRules []rule.Info, target string, result *PolicyResolutionResult) {
+func (r *basePolicyResolver) baseDeterminePackageInclusion(pkg string, pkgRules []rule.Info, result *PolicyResolutionResult) {
 	// Check if any rule in the package is included
 	hasIncludedRules := false
 	hasExcludedRules := false
@@ -656,7 +644,7 @@ func (r *basePolicyResolver) baseDeterminePackageInclusion(pkg string, pkgRules 
 		result.Explanations[pkg] = "package contains included rules"
 	} else if hasExcludedRules {
 		result.ExcludedPackages[pkg] = true
-		result.Explanations[pkg] = "package contains only excluded rules"
+		result.Explanations[pkg] = "package contains an excluded rule"
 	}
 }
 
@@ -785,33 +773,12 @@ func (r *ECPolicyResolver) processPackage(pkg string, pkgRules []rule.Info, targ
 	// Evaluate each rule in the package and determine if it should be included or excluded
 	for _, ruleInfo := range pkgRules {
 		ruleID := ruleInfo.Code // FIX: use ruleInfo.Code, not pkg.pkg.rule
-		r.evaluateRuleInclusion(ruleID, ruleInfo, target, result)
+		r.baseEvaluateRuleInclusion(ruleID, ruleInfo, target, result)
 	}
 
 	// Phase 3: Package-Level Determination
 	// Determine package inclusion based on its rules
-	r.determinePackageInclusion(pkg, pkgRules, target, result)
-}
-
-// evaluateRuleInclusion processes a single rule and determines whether it should be included or excluded
-// based on the policy configuration. This function implements the core scoring logic for
-// policy resolution.
-//
-// The function works as follows:
-// 1. Creates matchers for the rule (package, package.*, package.rule, collections, etc.)
-// 2. Scores the rule against include criteria and tracks which includes are matched
-// 3. Scores the rule against exclude criteria
-// 4. Determines inclusion based on score comparison:
-//   - If include score > exclude score: rule is included
-//   - If exclude score > 0: rule is explicitly excluded
-//   - If no explicit criteria: applies default behavior (include if no explicit includes or wildcard)
-//
-// 5. Records the decision and explanation in the result
-//
-// The scoring system uses specificity-based matching where more specific patterns
-// (like "package.rule") score higher than general patterns (like "package.*").
-func (r *ECPolicyResolver) evaluateRuleInclusion(ruleID string, ruleInfo rule.Info, target string, result *PolicyResolutionResult) {
-	r.baseEvaluateRuleInclusion(ruleID, ruleInfo, target, result)
+	r.baseDeterminePackageInclusion(pkg, pkgRules, result)
 }
 
 // determinePackageInclusion aggregates rule-level decisions to determine package-level inclusion.
@@ -827,11 +794,6 @@ func (r *ECPolicyResolver) evaluateRuleInclusion(ruleID string, ruleInfo rule.In
 // 2. Packages with only excluded rules are clearly marked as excluded
 // 3. The package-level organization is maintained for reporting and filtering purposes
 //
-// Example: If a package has 3 rules and 1 is included while 2 are excluded,
-// the package will be marked as included (because it has at least one included rule).
-func (r *ECPolicyResolver) determinePackageInclusion(pkg string, pkgRules []rule.Info, target string, result *PolicyResolutionResult) {
-	r.baseDeterminePackageInclusion(pkg, pkgRules, target, result)
-}
 
 // matchesPipelineIntention checks if the package matches pipeline intention criteria
 func (r *ECPolicyResolver) matchesPipelineIntention(pkgRules []rule.Info) bool {
@@ -1006,83 +968,6 @@ func MakeMatchers(result Result) []string {
 	matchers = append(matchers, extractCollections(result)...)
 
 	return matchers
-}
-
-// ComputeSuccesses computes success results for rules that didn't appear in warnings, failures, exceptions, or skipped.
-func ComputeSuccesses(
-	result Outcome,
-	rules policyRules,
-	target string,
-	missingIncludes map[string]bool,
-	include *Criteria,
-	exclude *Criteria,
-) []Result {
-	// what rules, by code, have we seen in the Conftest results, use map to
-	// take advantage of hashing for quicker lookup
-	seenRules := map[string]bool{}
-	for _, o := range [][]Result{result.Failures, result.Warnings, result.Skipped, result.Exceptions} {
-		for _, r := range o {
-			if code, ok := r.Metadata[metadataCode].(string); ok {
-				seenRules[code] = true
-			}
-		}
-	}
-
-	var successes []Result
-	if l := len(rules); l > 0 {
-		successes = make([]Result, 0, l)
-	}
-
-	// any rule left DID NOT get metadata added so it's a success
-	// this depends on the delete in addMetadata
-	for code, rule := range rules {
-		if _, ok := seenRules[code]; ok {
-			continue
-		}
-
-		// Ignore any successes that are not meant for the package this CheckResult represents
-		if rule.Package != result.Namespace {
-			continue
-		}
-
-		success := Result{
-			Message: "Pass",
-			Metadata: map[string]interface{}{
-				metadataCode: code,
-			},
-		}
-
-		if rule.Title != "" {
-			success.Metadata[metadataTitle] = rule.Title
-		}
-
-		if rule.Description != "" {
-			success.Metadata[metadataDescription] = rule.Description
-		}
-
-		if len(rule.Collections) > 0 {
-			success.Metadata[metadataCollections] = rule.Collections
-		}
-
-		if len(rule.DependsOn) > 0 {
-			success.Metadata[metadataDependsOn] = rule.DependsOn
-		}
-
-		if !IsResultIncluded(success, target, missingIncludes, include, exclude) {
-			continue
-		}
-
-		if rule.EffectiveOn != "" {
-			success.Metadata[metadataEffectiveOn] = rule.EffectiveOn
-		}
-
-		// Let's omit the solution text here because if the rule is passing
-		// already then the user probably doesn't care about the solution.
-
-		successes = append(successes, success)
-	}
-
-	return successes
 }
 
 //////////////////////////////////////////////////////////////////////////////
