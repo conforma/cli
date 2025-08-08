@@ -1,6 +1,6 @@
 module github.com/conforma/cli/tools/kubectl
 
-go 1.24.4
+go 1.24.5
 
 require k8s.io/kubernetes v1.31.6
 

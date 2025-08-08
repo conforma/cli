@@ -1,6 +1,6 @@
 module github.com/conforma/cli/tools
 
-go 1.24.4
+go 1.24.5
 
 require (
 	github.com/daixiang0/gci v0.13.5
