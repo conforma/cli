@@ -26,6 +26,12 @@ import (
 	"github.com/conforma/cli/internal/applicationsnapshot"
 )
 
+// VSAProcessingResult contains the results of VSA processing
+type VSAProcessingResult struct {
+	ComponentEnvelopes map[string]string // imageRef -> envelopePath
+	SnapshotEnvelope   string
+}
+
 // Service encapsulates all VSA processing logic for both components and snapshots
 type Service struct {
 	signer *Signer
@@ -66,7 +72,9 @@ func (s *Service) ProcessComponentVSA(ctx context.Context, report applicationsna
 		return "", fmt.Errorf("failed to attest component VSA: %w", err)
 	}
 
-	log.Infof("[VSA] Component VSA attested and envelope written to %s", envelopePath)
+	log.WithFields(log.Fields{
+		"envelope_path": envelopePath,
+	}).Info("[VSA] Component VSA attested and envelope written")
 	return envelopePath, nil
 }
 
@@ -99,12 +107,18 @@ func (s *Service) ProcessSnapshotVSA(ctx context.Context, report applicationsnap
 		return "", fmt.Errorf("failed to attest snapshot VSA: %w", err)
 	}
 
-	log.Infof("[VSA] Snapshot VSA attested and envelope written to %s", envelopePath)
+	log.WithFields(log.Fields{
+		"envelope_path": envelopePath,
+	}).Info("[VSA] Snapshot VSA attested and envelope written")
 	return envelopePath, nil
 }
 
-// ProcessAllVSAs processes VSAs for all components and the snapshot
-func (s *Service) ProcessAllVSAs(ctx context.Context, report applicationsnapshot.Report, getGitURL func(applicationsnapshot.Component) string, getDigest func(applicationsnapshot.Component) (string, error)) error {
+// ProcessAllVSAs processes VSAs for all components and the snapshot, returning envelope paths
+func (s *Service) ProcessAllVSAs(ctx context.Context, report applicationsnapshot.Report, getGitURL func(applicationsnapshot.Component) string, getDigest func(applicationsnapshot.Component) (string, error)) (*VSAProcessingResult, error) {
+	result := &VSAProcessingResult{
+		ComponentEnvelopes: make(map[string]string),
+	}
+
 	// Process VSAs for all components
 	for _, comp := range report.Components {
 		gitURL := getGitURL(comp)
@@ -114,19 +128,23 @@ func (s *Service) ProcessAllVSAs(ctx context.Context, report applicationsnapshot
 			continue
 		}
 
-		_, err = s.ProcessComponentVSA(ctx, report, comp, gitURL, digest)
+		envelopePath, err := s.ProcessComponentVSA(ctx, report, comp, gitURL, digest)
 		if err != nil {
 			log.Errorf("Failed to process VSA for component %s: %v", comp.ContainerImage, err)
 			continue
 		}
+
+		result.ComponentEnvelopes[comp.ContainerImage] = envelopePath
 	}
 
 	// Process VSA for the snapshot
-	_, err := s.ProcessSnapshotVSA(ctx, report)
+	snapshotEnvelopePath, err := s.ProcessSnapshotVSA(ctx, report)
 	if err != nil {
 		log.Errorf("Failed to process snapshot VSA: %v", err)
-		return err
+		return result, err
 	}
 
-	return nil
+	result.SnapshotEnvelope = snapshotEnvelopePath
+
+	return result, nil
 }

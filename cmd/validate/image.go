@@ -78,7 +78,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 		workers                     int
 		vsaEnabled                  bool
 		vsaSigningKey               string
-		vsaUpload                   string
+		vsaUpload                   []string
 	}{
 		strict:  true,
 		workers: 5,
@@ -492,10 +492,31 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				}
 
 				// Process all VSAs using the service
-				err = vsaService.ProcessAllVSAs(cmd.Context(), report, getGitURL, getDigest)
+				vsaResult, err := vsaService.ProcessAllVSAs(cmd.Context(), report, getGitURL, getDigest)
 				if err != nil {
 					log.Errorf("Failed to process VSAs: %v", err)
 					// Don't return error here, continue with the rest of the command
+				} else {
+					// Upload VSAs to configured storage backends
+					if len(data.vsaUpload) > 0 {
+						log.Infof("[VSA] Starting upload to %d storage backend(s)", len(data.vsaUpload))
+
+						// Upload component VSA envelopes
+						for imageRef, envelopePath := range vsaResult.ComponentEnvelopes {
+							uploadErr := vsa.UploadVSAEnvelope(cmd.Context(), envelopePath, imageRef, data.vsaUpload, signer)
+							if uploadErr != nil {
+								log.Errorf("[VSA] Upload failed for component %s: %v", imageRef, uploadErr)
+							}
+						}
+
+						// Upload snapshot VSA envelope if it exists
+						if vsaResult.SnapshotEnvelope != "" {
+							uploadErr := vsa.UploadVSAEnvelope(cmd.Context(), vsaResult.SnapshotEnvelope, "", data.vsaUpload, signer)
+							if uploadErr != nil {
+								log.Errorf("[VSA] Upload failed for snapshot: %v", uploadErr)
+							}
+						}
+					}
 				}
 			}
 
@@ -593,7 +614,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 
 	cmd.Flags().BoolVar(&data.vsaEnabled, "vsa", false, "Generate a Verification Summary Attestation (VSA) for each validated image.")
 	cmd.Flags().StringVar(&data.vsaSigningKey, "vsa-signing-key", "", "Path to the private key for signing the VSA.")
-	cmd.Flags().StringVar(&data.vsaUpload, "vsa-upload", "oci", "Where to upload the VSA attestation: oci, rekor, none")
+	cmd.Flags().StringSliceVar(&data.vsaUpload, "vsa-upload", nil, "Storage backends for VSA upload. Format: backend@url?param=value. Examples: rekor@https://rekor.sigstore.dev, local@./vsa-dir")
 
 	if len(data.input) > 0 || len(data.filePath) > 0 || len(data.images) > 0 {
 		if err := cmd.MarkFlagRequired("image"); err != nil {

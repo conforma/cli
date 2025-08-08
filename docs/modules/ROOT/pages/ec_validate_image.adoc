@@ -151,7 +151,7 @@ JSON of the "spec" or a reference to a Kubernetes object [<namespace>/]<name>
 -s, --strict:: Return non-zero status on non-successful validation. Defaults to true. Use --strict=false to return a zero status code. (Default: true)
 --vsa:: Generate a Verification Summary Attestation (VSA) for each validated image. (Default: false)
 --vsa-signing-key:: Path to the private key for signing the VSA.
---vsa-upload:: Where to upload the VSA attestation: oci, rekor, none (Default: oci)
+--vsa-upload:: Storage backends for VSA upload. Format: backend@url?param=value. Examples: rekor@https://rekor.sigstore.dev, local@./vsa-dir (Default: [])
 --workers:: Number of workers to use for validation. Defaults to 5. (Default: 5)
 
 == Options inherited from parent commands
