@@ -55,7 +55,7 @@ var now = time.Now
 var PolicySourcesFrom = source.PolicySourcesFrom
 
 func ValidatePolicy(ctx context.Context, policyConfig string) error {
-	return validatePolicyConfig(policyConfig)
+	return ValidatePolicyConfig(policyConfig)
 }
 
 type SigstoreOpts struct {
@@ -75,7 +75,7 @@ type Policy interface {
 	Spec() ecc.EnterpriseContractPolicySpec
 	EffectiveTime() time.Time
 	AttestationTime(time.Time)
-	Identity() cosign.Identity
+	GetSignatureVerificationIdentity() cosign.Identity
 	Keyless() bool
 	SigstoreOpts() (SigstoreOpts, error)
 }
@@ -117,7 +117,7 @@ func (p *policy) Spec() ecc.EnterpriseContractPolicySpec {
 	return p.EnterpriseContractPolicySpec
 }
 
-func (p *policy) Identity() cosign.Identity {
+func (p *policy) GetSignatureVerificationIdentity() cosign.Identity {
 	return p.identity
 }
 
@@ -259,7 +259,7 @@ func NewPolicy(ctx context.Context, opts Options) (Policy, error) {
 			p.identity = identity
 		}
 
-		if err := validateIdentity(p.identity); err != nil {
+		if err := ValidateIdentity(p.identity); err != nil {
 			return nil, err
 		}
 	}
@@ -311,7 +311,7 @@ func (p *policy) loadPolicy(ctx context.Context, policyRef string) error {
 		}
 		// Check if the policyRef is conformant to the schema
 		if policyRef != "" {
-			ok, err := p.isConformant(policyRef)
+			ok, err := p.IsConformant(policyRef)
 			if err != nil {
 				return err
 			}
@@ -338,11 +338,11 @@ func (p *policy) loadPolicy(ctx context.Context, policyRef string) error {
 	return nil
 }
 
-// isConformant checks if the given policy conforms to the Enterprise Contract
+// IsConformant checks if the given policy conforms to the Enterprise Contract
 // Policy schema. It returns a boolean indicating conformance and an error if any
 // occurred during the validation process.
-func (p *policy) isConformant(policyRef string) (bool, error) {
-	err := validatePolicyConfig(policyRef)
+func (p *policy) IsConformant(policyRef string) (bool, error) {
+	err := ValidatePolicyConfig(policyRef)
 	if err != nil {
 		return false, err
 	}
@@ -417,7 +417,7 @@ func checkOpts(ctx context.Context, p *policy) (*cosign.CheckOpts, error) {
 
 	if p.PublicKey != "" {
 		log.Debug("Using long-lived key workflow")
-		if opts.SigVerifier, err = signatureVerifier(ctx, p); err != nil {
+		if opts.SigVerifier, err = SignatureVerifier(ctx, p); err != nil {
 			return nil, err
 		}
 	} else {
@@ -472,12 +472,12 @@ func checkOpts(ctx context.Context, p *policy) (*cosign.CheckOpts, error) {
 }
 
 type signatureClient interface {
-	publicKeyFromKeyRef(context.Context, string) (sigstoreSig.Verifier, error)
+	PublicKeyFromKeyRef(context.Context, string) (sigstoreSig.Verifier, error)
 }
 
 type cosignClient struct{}
 
-func (c *cosignClient) publicKeyFromKeyRef(ctx context.Context, publicKey string) (sigstoreSig.Verifier, error) {
+func (c *cosignClient) PublicKeyFromKeyRef(ctx context.Context, publicKey string) (sigstoreSig.Verifier, error) {
 	return cosignSig.PublicKeyFromKeyRef(ctx, publicKey)
 }
 
@@ -485,11 +485,11 @@ type contextKey string
 
 const signatureClientContextKey contextKey = "ec.policy.signature.client"
 
-func withSignatureClient(ctx context.Context, client signatureClient) context.Context {
+func WithSignatureClient(ctx context.Context, client signatureClient) context.Context {
 	return context.WithValue(ctx, signatureClientContextKey, client)
 }
 
-func newSignatureClient(ctx context.Context) signatureClient {
+func NewSignatureClient(ctx context.Context) signatureClient {
 	client, ok := ctx.Value(signatureClientContextKey).(signatureClient)
 	if ok && client != nil {
 		return client
@@ -498,8 +498,8 @@ func newSignatureClient(ctx context.Context) signatureClient {
 	return &cosignClient{}
 }
 
-// signatureVerifier creates a new instance based on the PublicKey from the Policy.
-func signatureVerifier(ctx context.Context, p *policy) (sigstoreSig.Verifier, error) {
+// SignatureVerifier creates a new instance based on the PublicKey from the Policy.
+func SignatureVerifier(ctx context.Context, p *policy) (sigstoreSig.Verifier, error) {
 	publicKey := p.PublicKey
 
 	if strings.Contains(publicKey, "-----BEGIN PUBLIC KEY-----") {
@@ -510,14 +510,14 @@ func signatureVerifier(ctx context.Context, p *policy) (sigstoreSig.Verifier, er
 		return verifier, nil
 	}
 
-	verifier, err := newSignatureClient(ctx).publicKeyFromKeyRef(ctx, publicKey)
+	verifier, err := NewSignatureClient(ctx).PublicKeyFromKeyRef(ctx, publicKey)
 	if err != nil {
 		return nil, err
 	}
 	return verifier, nil
 }
 
-func validateIdentity(identity cosign.Identity) error {
+func ValidateIdentity(identity cosign.Identity) error {
 	var errs error
 
 	if identity.Issuer == "" && identity.IssuerRegExp == "" {
@@ -533,7 +533,7 @@ func validateIdentity(identity cosign.Identity) error {
 	return errs
 }
 
-func validatePolicyConfig(policyConfig string) error {
+func ValidatePolicyConfig(policyConfig string) error {
 	policySchema, err := jsonschema.CompileString("schema.json", ecc.Schema)
 	if err != nil {
 		log.Errorf("Failed to compile schema: %s", err)
@@ -614,8 +614,8 @@ func PreProcessPolicy(ctx context.Context, policyOptions Options) (Policy, *cach
 
 		sources[i] = ecc.Source{
 			Name:           sourceGroup.Name,
-			Policy:         urls(policySources, source.PolicyKind),
-			Data:           urls(policySources, source.DataKind),
+			Policy:         Urls(policySources, source.PolicyKind),
+			Data:           Urls(policySources, source.DataKind),
 			RuleData:       sourceGroup.RuleData,
 			Config:         sourceGroup.Config,
 			VolatileConfig: sourceGroup.VolatileConfig,
@@ -625,7 +625,7 @@ func PreProcessPolicy(ctx context.Context, policyOptions Options) (Policy, *cach
 	return p, policyCache, err
 }
 
-func urls(s []source.PolicySource, kind source.PolicyType) []string {
+func Urls(s []source.PolicySource, kind source.PolicyType) []string {
 	ret := make([]string, 0, len(s))
 	for _, u := range s {
 		if u.Type() == kind {
