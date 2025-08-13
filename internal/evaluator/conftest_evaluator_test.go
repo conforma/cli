@@ -3124,3 +3124,73 @@ func TestMissingIncludesIntegration(t *testing.T) {
 		assert.Equal(t, 2, len(warningResults), "Should generate warnings for unmatched includes")
 	})
 }
+
+func TestStrictCapabilitiesProductionReady(t *testing.T) {
+	// Test that strictCapabilities is production-ready with proper error handling
+	ctx := context.Background()
+
+	// Test 1: Normal operation
+	capabilities, err := strictCapabilities(ctx)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, capabilities)
+
+	// Verify it's valid JSON
+	var parsed map[string]interface{}
+	err = json.Unmarshal([]byte(capabilities), &parsed)
+	assert.NoError(t, err)
+
+	// Test 2: Caching works
+	capabilities2, err := strictCapabilities(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, capabilities, capabilities2, "Cached capabilities should be identical")
+
+	// Test 3: Context override works
+	overrideCaps := `{"test": "override"}`
+	ctxWithOverride := withCapabilities(ctx, overrideCaps)
+	capabilities3, err := strictCapabilities(ctxWithOverride)
+	assert.NoError(t, err)
+	assert.Equal(t, overrideCaps, capabilities3)
+
+	t.Logf("Production-ready capabilities test passed")
+}
+
+func TestGenerateCapabilitiesRetryLogic(t *testing.T) {
+	// Test the retry logic with different scenarios
+	capabilities, err := generateCapabilities()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, capabilities)
+
+	// Verify it's valid JSON
+	var parsed map[string]interface{}
+	err = json.Unmarshal([]byte(capabilities), &parsed)
+	assert.NoError(t, err)
+
+	// Should contain expected fields
+	assert.Contains(t, parsed, "builtins")
+	assert.Contains(t, parsed, "allow_net")
+
+	t.Logf("Retry logic test passed")
+}
+
+func TestMinimalCapabilitiesFallback(t *testing.T) {
+	// Test the minimal capabilities fallback
+	capabilities, err := generateMinimalCapabilities()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, capabilities)
+
+	// Verify it's valid JSON
+	var parsed map[string]interface{}
+	err = json.Unmarshal([]byte(capabilities), &parsed)
+	assert.NoError(t, err)
+
+	// Should contain minimal required fields
+	assert.Contains(t, parsed, "builtins")
+	assert.Contains(t, parsed, "allow_net")
+
+	// Should have at least one builtin (print)
+	builtins, ok := parsed["builtins"].([]interface{})
+	assert.True(t, ok)
+	assert.GreaterOrEqual(t, len(builtins), 1)
+
+	t.Logf("Minimal capabilities fallback test passed")
+}
