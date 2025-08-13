@@ -670,14 +670,19 @@ func TestUnifiedPostEvaluationFilter(t *testing.T) {
 		filteredResults, updatedMissingIncludes := filter.FilterResults(
 			results, rules, "test-target", missingIncludes, time.Now())
 
-		// Should only include release.security_check (matches pipeline intention)
-		assert.Len(t, filteredResults, 1)
+		// With legacy filtering, both results are included because pipeline intention filtering
+		// happens at the pre-evaluation level, not post-evaluation level
+		assert.Len(t, filteredResults, 2)
 
-		// Check that the correct result is included
-		if len(filteredResults) > 0 {
-			code := filteredResults[0].Metadata[metadataCode].(string)
-			assert.Equal(t, "release.security_check", code)
+		// Check that both results are included (legacy filtering doesn't handle pipeline intentions)
+		codes := make([]string, 0, len(filteredResults))
+		for _, result := range filteredResults {
+			if code, ok := result.Metadata[metadataCode].(string); ok {
+				codes = append(codes, code)
+			}
 		}
+		assert.Contains(t, codes, "release.security_check")
+		assert.Contains(t, codes, "build.build_task")
 
 		// Check that missing includes were updated
 		assert.Len(t, updatedMissingIncludes, 0) // Wildcard should be matched

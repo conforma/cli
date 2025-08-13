@@ -592,10 +592,10 @@ func (r *basePolicyResolver) baseEvaluateRuleInclusion(ruleID string, ruleInfo r
 	matchers := r.createRuleMatchers(ruleID, ruleInfo)
 
 	// Score against include criteria
-	includeScore := r.scoreMatches(matchers, r.include.get(target), result.MissingIncludes)
+	includeScore := LegacyScoreMatches(matchers, r.include.get(target), result.MissingIncludes)
 
 	// Score against exclude criteria
-	excludeScore := r.scoreMatches(matchers, r.exclude.get(target), make(map[string]bool))
+	excludeScore := LegacyScoreMatches(matchers, r.exclude.get(target), make(map[string]bool))
 
 	// Debug: Log rule scoring
 	log.Debugf("[evaluateRuleInclusion] Rule: %s, includeScore: %d, excludeScore: %d, matchers: %v", ruleID, includeScore, excludeScore, matchers)
@@ -675,64 +675,6 @@ func (r *basePolicyResolver) createRuleMatchers(ruleID string, ruleInfo rule.Inf
 	}
 
 	return matchers
-}
-
-// scoreMatches returns the combined score for every match between needles and haystack
-// (same logic for both resolvers).
-func (r *basePolicyResolver) scoreMatches(needles, haystack []string, toBePruned map[string]bool) int {
-	s := 0
-	for _, needle := range needles {
-		for _, hay := range haystack {
-			if hay == needle {
-				s += r.score(hay)
-				delete(toBePruned, hay)
-			}
-		}
-	}
-	return s
-}
-
-// score computes the specificity score for a given name (same logic for both resolvers).
-func (r *basePolicyResolver) score(name string) int {
-	if strings.HasPrefix(name, "@") {
-		return 10
-	}
-	value := 0
-	shortName, term, _ := strings.Cut(name, ":")
-	if term != "" {
-		value += 100
-	}
-	nameSplit := strings.Split(shortName, ".")
-	nameSplitLen := len(nameSplit)
-
-	if nameSplitLen == 1 {
-		// When there are no dots we assume the name refers to a
-		// package and any rule inside the package is matched
-		if shortName == "*" {
-			value += 1
-		} else {
-			value += 10
-		}
-	} else if nameSplitLen > 1 {
-		// When there is at least one dot we assume the last element
-		// is the rule and everything else is the package path
-		rule := nameSplit[nameSplitLen-1]
-		pkg := strings.Join(nameSplit[:nameSplitLen-1], ".")
-
-		if pkg == "*" {
-			// E.g. "*.rule", a weird edge case
-			value += 1
-		} else {
-			// E.g. "pkg.rule" or "path.pkg.rule"
-			value += 10 * (nameSplitLen - 1)
-		}
-
-		if rule != "*" && rule != "" {
-			// E.g. "pkg.rule" so a specific rule was specified
-			value += 100
-		}
-	}
-	return value
 }
 
 // processPackage processes a single package and its rules
@@ -1098,10 +1040,7 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 	missingIncludes map[string]bool,
 	effectiveTime time.Time,
 ) ([]Result, map[string]bool) {
-	// Use the unified PolicyResolver for consistent filtering logic
-	policyResolution := f.policyResolver.ResolvePolicy(rules, target)
-
-	// Filter results based on the policy resolution
+	// Always use legacy filtering - it handles all cases correctly and consistently
 	var filteredResults []Result
 	for _, result := range results {
 		code := ExtractStringFromMetadata(result, metadataCode)
@@ -1112,24 +1051,11 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 			continue
 		}
 
-		// If there are no actual rules in the policy sources (like in tests with mocks),
-		// use legacy filtering logic to maintain backward compatibility
-		if len(rules) == 0 {
-			// Use legacy filtering logic for all results
-			if LegacyIsResultIncluded(result, target, missingIncludes, f.policyResolver.Includes(), f.policyResolver.Excludes()) {
-				filteredResults = append(filteredResults, result)
-			}
-			continue
-		}
-
-		// Include only results that are in the included rules
-		if policyResolution.IncludedRules[code] {
+		// Use legacy filtering logic for all results
+		if LegacyIsResultIncluded(result, target, missingIncludes, f.policyResolver.Includes(), f.policyResolver.Excludes()) {
 			filteredResults = append(filteredResults, result)
 		}
 	}
-
-	// Apply term-based exclusions after initial filtering
-	filteredResults = f.applyTermBasedExclusions(filteredResults, target)
 
 	// Update missing includes based on what was actually matched
 	for include := range missingIncludes {
@@ -1152,44 +1078,6 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 	}
 
 	return filteredResults, missingIncludes
-}
-
-// applyTermBasedExclusions removes results that match term-based exclude patterns
-func (f *UnifiedPostEvaluationFilter) applyTermBasedExclusions(results []Result, target string) []Result {
-	excludeCriteria := f.policyResolver.Excludes().get(target)
-
-	// Build a set of term-based exclude patterns for efficient lookup
-	termExcludePatterns := make(map[string]bool)
-	for _, exclude := range excludeCriteria {
-		if strings.Contains(exclude, ":") {
-			termExcludePatterns[exclude] = true
-		}
-	}
-
-	if len(termExcludePatterns) == 0 {
-		return results
-	}
-
-	var filteredResults []Result
-	for _, result := range results {
-		code := ExtractStringFromMetadata(result, metadataCode)
-		terms := extractStringsFromMetadata(result, metadataTerm)
-
-		shouldExclude := false
-		for _, term := range terms {
-			termExclude := fmt.Sprintf("%s:%s", code, term)
-			if termExcludePatterns[termExclude] {
-				shouldExclude = true
-				break
-			}
-		}
-
-		if !shouldExclude {
-			filteredResults = append(filteredResults, result)
-		}
-	}
-
-	return filteredResults
 }
 
 // CategorizeResults takes filtered results and categorizes them by type

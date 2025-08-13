@@ -1357,7 +1357,7 @@ func TestMakeMatchers(t *testing.T) {
 			if tt.term != "" {
 				result.Metadata["term"] = tt.term
 			}
-			assert.Equal(t, tt.want, makeMatchers(result))
+			assert.Equal(t, tt.want, LegacyMakeMatchers(result))
 		})
 	}
 }
@@ -1621,7 +1621,7 @@ func TestNameScoring(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			assert.Equal(t, c.score, score(c.name))
+			assert.Equal(t, c.score, LegacyScore(c.name))
 		})
 	}
 }
@@ -2797,7 +2797,7 @@ func TestMissingIncludesSuccessComputation(t *testing.T) {
 			}
 
 			// Call computeSuccesses with the test data
-			successes := conftestEval.computeSuccesses(tt.result, tt.rules, tt.target, missingIncludes)
+			successes := conftestEval.computeSuccesses(tt.result, tt.rules, tt.target, missingIncludes, nil)
 
 			// Verify the number of successes
 			assert.Equal(t, tt.expectedSuccesses, len(successes),
@@ -3002,7 +3002,7 @@ func TestMissingIncludesIntegration(t *testing.T) {
 			},
 		}
 
-		successes := conftestEval.computeSuccesses(result, rules, "test-target", missingIncludes)
+		successes := conftestEval.computeSuccesses(result, rules, "test-target", missingIncludes, nil)
 		assert.Equal(t, 1, len(successes), "Should generate one success")
 
 		// 4. Verify no warnings are generated
@@ -3106,7 +3106,7 @@ func TestMissingIncludesIntegration(t *testing.T) {
 			},
 		}
 
-		successes := conftestEval.computeSuccesses(result, rules, "test-target", missingIncludes)
+		successes := conftestEval.computeSuccesses(result, rules, "test-target", missingIncludes, nil)
 		assert.Equal(t, 1, len(successes), "Should generate successes even for unmatched includes (due to wildcard)")
 
 		// 4. Verify warnings are generated for unmatched includes
