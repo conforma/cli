@@ -654,7 +654,7 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		result.Skipped = skipped
 
 		// Replace the placeholder successes slice with the actual successes.
-		result.Successes = c.computeSuccesses(result, rules, target.Target, missingIncludes)
+		result.Successes = c.computeSuccesses(result, rules, target.Target, missingIncludes, unifiedFilter)
 
 		totalRules += len(result.Warnings) + len(result.Failures) + len(result.Successes)
 
@@ -755,6 +755,7 @@ func (c conftestEvaluator) computeSuccesses(
 	rules policyRules,
 	target string,
 	missingIncludes map[string]bool,
+	unifiedFilter PostEvaluationFilter,
 ) []Result {
 	// what rules, by code, have we seen in the Conftest results, use map to
 	// take advantage of hashing for quicker lookup
@@ -807,9 +808,22 @@ func (c conftestEvaluator) computeSuccesses(
 			success.Metadata[metadataDependsOn] = rule.DependsOn
 		}
 
-		if !c.isResultIncluded(success, target, missingIncludes) {
-			log.Debugf("Skipping result success: %#v", success)
-			continue
+		// Use unified filtering approach for consistency
+		if unifiedFilter != nil {
+			// Use the unified filter to check if this success should be included
+			filteredResults, _ := unifiedFilter.FilterResults(
+				[]Result{success}, rules, target, missingIncludes, time.Now())
+
+			if len(filteredResults) == 0 {
+				log.Debugf("Skipping result success: %#v", success)
+				continue
+			}
+		} else {
+			// Fallback to legacy filtering for backward compatibility
+			if !c.isResultIncluded(success, target, missingIncludes) {
+				log.Debugf("Skipping result success: %#v", success)
+				continue
+			}
 		}
 
 		if rule.EffectiveOn != "" {
@@ -1062,117 +1076,10 @@ func isResultEffective(failure Result, now time.Time) bool {
 // discarded based on the policy configuration.
 // 'missingIncludes' is a list of include directives that gets pruned if the result is matched
 func (c conftestEvaluator) isResultIncluded(result Result, target string, missingIncludes map[string]bool) bool {
-	ruleMatchers := makeMatchers(result)
-	includeScore := scoreMatches(ruleMatchers, c.include.get(target), missingIncludes)
-	excludeScore := scoreMatches(ruleMatchers, c.exclude.get(target), map[string]bool{})
+	ruleMatchers := LegacyMakeMatchers(result)
+	includeScore := LegacyScoreMatches(ruleMatchers, c.include.get(target), missingIncludes)
+	excludeScore := LegacyScoreMatches(ruleMatchers, c.exclude.get(target), map[string]bool{})
 	return includeScore > excludeScore
-}
-
-// scoreMatches returns the combined score for every match between needles and haystack.
-// 'toBePruned' contains items that will be removed (pruned) from this map if a match is found.
-func scoreMatches(needles, haystack []string, toBePruned map[string]bool) int {
-	var s int
-	for _, needle := range needles {
-		for _, hay := range haystack {
-			if hay == needle {
-				s += score(hay)
-				delete(toBePruned, hay)
-			}
-		}
-	}
-	return s
-}
-
-// score computes and returns the specificity of the given name. The scoring guidelines are:
-//  1. If the name starts with "@" the returned score is exactly 10, e.g. "@collection". No
-//     further processing is done.
-//  2. Add 1 if the name covers everything, i.e. "*"
-//  3. Add 10 if the name specifies a package name, e.g. "pkg", "pkg.", "pkg.*", or "pkg.rule",
-//     and an additional 10 based on the namespace depth of the pkg, e.g. "a.pkg.rule" adds 10
-//     more, "a.b.pkg.rule" adds 20, etc
-//  4. Add 100 if a term is used, e.g. "*:term", "pkg:term" or "pkg.rule:term"
-//  5. Add 100 if a rule is used, e.g. "pkg.rule", "pkg.rule:term"
-//
-// The score is cumulative. If a name is covered by multiple items in the guidelines, they
-// are added together. For example, "pkg.rule:term" scores at 210.
-func score(name string) int {
-	if strings.HasPrefix(name, "@") {
-		return 10
-	}
-	var value int
-	shortName, term, _ := strings.Cut(name, ":")
-	if term != "" {
-		value += 100
-	}
-	nameSplit := strings.Split(shortName, ".")
-	nameSplitLen := len(nameSplit)
-
-	if nameSplitLen == 1 {
-		// When there are no dots we assume the name refers to a
-		// package and any rule inside the package is matched
-		if shortName == "*" {
-			value += 1
-		} else {
-			value += 10
-		}
-	} else if nameSplitLen > 1 {
-		// When there is at least one dot we assume the last element
-		// is the rule and everything else is the package path
-		rule := nameSplit[nameSplitLen-1]
-		pkg := strings.Join(nameSplit[:nameSplitLen-1], ".")
-
-		if pkg == "*" {
-			// E.g. "*.rule", a weird edge case
-			value += 1
-		} else {
-			// E.g. "pkg.rule" or "path.pkg.rule"
-			value += 10 * (nameSplitLen - 1)
-		}
-
-		if rule != "*" && rule != "" {
-			// E.g. "pkg.rule" so a specific rule was specified
-			value += 100
-		}
-
-	}
-	return value
-}
-
-// makeMatchers returns the possible matching strings for the result.
-func makeMatchers(result Result) []string {
-	code := ExtractStringFromMetadata(result, metadataCode)
-	terms := extractStringsFromMetadata(result, metadataTerm)
-	parts := strings.Split(code, ".")
-	var pkg string
-	if len(parts) >= 2 {
-		pkg = parts[len(parts)-2]
-	}
-	rule := parts[len(parts)-1]
-
-	var matchers []string
-
-	if pkg != "" {
-		matchers = append(matchers, pkg, fmt.Sprintf("%s.*", pkg), fmt.Sprintf("%s.%s", pkg, rule))
-	}
-
-	// A term can be applied to any of the package matchers above. But we don't want to apply a term
-	// matcher to a matcher that already includes a term.
-	var termMatchers []string
-	for _, term := range terms {
-		if len(term) == 0 {
-			continue
-		}
-		for _, matcher := range matchers {
-			termMatchers = append(termMatchers, fmt.Sprintf("%s:%s", matcher, term))
-		}
-	}
-	matchers = append(matchers, termMatchers...)
-
-	matchers = append(matchers, "*")
-
-	matchers = append(matchers, extractCollections(result)...)
-
-	return matchers
 }
 
 // extractCollections returns the collections encoded in the result metadata.
