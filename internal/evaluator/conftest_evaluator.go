@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"runtime/trace"
 	"strings"
+	"sync"
 	"time"
 
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
@@ -52,6 +53,12 @@ const (
 	runnerKey        contextKey = "ec.evaluator.runner"
 	capabilitiesKey  contextKey = "ec.evaluator.capabilities"
 	effectiveTimeKey contextKey = "ec.evaluator.effective_time"
+)
+
+var (
+	// capabilitiesCache stores the marshaled capabilities to avoid repeated marshaling
+	capabilitiesCache     string
+	capabilitiesCacheOnce sync.Once
 )
 
 // trim removes all failure, warning, success or skipped results that depend on
@@ -1130,6 +1137,41 @@ func strictCapabilities(ctx context.Context) (string, error) {
 		return c, nil
 	}
 
+	// Use cached capabilities if available
+	var cacheErr error
+	capabilitiesCacheOnce.Do(func() {
+		capabilitiesCache, cacheErr = generateCapabilities()
+	})
+
+	if cacheErr != nil {
+		return "", fmt.Errorf("failed to generate capabilities: %w", cacheErr)
+	}
+
+	return capabilitiesCache, nil
+}
+
+// generateCapabilities creates the OPA capabilities with proper error handling and retry logic
+func generateCapabilities() (string, error) {
+	// Try multiple times with increasing timeouts
+	timeouts := []time.Duration{2 * time.Second, 5 * time.Second, 10 * time.Second}
+
+	for i, timeout := range timeouts {
+		if capabilities, err := tryGenerateCapabilities(timeout); err == nil {
+			return capabilities, nil
+		} else {
+			log.Warnf("Capabilities generation attempt %d failed (timeout: %v): %v", i+1, timeout, err)
+			if i == len(timeouts)-1 {
+				// Last attempt failed, try with a minimal capabilities fallback
+				return generateMinimalCapabilities()
+			}
+		}
+	}
+
+	return "", fmt.Errorf("all attempts to generate capabilities failed")
+}
+
+// tryGenerateCapabilities attempts to generate capabilities with a specific timeout
+func tryGenerateCapabilities(timeout time.Duration) (string, error) {
 	capabilities := ast.CapabilitiesForThisVersion()
 	// An empty list means no hosts can be reached. However, a nil value means all
 	// hosts can be reached. Unfortunately, the required JSON marshalling process
@@ -1156,10 +1198,238 @@ func strictCapabilities(ctx context.Context) (string, error) {
 	capabilities.Builtins = builtins
 	log.Debugf("Access to some rego built-in functions disabled: %s", disallowed.List())
 
-	blob, err := json.Marshal(capabilities)
-	if err != nil {
-		return "", err
+	// Add timeout to prevent hanging
+	var blob []byte
+	var err error
+	done := make(chan struct{})
+
+	go func() {
+		blob, err = json.Marshal(capabilities)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		if err != nil {
+			return "", fmt.Errorf("JSON marshaling failed: %w", err)
+		}
+		return string(blob), nil
+	case <-time.After(timeout):
+		return "", fmt.Errorf("timeout after %v", timeout)
 	}
+}
+
+// generateMinimalCapabilities creates a minimal capabilities structure as a fallback
+func generateMinimalCapabilities() (string, error) {
+	log.Warn("Using minimal capabilities fallback due to marshaling failures")
+
+	// Create a minimal capabilities structure that includes commonly needed functions
+	// while still maintaining security restrictions
+	minimalCapabilities := map[string]interface{}{
+		"builtins": []map[string]interface{}{
+			// Basic functions that are commonly needed
+			{
+				"name": "print",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "any"},
+					},
+					"result": map[string]interface{}{
+						"type": "any",
+					},
+				},
+			},
+			{
+				"name": "startswith",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "string"},
+						{"type": "string"},
+					},
+					"result": map[string]interface{}{
+						"type": "boolean",
+					},
+				},
+			},
+			{
+				"name": "endswith",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "string"},
+						{"type": "string"},
+					},
+					"result": map[string]interface{}{
+						"type": "boolean",
+					},
+				},
+			},
+			{
+				"name": "contains",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "any"},
+						{"type": "any"},
+					},
+					"result": map[string]interface{}{
+						"type": "boolean",
+					},
+				},
+			},
+			{
+				"name": "count",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "any"},
+					},
+					"result": map[string]interface{}{
+						"type": "number",
+					},
+				},
+			},
+			{
+				"name": "object.get",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "object"},
+						{"type": "any"},
+						{"type": "any"},
+					},
+					"result": map[string]interface{}{
+						"type": "any",
+					},
+				},
+			},
+			{
+				"name": "object.keys",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "object"},
+					},
+					"result": map[string]interface{}{
+						"type": "array",
+					},
+				},
+			},
+			{
+				"name": "array.concat",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "array"},
+						{"type": "array"},
+					},
+					"result": map[string]interface{}{
+						"type": "array",
+					},
+				},
+			},
+			{
+				"name": "array.slice",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "array"},
+						{"type": "number"},
+						{"type": "number"},
+					},
+					"result": map[string]interface{}{
+						"type": "array",
+					},
+				},
+			},
+			{
+				"name": "json.marshal",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "any"},
+					},
+					"result": map[string]interface{}{
+						"type": "string",
+					},
+				},
+			},
+			{
+				"name": "json.unmarshal",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "string"},
+					},
+					"result": map[string]interface{}{
+						"type": "any",
+					},
+				},
+			},
+			{
+				"name": "base64.encode",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "string"},
+					},
+					"result": map[string]interface{}{
+						"type": "string",
+					},
+				},
+			},
+			{
+				"name": "base64.decode",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "string"},
+					},
+					"result": map[string]interface{}{
+						"type": "string",
+					},
+				},
+			},
+			{
+				"name": "crypto.md5",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "string"},
+					},
+					"result": map[string]interface{}{
+						"type": "string",
+					},
+				},
+			},
+			{
+				"name": "crypto.sha256",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "string"},
+					},
+					"result": map[string]interface{}{
+						"type": "string",
+					},
+				},
+			},
+			{
+				"name": "time.now_ns",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{},
+					"result": map[string]interface{}{
+						"type": "number",
+					},
+				},
+			},
+			{
+				"name": "time.parse_rfc3339_ns",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "string"},
+					},
+					"result": map[string]interface{}{
+						"type": "number",
+					},
+				},
+			},
+		},
+		"allow_net": []string{""},
+	}
+
+	blob, err := json.Marshal(minimalCapabilities)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal minimal capabilities: %w", err)
+	}
+
 	return string(blob), nil
 }
 
