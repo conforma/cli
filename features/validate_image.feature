@@ -1261,3 +1261,154 @@ Feature: evaluate enterprise contract
     Then the exit status should be 1
      And the output should match the snapshot
      And the "${TMPDIR}/output.json" file should match the snapshot
+
+  Scenario: VSA generation with local storage backend
+    Given a key pair named "vsa-test"
+    Given an image named "acceptance/vsa-test-image"
+    Given a valid image signature of "acceptance/vsa-test-image" image signed by the "vsa-test" key
+    Given a valid Rekor entry for image signature of "acceptance/vsa-test-image"
+    Given a valid attestation of "acceptance/vsa-test-image" signed by the "vsa-test" key
+    Given a valid Rekor entry for attestation of "acceptance/vsa-test-image"
+    Given a git repository named "vsa-policy" with
+      | main.rego | examples/happy_day.rego |
+    Given policy configuration named "vsa-ec-policy" with specification
+    """
+    {
+      "sources": [
+        {
+          "policy": [
+            "git::https://${GITHOST}/git/vsa-policy.git"
+          ]
+        }
+      ]
+    }
+    """
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/vsa-test-image --policy acceptance/vsa-ec-policy --public-key ${vsa-test_PUBLIC_KEY} --rekor-url ${REKOR} --vsa --vsa-signing-key ${vsa-test_PRIVATE_KEY} --vsa-upload local@${TMPDIR}/vsa-output --output json"
+    Then the exit status should be 0
+    Then the output should match the snapshot
+    And VSA envelope files should exist in "${TMPDIR}/vsa-output"
+    And the output should contain "[VSA] Component VSA attested and envelope written"
+    And the output should contain "[VSA] Snapshot VSA attested and envelope written"
+    And the output should contain "[VSA] Starting upload to 1 storage backend(s)"
+
+  Scenario: VSA generation with Rekor storage backend
+    Given a key pair named "vsa-rekor"
+    Given an image named "acceptance/vsa-rekor-image"
+    Given a valid image signature of "acceptance/vsa-rekor-image" image signed by the "vsa-rekor" key
+    Given a valid Rekor entry for image signature of "acceptance/vsa-rekor-image"
+    Given a valid attestation of "acceptance/vsa-rekor-image" signed by the "vsa-rekor" key
+    Given a valid Rekor entry for attestation of "acceptance/vsa-rekor-image"
+    Given a git repository named "vsa-rekor-policy" with
+      | main.rego | examples/happy_day.rego |
+    Given policy configuration named "vsa-rekor-ec-policy" with specification
+    """
+    {
+      "sources": [
+        {
+          "policy": [
+            "git::https://${GITHOST}/git/vsa-rekor-policy.git"
+          ]
+        }
+      ]
+    }
+    """
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/vsa-rekor-image --policy acceptance/vsa-rekor-ec-policy --public-key ${vsa-rekor_PUBLIC_KEY} --rekor-url ${REKOR} --vsa --vsa-signing-key ${vsa-rekor_PRIVATE_KEY} --vsa-upload rekor@${REKOR} --output json"
+    Then the exit status should be 0
+    Then the output should match the snapshot
+    And the output should contain "[VSA] Component VSA attested and envelope written"
+    And the output should contain "[VSA] Snapshot VSA attested and envelope written"
+    And the output should contain "[VSA] Starting upload to 1 storage backend(s)"
+    And the output should contain "[VSA] Successfully uploaded Component VSA to Rekor"
+    And the output should contain "[VSA] Successfully uploaded Snapshot VSA to Rekor"
+
+  Scenario: VSA generation with multiple storage backends
+    Given a key pair named "vsa-multi"
+    Given an image named "acceptance/vsa-multi-image"
+    Given a valid image signature of "acceptance/vsa-multi-image" image signed by the "vsa-multi" key
+    Given a valid Rekor entry for image signature of "acceptance/vsa-multi-image"
+    Given a valid attestation of "acceptance/vsa-multi-image" signed by the "vsa-multi" key
+    Given a valid Rekor entry for attestation of "acceptance/vsa-multi-image"
+    Given a git repository named "vsa-multi-policy" with
+      | main.rego | examples/happy_day.rego |
+    Given policy configuration named "vsa-multi-ec-policy" with specification
+    """
+    {
+      "sources": [
+        {
+          "policy": [
+            "git::https://${GITHOST}/git/vsa-multi-policy.git"
+          ]
+        }
+      ]
+    }
+    """
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/vsa-multi-image --policy acceptance/vsa-multi-ec-policy --public-key ${vsa-multi_PUBLIC_KEY} --rekor-url ${REKOR} --vsa --vsa-signing-key ${vsa-multi_PRIVATE_KEY} --vsa-upload local@${TMPDIR}/vsa-multi-output --vsa-upload rekor@${REKOR} --output json"
+    Then the exit status should be 0
+    Then the output should match the snapshot
+    And VSA envelope files should exist in "${TMPDIR}/vsa-multi-output"
+    And the output should contain "[VSA] Starting upload to 2 storage backend(s)"
+    And the output should contain "[VSA] Successfully uploaded Component VSA to Rekor"
+    And the output should contain "[VSA] Successfully uploaded Snapshot VSA to Rekor"
+    And the output should contain "[VSA] Successfully saved Component VSA to local file"
+    And the output should contain "[VSA] Successfully saved Snapshot VSA to local file"
+
+  Scenario: VSA generation with invalid storage backend configuration
+    Given a key pair named "vsa-invalid"
+    Given an image named "acceptance/vsa-invalid-image"
+    Given a valid image signature of "acceptance/vsa-invalid-image" image signed by the "vsa-invalid" key
+    Given a valid Rekor entry for image signature of "acceptance/vsa-invalid-image"
+    Given a valid attestation of "acceptance/vsa-invalid-image" signed by the "vsa-invalid" key
+    Given a valid Rekor entry for attestation of "acceptance/vsa-invalid-image"
+    Given a git repository named "vsa-invalid-policy" with
+      | main.rego | examples/happy_day.rego |
+    Given policy configuration named "vsa-invalid-ec-policy" with specification
+    """
+    {
+      "sources": [
+        {
+          "policy": [
+            "git::https://${GITHOST}/git/vsa-invalid-policy.git"
+          ]
+        }
+      ]
+    }
+    """
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/vsa-invalid-image --policy acceptance/vsa-invalid-ec-policy --public-key ${vsa-invalid_PUBLIC_KEY} --rekor-url ${REKOR} --vsa --vsa-signing-key ${vsa-invalid_PRIVATE_KEY} --vsa-upload invalid-backend@somewhere --output json"
+    Then the exit status should be 0
+    Then the output should match the snapshot
+    And the output should contain "unsupported storage backend: invalid-backend"
+
+  Scenario: VSA generation with multiple images
+    Given a key pair named "vsa-multiple"
+    Given an image named "acceptance/vsa-multiple-image-1"
+    Given a valid image signature of "acceptance/vsa-multiple-image-1" image signed by the "vsa-multiple" key
+    Given a valid Rekor entry for image signature of "acceptance/vsa-multiple-image-1"
+    Given a valid attestation of "acceptance/vsa-multiple-image-1" signed by the "vsa-multiple" key
+    Given a valid Rekor entry for attestation of "acceptance/vsa-multiple-image-1"
+    Given an image named "acceptance/vsa-multiple-image-2"
+    Given a valid image signature of "acceptance/vsa-multiple-image-2" image signed by the "vsa-multiple" key
+    Given a valid Rekor entry for image signature of "acceptance/vsa-multiple-image-2"
+    Given a valid attestation of "acceptance/vsa-multiple-image-2" signed by the "vsa-multiple" key
+    Given a valid Rekor entry for attestation of "acceptance/vsa-multiple-image-2"
+    Given a git repository named "vsa-multiple-policy" with
+      | main.rego | examples/happy_day.rego |
+    Given policy configuration named "vsa-multiple-ec-policy" with specification
+    """
+    {
+      "sources": [
+        {
+          "policy": [
+            "git::https://${GITHOST}/git/vsa-multiple-policy.git"
+          ]
+        }
+      ]
+    }
+    """
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/vsa-multiple-image-1 --image ${REGISTRY}/acceptance/vsa-multiple-image-2 --policy acceptance/vsa-multiple-ec-policy --public-key ${vsa-multiple_PUBLIC_KEY} --rekor-url ${REKOR} --vsa --vsa-signing-key ${vsa-multiple_PRIVATE_KEY} --vsa-upload local@${TMPDIR}/vsa-multiple-output --output json"
+    Then the exit status should be 0
+    Then the output should match the snapshot
+    And VSA envelope files should exist in "${TMPDIR}/vsa-multiple-output"
+    And multiple VSA envelope files should exist for different images in "${TMPDIR}/vsa-multiple-output"
+    And the output should contain "[VSA] Component VSA attested and envelope written"
+    And the output should contain "[VSA] Snapshot VSA attested and envelope written"
+    And the output should contain "[VSA] Starting upload to 1 storage backend(s)"

@@ -29,27 +29,29 @@ import (
 
 	"github.com/sigstore/cosign/v2/pkg/cosign"
 	att "github.com/sigstore/cosign/v2/pkg/cosign/attestation"
-	"github.com/sigstore/cosign/v2/pkg/types"
+	cosigntypes "github.com/sigstore/cosign/v2/pkg/types"
 	"github.com/sigstore/sigstore/pkg/signature"
 	"github.com/sigstore/sigstore/pkg/signature/dsse"
 	sigopts "github.com/sigstore/sigstore/pkg/signature/options"
 	"github.com/spf13/afero"
 )
 
-var loadPrivateKey = cosign.LoadPrivateKey
+// LoadPrivateKey is aliased to allow easy testing.
+var LoadPrivateKey = cosign.LoadPrivateKey
 
 type Attestor struct {
-	PredicatePath string // path to the raw VSA (predicate) JSON
-	PredicateType string // e.g. "https://enterprisecontract.dev/attestations/vsa/v1" // TODO: make this configurable
-	Digest        string // sha256:abcd…  (as returned by `skopeo inspect --format {{.Digest}}`)
-	Repo          string // "quay.io/acme/widget" (hostname/namespace/repo)
-	Signer        *Signer
+	PredicatePath string  // path to the raw VSA (predicate) JSON
+	PredicateType string  // e.g. "https://enterprisecontract.dev/attestations/vsa/v1" // TODO: make this configurable
+	Digest        string  // sha256:abcd…  (as returned by `skopeo inspect --format {{.Digest}}`)
+	Repo          string  // "quay.io/acme/widget" (hostname/namespace/repo)
+	Signer        *Signer // Signer is the signer used to sign the VSA
 }
 
 type Signer struct {
-	KeyPath    string
-	FS         afero.Fs
-	WrapSigner signature.Signer
+	KeyPath        string
+	FS             afero.Fs
+	WrapSigner     signature.Signer
+	SignerVerifier signature.SignerVerifier // Store the original signer for public key access
 }
 
 func NewSigner(keyPath string, fs afero.Fs) (*Signer, error) {
@@ -58,15 +60,16 @@ func NewSigner(keyPath string, fs afero.Fs) (*Signer, error) {
 		return nil, fmt.Errorf("read key %q: %w", keyPath, err)
 	}
 
-	signerVerifier, err := loadPrivateKey(keyBytes, []byte(os.Getenv("COSIGN_PASSWORD")))
+	signerVerifier, err := LoadPrivateKey(keyBytes, []byte(os.Getenv("COSIGN_PASSWORD")))
 	if err != nil {
 		return nil, fmt.Errorf("load private key: %w", err)
 	}
 
 	return &Signer{
-		KeyPath:    keyPath,
-		FS:         fs,
-		WrapSigner: dsse.WrapSigner(signerVerifier, types.IntotoPayloadType),
+		KeyPath:        keyPath,
+		FS:             fs,
+		WrapSigner:     dsse.WrapSigner(signerVerifier, cosigntypes.IntotoPayloadType),
+		SignerVerifier: signerVerifier,
 	}, nil
 }
 
@@ -89,14 +92,14 @@ func (a Attestor) TargetDigest() string {
 // returns the fully‑signed **DSSE envelope** (identical to cosign's
 // --no-upload output).  Nothing is pushed to a registry or the TLog.
 func (a Attestor) AttestPredicate(ctx context.Context) ([]byte, error) {
-	//-------------------------------------------------------------------- 2. read predicate
+	//-------------------------------------------------------------------- 1. read predicate
 	predFile, err := a.Signer.FS.Open(a.PredicatePath)
 	if err != nil {
 		return nil, fmt.Errorf("open predicate: %w", err)
 	}
 	defer predFile.Close()
 
-	//-------------------------------------------------------------------- 3. make the in‑toto statement
+	//-------------------------------------------------------------------- 2. make the in‑toto statement
 	stmt, err := att.GenerateStatement(att.GenerateOpts{
 		Predicate: predFile,
 		Type:      a.PredicateType,
@@ -109,12 +112,13 @@ func (a Attestor) AttestPredicate(ctx context.Context) ([]byte, error) {
 	}
 	payload, _ := json.Marshal(stmt) // canonicalised by dsse later
 
-	//-------------------------------------------------------------------- 4. sign -> DSSE envelope
+	//-------------------------------------------------------------------- 3. sign -> DSSE envelope
 	env, err := a.Signer.WrapSigner.SignMessage(bytes.NewReader(payload), sigopts.WithContext(ctx))
 	if err != nil {
-		return nil, fmt.Errorf("sign statement: %w", err)
+		return nil, fmt.Errorf("failed to sign VSA: %w", err)
 	}
-	return env, nil // byte‑slice containing the JSON DSSE envelope
+
+	return env, nil
 }
 
 // WriteEnvelope is an optional convenience that mirrors cosign's
@@ -124,6 +128,7 @@ func (a Attestor) WriteEnvelope(data []byte) (string, error) {
 	if err := afero.WriteFile(a.Signer.FS, out, data, 0o644); err != nil {
 		return "", err
 	}
+
 	abs, err := filepath.Abs(out)
 	if err != nil {
 		return "", err
