@@ -2477,3 +2477,70 @@ func createTestArchive(t *testing.T, sourceDir, archivePath string) {
 	})
 	require.NoError(t, err)
 }
+
+// TestDestroy tests the Destroy method of conftestEvaluator.
+func TestConftestEvaluatorDestroy(t *testing.T) {
+	// Setup an in-memory filesystem
+	fs := afero.NewMemMapFs()
+	workDir := "/tmp/workdir"
+
+	// Define test cases
+	testCases := []struct {
+		name         string
+		workDir      string
+		EC_DEBUG     bool
+		expectRemove bool
+	}{
+		{
+			name:         "Non-empty workDir, EC_DEBUG not set",
+			workDir:      workDir,
+			EC_DEBUG:     false,
+			expectRemove: true,
+		},
+		{
+			name:         "Non-empty workDir, EC_DEBUG set",
+			workDir:      workDir,
+			EC_DEBUG:     true,
+			expectRemove: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Set up the environment
+			if tc.workDir != "" {
+				err := fs.MkdirAll(tc.workDir, 0755)
+				assert.NoError(t, err, "Failed to create workDir in in-memory filesystem")
+			}
+
+			if tc.EC_DEBUG {
+				os.Setenv("EC_DEBUG", "true")
+			} else {
+				os.Unsetenv("EC_DEBUG")
+			}
+
+			// Initialize the evaluator
+			conftestEval := conftestEvaluator{
+				workDir: tc.workDir,
+				fs:      fs,
+			}
+
+			// Call Destroy
+			conftestEval.Destroy()
+
+			// Verify the result
+			exists, err := afero.DirExists(fs, tc.workDir)
+			assert.NoError(t, err, "Error checking if workDir exists after Destroy")
+
+			if tc.expectRemove {
+				assert.False(t, exists, "workDir should be removed")
+			} else {
+				assert.True(t, exists, "workDir should not be removed")
+			}
+
+			// Clean up for next test
+			_ = fs.RemoveAll(tc.workDir)
+			os.Unsetenv("EC_DEBUG")
+		})
+	}
+}

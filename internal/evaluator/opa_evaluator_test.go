@@ -112,3 +112,43 @@ func TestDestroy(t *testing.T) {
 		})
 	}
 }
+
+// TestCapabilitiesPath tests the CapabilitiesPath method of opaEvaluator.
+func TestCapabilitiesPath(t *testing.T) {
+	// Define test cases
+	testCases := []struct {
+		name     string
+		workDir  string
+		expected string
+	}{
+		{
+			name:     "Non-empty workDir",
+			workDir:  "/tmp/workdir",
+			expected: "/tmp/workdir/capabilities.json",
+		},
+		{
+			name:     "Root workDir",
+			workDir:  "/",
+			expected: "/capabilities.json",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create a mock filesystem (though not strictly needed for this test)
+			fs := afero.NewMemMapFs()
+
+			// Initialize the evaluator with test data
+			opaEval := opaEvaluator{
+				workDir: tc.workDir,
+				fs:      fs,
+			}
+
+			// Call CapabilitiesPath
+			result := opaEval.CapabilitiesPath()
+
+			// Verify the result
+			assert.Equal(t, tc.expected, result, "CapabilitiesPath should return the expected path")
+		})
+	}
+}
