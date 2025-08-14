@@ -174,19 +174,18 @@ type testRunner interface {
 }
 
 const (
-	effectiveOnFormat         = "2006-01-02T15:04:05Z"
-	effectiveOnTimeout        = -90 * 24 * time.Hour // keep effective_on metadata up to 90 days
-	metadataQuery             = "query"
-	metadataCode              = "code"
-	metadataCollections       = "collections"
-	metadataDependsOn         = "depends_on"
-	metadataDescription       = "description"
-	metadataPipelineIntention = "pipeline_intention"
-	metadataSeverity          = "severity"
-	metadataEffectiveOn       = "effective_on"
-	metadataSolution          = "solution"
-	metadataTerm              = "term"
-	metadataTitle             = "title"
+	effectiveOnFormat   = "2006-01-02T15:04:05Z"
+	effectiveOnTimeout  = -90 * 24 * time.Hour // keep effective_on metadata up to 90 days
+	metadataQuery       = "query"
+	metadataCode        = "code"
+	metadataCollections = "collections"
+	metadataDependsOn   = "depends_on"
+	metadataDescription = "description"
+	metadataSeverity    = "severity"
+	metadataEffectiveOn = "effective_on"
+	metadataSolution    = "solution"
+	metadataTerm        = "term"
+	metadataTitle       = "title"
 )
 
 const (
