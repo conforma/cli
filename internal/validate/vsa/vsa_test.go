@@ -460,3 +460,75 @@ func TestFilterReportForComponent(t *testing.T) {
 		})
 	}
 }
+
+func TestIsVSAExpired(t *testing.T) {
+	now := time.Now()
+	tests := []struct {
+		name                string
+		vsaTimestamp        time.Time
+		expirationThreshold time.Duration
+		expected            bool
+	}{
+		{
+			name:                "VSA within threshold - not expired",
+			vsaTimestamp:        now.Add(-1 * time.Hour), // 1 hour ago
+			expirationThreshold: 24 * time.Hour,          // 24 hour threshold
+			expected:            false,
+		},
+		{
+			name:                "VSA beyond threshold - expired",
+			vsaTimestamp:        now.Add(-25 * time.Hour), // 25 hours ago
+			expirationThreshold: 24 * time.Hour,           // 24 hour threshold
+			expected:            true,
+		},
+		{
+			name:                "VSA exactly at threshold boundary - expired",
+			vsaTimestamp:        now.Add(-24 * time.Hour), // exactly 24 hours ago
+			expirationThreshold: 24 * time.Hour,           // 24 hour threshold
+			expected:            true,                     // Should be expired at exactly the boundary
+		},
+		{
+			name:                "Zero expiration threshold - not expired",
+			vsaTimestamp:        now.Add(-1000 * time.Hour), // very old
+			expirationThreshold: 0,                          // no expiration
+			expected:            false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsVSAExpired(tt.vsaTimestamp, tt.expirationThreshold)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestNewVSAChecker(t *testing.T) {
+	tests := []struct {
+		name            string
+		rekorURL        string
+		timeout         time.Duration
+		expectedTimeout time.Duration
+	}{
+		{
+			name:            "with timeout",
+			rekorURL:        "https://rekor.sigstore.dev",
+			timeout:         60 * time.Second,
+			expectedTimeout: 60 * time.Second,
+		},
+		{
+			name:            "zero timeout uses default",
+			rekorURL:        "https://rekor.sigstore.dev",
+			timeout:         0,
+			expectedTimeout: 30 * time.Second,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			checker := NewVSAChecker(tt.rekorURL, tt.timeout)
+			assert.Equal(t, tt.rekorURL, checker.RekorURL)
+			assert.Equal(t, tt.expectedTimeout, checker.Timeout)
+		})
+	}
+}

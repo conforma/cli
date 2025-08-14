@@ -40,6 +40,7 @@ import (
 	"github.com/conforma/cli/acceptance/tekton"
 	"github.com/conforma/cli/acceptance/testenv"
 	"github.com/conforma/cli/acceptance/tuf"
+	"github.com/conforma/cli/acceptance/vsa"
 	"github.com/conforma/cli/acceptance/wiremock"
 )
 
@@ -73,6 +74,7 @@ func initializeScenario(sc *godog.ScenarioContext) {
 	pipeline.AddStepsTo(sc)
 	conftest.AddStepsTo(sc)
 	tuf.AddStepsTo(sc)
+	vsa.AddStepsTo(sc)
 
 	sc.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {
 		logger, ctx := log.LoggerFor(ctx)

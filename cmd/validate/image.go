@@ -24,6 +24,7 @@ import (
 	"runtime/trace"
 	"sort"
 	"strings"
+	"time"
 
 	hd "github.com/MakeNowJust/heredoc"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -36,6 +37,7 @@ import (
 	"github.com/conforma/cli/internal/applicationsnapshot"
 	"github.com/conforma/cli/internal/evaluator"
 	"github.com/conforma/cli/internal/format"
+	"github.com/conforma/cli/internal/image"
 	"github.com/conforma/cli/internal/output"
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/policy/source"
@@ -78,10 +80,12 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 		workers                     int
 		vsaEnabled                  bool
 		vsaSigningKey               string
-		vsaUpload                   string
+		vsaUpload                   []string
+		vsaExpiration               time.Duration
 	}{
-		strict:  true,
-		workers: 5,
+		strict:        true,
+		workers:       5,
+		vsaExpiration: 168 * time.Hour, // 7 days default
 	}
 
 	validOutputFormats := applicationsnapshot.OutputFormats
@@ -360,7 +364,18 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 					}
 
 					log.Debugf("Worker %d got a component %q", id, comp.ContainerImage)
-					out, err := validate(ctx, comp, data.spec, data.policy, evaluators, data.info)
+
+					// Use VSA-aware validation if VSA checking is enabled
+					var out *output.Output
+					var err error
+					rekorUrl := data.policy.Spec().RekorUrl
+					if data.vsaExpiration > 0 && rekorUrl != "" {
+						// Import needed for the new validation function
+						out, err = image.ValidateImageWithVSACheck(ctx, comp, data.spec, data.policy, evaluators, data.info, data.vsaExpiration, rekorUrl)
+					} else {
+						// Use original validation when VSA checking is disabled
+						out, err = validate(ctx, comp, data.spec, data.policy, evaluators, data.info)
+					}
 					res := result{
 						err: err,
 						component: applicationsnapshot.Component{
@@ -492,10 +507,41 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				}
 
 				// Process all VSAs using the service
-				err = vsaService.ProcessAllVSAs(cmd.Context(), report, getGitURL, getDigest)
+				vsaResult, err := vsaService.ProcessAllVSAs(cmd.Context(), report, getGitURL, getDigest)
 				if err != nil {
 					log.Errorf("Failed to process VSAs: %v", err)
 					// Don't return error here, continue with the rest of the command
+				} else {
+					// Upload VSAs to configured storage backends
+					if len(data.vsaUpload) > 0 {
+						log.Infof("[VSA] Starting upload to %d storage backend(s)", len(data.vsaUpload))
+
+						// Upload component VSA envelopes
+						for imageRef, envelopePath := range vsaResult.ComponentEnvelopes {
+							uploadErr := vsa.UploadVSAEnvelope(cmd.Context(), envelopePath, imageRef, data.vsaUpload, signer)
+							if uploadErr != nil {
+								log.Errorf("[VSA] Upload failed for component %s: %v", imageRef, uploadErr)
+							}
+						}
+
+						// Upload snapshot VSA envelope if it exists
+						if vsaResult.SnapshotEnvelope != "" {
+							uploadErr := vsa.UploadVSAEnvelope(cmd.Context(), vsaResult.SnapshotEnvelope, "", data.vsaUpload, signer)
+							if uploadErr != nil {
+								log.Errorf("[VSA] Upload failed for snapshot: %v", uploadErr)
+							}
+						}
+					} else {
+						// No upload backends configured - inform user about next steps
+						totalFiles := len(vsaResult.ComponentEnvelopes)
+						if vsaResult.SnapshotEnvelope != "" {
+							totalFiles++
+						}
+
+						if totalFiles > 0 {
+							log.Errorf("[VSA] VSA files generated but not uploaded (no --vsa-upload backends specified)")
+						}
+					}
 				}
 			}
 
@@ -593,7 +639,8 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 
 	cmd.Flags().BoolVar(&data.vsaEnabled, "vsa", false, "Generate a Verification Summary Attestation (VSA) for each validated image.")
 	cmd.Flags().StringVar(&data.vsaSigningKey, "vsa-signing-key", "", "Path to the private key for signing the VSA.")
-	cmd.Flags().StringVar(&data.vsaUpload, "vsa-upload", "oci", "Where to upload the VSA attestation: oci, rekor, none")
+	cmd.Flags().StringSliceVar(&data.vsaUpload, "vsa-upload", nil, "Storage backends for VSA upload. Format: backend@url?param=value. Examples: rekor@https://rekor.sigstore.dev, local@./vsa-dir")
+	cmd.Flags().DurationVar(&data.vsaExpiration, "vsa-expiration", data.vsaExpiration, "Expiration threshold for existing VSAs. If a valid VSA exists and is newer than this threshold, validation will be skipped. (default 168h)")
 
 	if len(data.input) > 0 || len(data.filePath) > 0 || len(data.images) > 0 {
 		if err := cmd.MarkFlagRequired("image"); err != nil {

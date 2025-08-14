@@ -20,9 +20,12 @@ package vsa
 import (
 	"context"
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"math/big"
 	"path/filepath"
 	"testing"
 
@@ -34,9 +37,10 @@ import (
 // testSigner creates a mock signer for testing that bypasses expensive crypto operations
 func testSigner(keyPath string, fs afero.Fs) *Signer {
 	return &Signer{
-		KeyPath:    keyPath,
-		FS:         fs,
-		WrapSigner: &fakeSigner{},
+		KeyPath:        keyPath,
+		FS:             fs,
+		WrapSigner:     &fakeSigner{},
+		SignerVerifier: &fakeSigner{},
 	}
 }
 
@@ -44,7 +48,12 @@ func testSigner(keyPath string, fs afero.Fs) *Signer {
 type fakeSigner struct{}
 
 func (f *fakeSigner) PublicKey(opts ...signature.PublicKeyOption) (crypto.PublicKey, error) {
-	return nil, nil
+	// Return a mock ECDSA public key for testing
+	return &ecdsa.PublicKey{
+		Curve: elliptic.P256(),
+		X:     big.NewInt(1),
+		Y:     big.NewInt(1),
+	}, nil
 }
 
 // SignMessage must match signature.SignerVerifier:
@@ -68,17 +77,17 @@ func (f *fakeSigner) VerifySignature(signature, message io.Reader, opts ...signa
 	return nil
 }
 
-// Encrypted test key (not actually used since we use testSigner)
+// Unencrypted test key for testing (proper SIGSTORE format)
 const testECKey = `-----BEGIN ENCRYPTED SIGSTORE PRIVATE KEY-----
 eyJrZGYiOnsibmFtZSI6InNjcnlwdCIsInBhcmFtcyI6eyJOIjo2NTUzNiwiciI6
-OCwicCI6MX0sInNhbHQiOiJLYU9OQzduQVJLOVgxM1FoaWFucjAwTTBGYys2Sitr
-dnAxN1FuanpiVk9nPSJ9LCJjaXBoZXIiOnsibmFtZSI6Im5hY2wvc2VjcmV0Ym94
-Iiwibm9uY2UiOiJVOHZqWWtqMlZOUFZGdlZFZWZ3bXZ5VGloUERrelBoaCJ9LCJj
-aXBoZXJ0ZXh0IjoidWNWMnQ4TTZVNFJvb29FOXc0d3dkc3E1RDYrS2RKY245dERT
-KzFwRDRGN040SVJOWEgzSTBua3h1a3NackFOUHR1emIvTkVYQ201dUp3Zjh3Qzl1
-VlprbXdwNU5jRUZ6b3ZNS3JCZmNvdXdjaEkrMzkrQ0NhbVZPbzBucmRnZjhvcmpK
-dXdrWDBYL1phY0RUTERGaUxyc1laMWVMMmlqMGU1MVRpZmVQNTl4WXNPK1FnM1Jv
-OURRVjNQMk9ndDFDaVFHeGg1VXhUZytGc3c9PSJ9
+OCwicCI6MX0sInNhbHQiOiJKK0NwVkQ3RnE5OVhNNjdScFFweG1QUlBIWFZxMVpS
+a0RuN0hva1V4aDl3PSJ9LCJjaXBoZXIiOnsibmFtZSI6Im5hY2wvc2VjcmV0Ym94
+Iiwibm9uY2UiOiJhVHdJeEdrOHMvaUdHUGJqRW9wUkJackM4K0xHVmFEOSJ9LCJj
+aXBoZXJ0ZXh0IjoiRyt1eFU4K0tvMnpCdklRajhWc0d2bnZ2MDFHaVladU9zR3pY
+OW1kTGNGZGRlYUNEcnFkc2UrQk4wR0lROERmNWtQV2JuQWxXMnhqcTNCL1piZzNH
+VmJYSEhwK0o5NGxKc1RFQ0U4U1hpTkxaOGVJSGFwQkVrTDc1Mk5xMCtZMkRSbjVy
+azNoSXRYaHBLYWxueEY5S0lqNFR1YkRiRHo1MGlWd1I2MkdSWlJPaFRYa0dEOXNr
+RGNWMnRvTWdxSVlNQ2N6bzVMRU4weEhEM3c9PSJ9
 -----END ENCRYPTED SIGSTORE PRIVATE KEY-----`
 
 const (
@@ -122,7 +131,6 @@ func TestNewSigner(t *testing.T) {
 			fs, keyPath := tc.prepare(tmp)
 
 			if tc.expectErr {
-				// For error cases, still test the real NewSigner to verify error handling
 				_, err := NewSigner(keyPath, fs)
 				if err == nil {
 					t.Fatalf("expected error, got nil")
@@ -130,10 +138,44 @@ func TestNewSigner(t *testing.T) {
 				return
 			}
 
-			// For success cases, use testSigner to avoid timeouts
-			signer := testSigner(keyPath, fs)
+			// Mock the loadPrivateKey function for success cases to avoid expensive decryption
+			originalLoadPrivateKey := LoadPrivateKey
+			defer func() { LoadPrivateKey = originalLoadPrivateKey }()
+
+			LoadPrivateKey = func(keyBytes, password []byte) (signature.SignerVerifier, error) {
+				return &fakeSigner{}, nil
+			}
+
+			signer, err := NewSigner(keyPath, fs)
+
+			// For success cases, verify all fields are properly set
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
 			if signer.WrapSigner == nil {
 				t.Errorf("WrapSigner should not be nil")
+			}
+
+			if signer.SignerVerifier == nil {
+				t.Errorf("SignerVerifier should not be nil")
+			}
+
+			if signer.KeyPath != keyPath {
+				t.Errorf("KeyPath mismatch: got %s, want %s", signer.KeyPath, keyPath)
+			}
+
+			if signer.FS != fs {
+				t.Errorf("FS should be set")
+			}
+
+			// Verify SignerVerifier can be used to get public key
+			pubKey, err := signer.SignerVerifier.PublicKey()
+			if err != nil {
+				t.Errorf("SignerVerifier.PublicKey() failed: %v", err)
+			}
+			if pubKey == nil {
+				t.Errorf("SignerVerifier.PublicKey() returned nil")
 			}
 		})
 	}
