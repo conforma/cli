@@ -3194,3 +3194,268 @@ func TestMinimalCapabilitiesFallback(t *testing.T) {
 
 	t.Logf("Minimal capabilities fallback test passed")
 }
+
+func TestExtractCodeFromRuleBody(t *testing.T) {
+	tests := []struct {
+		name     string
+		rego     string
+		expected string
+	}{
+		{
+			name: "nil body",
+			rego: `package test
+
+rule := true`,
+			expected: "",
+		},
+		{
+			name: "empty body",
+			rego: `package test
+
+rule := true if { }`,
+			expected: "",
+		},
+		{
+			name: "non-assignment expression",
+			rego: `package test
+
+rule := true if { some_function("arg1") }`,
+			expected: "",
+		},
+		{
+			name: "assignment with insufficient operands",
+			rego: `package test
+
+rule := true if { result := true }`,
+			expected: "",
+		},
+		{
+			name: "assignment with non-object second operand",
+			rego: `package test
+
+rule := true if { result := "not_an_object" }`,
+			expected: "",
+		},
+		{
+			name: "assignment with object but no code key",
+			rego: `package test
+
+rule := true if { result := {"message": "test message", "severity": "high"} }`,
+			expected: "",
+		},
+		{
+			name: "assignment with code key but non-string value",
+			rego: `package test
+
+rule := true if { result := {"code": 123, "message": "test message"} }`,
+			expected: "",
+		},
+		{
+			name: "assignment with code key and string value",
+			rego: `package test
+
+rule := true if { result := {"code": "test.rule.code", "message": "test message"} }`,
+			expected: "test.rule.code",
+		},
+		{
+			name: "assignment with only code key",
+			rego: `package test
+
+rule := true if { result := {"code": "simple.code"} }`,
+			expected: "simple.code",
+		},
+		{
+			name: "multiple expressions, code in first",
+			rego: `package test
+
+rule := true if { 
+	result := {"code": "first.rule.code"}
+	other := {"code": "second.rule.code"} 
+}`,
+			expected: "first.rule.code",
+		},
+		{
+			name: "multiple expressions, code in second",
+			rego: `package test
+
+rule := true if { 
+	other := {"message": "no code here"}
+	result := {"code": "second.rule.code"} 
+}`,
+			expected: "second.rule.code",
+		},
+		{
+			name: "mixed expressions with code",
+			rego: `package test
+
+rule := true if { 
+	some_function("arg1")
+	result := {"code": "mixed.rule.code", "message": "test message"}
+	another_function("arg2") 
+}`,
+			expected: "mixed.rule.code",
+		},
+		{
+			name: "empty string code value",
+			rego: `package test
+
+rule := true if { result := {"code": "", "message": "test message"} }`,
+			expected: "",
+		},
+		{
+			name: "complex object with nested structures",
+			rego: `package test
+
+rule := true if { result := {"code": "complex.rule.code", "metadata": {"nested": "value"}, "array": ["item1", "item2"]} }`,
+			expected: "complex.rule.code",
+		},
+		{
+			name: "real-world result_helper pattern",
+			rego: `package cve
+
+deny contains result if {
+	some level, vulns in _grouped_vulns.restrict_cve_security_levels
+	some vuln in vulns
+
+	leeway := _compute_leeway(vuln, level)
+	name := _name(vuln)
+
+	result := _with_effective_on(
+		lib.result_helper_with_term(rego.metadata.chain(), [name, level], name),
+		leeway,
+	)
+}`,
+			expected: "",
+		},
+		{
+			name: "real-world result_helper_with_term pattern",
+			rego: `package cve
+
+warn contains result if {
+	some level, vulns in _grouped_vulns.warn_cve_security_levels
+	some vuln in vulns
+
+	name := _name(vuln)
+	result := lib.result_helper_with_term(rego.metadata.chain(), [name, level], name)
+}`,
+			expected: "",
+		},
+		{
+			name: "real-world simple result_helper pattern",
+			rego: `package attestation_type
+
+deny contains result if {
+	count(lib.pipelinerun_attestations) == 0
+	result := lib.result_helper(rego.metadata.chain(), [])
+}`,
+			expected: "",
+		},
+		{
+			name: "real-world result_helper_with_severity pattern",
+			rego: `package attestation_type
+
+deny contains result if {
+	some error in _rule_data_errors
+	result := lib.result_helper_with_severity(rego.metadata.chain(), [error.message], error.severity)
+}`,
+			expected: "",
+		},
+		{
+			name: "real-world object.union pattern",
+			rego: `package cve
+
+deny contains result if {
+	some level, vulns in _grouped_vulns.restrict_unpatched_cve_security_levels
+	some vuln in vulns
+
+	leeway := _compute_leeway(vuln, level)
+	name := _name(vuln)
+
+	result := _with_effective_on(
+		lib.result_helper_with_term(rego.metadata.chain(), [name, level], name),
+		leeway,
+	)
+}`,
+			expected: "",
+		},
+		{
+			name: "real-world with term pattern",
+			rego: `package test
+
+deny contains result if {
+	some test in failing_tests
+	result := lib.result_helper_with_term(rego.metadata.chain(), [test], test)
+}`,
+			expected: "",
+		},
+		{
+			name: "real-world complex nested function calls",
+			rego: `package cve
+
+deny contains result if {
+	some level, vulns in _grouped_vulns.restrict_cve_security_levels
+	some vuln in vulns
+
+	leeway := _compute_leeway(vuln, level)
+	name := _name(vuln)
+
+	result := _with_effective_on(
+		lib.result_helper_with_term(rego.metadata.chain(), [name, level], name),
+		leeway,
+	)
+}`,
+			expected: "",
+		},
+		{
+			name: "real-world multiple assignments in rule body",
+			rego: `package test
+
+deny contains result if {
+	some test in failing_tests
+	severity := "high"
+	message := sprintf("Test %s failed", [test])
+	result := lib.result_helper_with_term(rego.metadata.chain(), [message], test)
+}`,
+			expected: "",
+		},
+		{
+			name: "real-world multiple variable assignments",
+			rego: `package test
+
+deny contains result if {
+	some test in failing_tests
+	severity := "high"
+	message := sprintf("Test %s failed", [test])
+	result := lib.result_helper_with_term(rego.metadata.chain(), [message], test)
+}`,
+			expected: "",
+		},
+		{
+			name: "real-world with effective_on pattern",
+			rego: `package labels
+
+deny contains result if {
+	some label in input.image.labels
+	not label.key in lib.rule_data("allowed_labels")
+	
+	effective_on := time.format([time.now_ns(), "UTC", "2006-01-02T15:04:05Z07:00"])
+	result := _with_effective_on(
+		lib.result_helper(rego.metadata.chain(), [input.image.ref]),
+		effective_on,
+	)
+}`,
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Parse the Rego code to get a valid AST
+			module := ast.MustParseModuleWithOpts(tt.rego, ast.ParserOptions{})
+			ruleRef := module.Rules[0]
+
+			result := extractCodeFromRuleBody(ruleRef)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
