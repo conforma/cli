@@ -380,12 +380,12 @@ func (c conftestEvaluator) CapabilitiesPath() string {
 	return path.Join(c.workDir, "capabilities.json")
 }
 
-type policyRules map[string]rule.Info
+type PolicyRules map[string]rule.Info
 
 // Add a new type to track non-annotated rules separately
 type nonAnnotatedRules map[string]bool
 
-func (r *policyRules) collect(a *ast.AnnotationsRef) error {
+func (r *PolicyRules) collect(a *ast.AnnotationsRef) error {
 	if a.Annotations == nil {
 		return nil
 	}
@@ -420,7 +420,7 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 	// NOTE: emphasis on _all rules from all sources_; meaning that if two rules
 	// exist with the same code in two separate sources the collected rule
 	// information is not deterministic
-	rules := policyRules{}
+	rules := PolicyRules{}
 	// Track non-annotated rules separately for filtering purposes only
 	nonAnnotatedRules := nonAnnotatedRules{}
 	// Download all sources
@@ -503,7 +503,7 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 
 	// Prepare all rules for policy resolution (both annotated and non-annotated)
 	// Combine annotated and non-annotated rules for filtering
-	allRules := make(policyRules)
+	allRules := make(PolicyRules)
 	for code, rule := range rules {
 		allRules[code] = rule
 	}
@@ -751,7 +751,7 @@ func toRules(results []output.Result) []Result {
 // that hasn't been touched by adding metadata must have succeeded
 func (c conftestEvaluator) computeSuccesses(
 	result Outcome,
-	rules policyRules,
+	rules PolicyRules,
 	target string,
 	missingIncludes map[string]bool,
 	unifiedFilter PostEvaluationFilter,
@@ -838,7 +838,7 @@ func (c conftestEvaluator) computeSuccesses(
 	return successes
 }
 
-func addRuleMetadata(ctx context.Context, result *Result, rules policyRules) {
+func addRuleMetadata(ctx context.Context, result *Result, rules PolicyRules) {
 	code, ok := (*result).Metadata[metadataCode].(string)
 	if ok {
 		addMetadataToResults(ctx, result, rules[code])

@@ -1382,10 +1382,10 @@ func TestCollectAnnotationData(t *testing.T) {
 		ProcessAnnotation: true,
 	})
 
-	rules := policyRules{}
+	rules := PolicyRules{}
 	require.NoError(t, rules.collect(ast.NewAnnotationsRef(module.Annotations[0])))
 
-	assert.Equal(t, policyRules{
+	assert.Equal(t, PolicyRules{
 		"a.b.c.short": {
 			Code:              "a.b.c.short",
 			Collections:       []string{"A", "B", "C"},
@@ -1409,7 +1409,7 @@ func TestRuleMetadata(t *testing.T) {
 	ctx := context.TODO()
 	ctx = context.WithValue(ctx, effectiveTimeKey, effectiveTimeTest)
 
-	rules := policyRules{
+	rules := PolicyRules{
 		"warning1": rule.Info{
 			Title: "Warning1",
 		},
@@ -1436,7 +1436,7 @@ func TestRuleMetadata(t *testing.T) {
 	cases := []struct {
 		name   string
 		result Result
-		rules  policyRules
+		rules  PolicyRules
 		want   Result
 	}{
 		{
@@ -2604,7 +2604,7 @@ func TestMissingIncludesSuccessComputation(t *testing.T) {
 	tests := []struct {
 		name              string
 		result            Outcome
-		rules             policyRules
+		rules             PolicyRules
 		target            string
 		missingIncludes   map[string]bool
 		expectedSuccesses int
@@ -2619,7 +2619,7 @@ func TestMissingIncludesSuccessComputation(t *testing.T) {
 				Skipped:    []Result{},
 				Exceptions: []Result{},
 			},
-			rules: policyRules{
+			rules: PolicyRules{
 				"cve.high_severity": rule.Info{
 					Package: "cve",
 					Code:    "cve.high_severity",
@@ -2641,7 +2641,7 @@ func TestMissingIncludesSuccessComputation(t *testing.T) {
 				Skipped:    []Result{},
 				Exceptions: []Result{},
 			},
-			rules: policyRules{
+			rules: PolicyRules{
 				"cve.high_severity": rule.Info{
 					Package: "cve",
 					Code:    "cve.high_severity",
@@ -2663,7 +2663,7 @@ func TestMissingIncludesSuccessComputation(t *testing.T) {
 				Skipped:    []Result{},
 				Exceptions: []Result{},
 			},
-			rules: policyRules{
+			rules: PolicyRules{
 				"cve.high_severity": rule.Info{
 					Package: "cve",
 					Code:    "cve.high_severity",
@@ -2685,7 +2685,7 @@ func TestMissingIncludesSuccessComputation(t *testing.T) {
 				Skipped:    []Result{},
 				Exceptions: []Result{},
 			},
-			rules: policyRules{
+			rules: PolicyRules{
 				"tasks.build_task": rule.Info{
 					Package:     "tasks",
 					Code:        "tasks.build_task",
@@ -2708,7 +2708,7 @@ func TestMissingIncludesSuccessComputation(t *testing.T) {
 				Skipped:    []Result{},
 				Exceptions: []Result{},
 			},
-			rules: policyRules{
+			rules: PolicyRules{
 				"cve.high_severity": rule.Info{
 					Package: "cve",
 					Code:    "cve.high_severity",
@@ -2730,7 +2730,7 @@ func TestMissingIncludesSuccessComputation(t *testing.T) {
 				Skipped:    []Result{},
 				Exceptions: []Result{},
 			},
-			rules: policyRules{
+			rules: PolicyRules{
 				"cve.high_severity": rule.Info{
 					Package: "cve",
 					Code:    "cve.high_severity",
@@ -2995,7 +2995,7 @@ func TestMissingIncludesIntegration(t *testing.T) {
 			Exceptions: []Result{},
 		}
 
-		rules := policyRules{
+		rules := PolicyRules{
 			"cve.high_severity": rule.Info{
 				Package: "cve",
 				Code:    "cve.high_severity",
@@ -3099,7 +3099,7 @@ func TestMissingIncludesIntegration(t *testing.T) {
 			Exceptions: []Result{},
 		}
 
-		rules := policyRules{
+		rules := PolicyRules{
 			"cve.high_severity": rule.Info{
 				Package: "cve",
 				Code:    "cve.high_severity",
