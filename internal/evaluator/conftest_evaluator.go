@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -39,7 +38,6 @@ import (
 	"github.com/spf13/afero"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	"github.com/conforma/cli/internal/opa"
 	"github.com/conforma/cli/internal/opa/rule"
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/policy/source"
@@ -416,110 +414,15 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		defer region.End()
 	}
 
-	// hold all rule annotations from all policy sources
-	// NOTE: emphasis on _all rules from all sources_; meaning that if two rules
-	// exist with the same code in two separate sources the collected rule
-	// information is not deterministic
-	rules := PolicyRules{}
-	// Track non-annotated rules separately for filtering purposes only
-	nonAnnotatedRules := nonAnnotatedRules{}
-	// Download all sources
-	for _, s := range c.policySources {
-		dir, err := s.GetPolicy(ctx, c.workDir, false)
-		if err != nil {
-			log.Debugf("Unable to download source from %s!", s.PolicyUrl())
-			// TODO do we want to download other policies instead of erroring out?
-			return nil, err
-		}
-		annotations := []*ast.AnnotationsRef{}
-		fs := utils.FS(ctx)
-		// We only want to inspect the directory of policy subdirs, not config or data subdirs.
-		if s.Subdir() == "policy" {
-			annotations, err = opa.InspectDir(fs, dir)
-			if err != nil {
-				errMsg := err
-				if err.Error() == "no rego files found in policy subdirectory" {
-					// Let's try to give some more robust messaging to the user.
-					policyURL, err := url.Parse(s.PolicyUrl())
-					if err != nil {
-						return nil, errMsg
-					}
-					// Do we have a prefix at the end of the URL path?
-					// If not, this means we aren't trying to access a specific file.
-					// TODO: Determine if we want to check for a .git suffix as well?
-					pos := strings.LastIndex(policyURL.Path, ".")
-					if pos == -1 {
-						// Are we accessing a GitHub or GitLab URL? If so, are we beginning with 'https' or 'http'?
-						if (policyURL.Host == "github.com" || policyURL.Host == "gitlab.com") && (policyURL.Scheme == "https" || policyURL.Scheme == "http") {
-							log.Debug("Git Hub or GitLab, http transport, and no file extension, this could be a problem.")
-							errMsg = fmt.Errorf("%s.\nYou've specified a %s URL with an %s:// scheme.\nDid you mean: %s instead?", errMsg, policyURL.Hostname(), policyURL.Scheme, fmt.Sprint(policyURL.Host+policyURL.RequestURI()))
-						}
-					}
-				}
-				return nil, errMsg
-			}
-		}
-
-		// Collect ALL rules for filtering purposes - both with and without annotations
-		// This ensures that rules without metadata (like fail_with_data.rego) are properly included
-		for _, a := range annotations {
-			if a.Annotations != nil {
-				// Rules with annotations - collect full metadata
-				if err := rules.collect(a); err != nil {
-					return nil, err
-				}
-			} else {
-				// Rules without annotations - track for filtering only, not for success computation
-				ruleRef := a.GetRule()
-				if ruleRef != nil {
-					// Extract package name from the rule path
-					packageName := ""
-					if len(a.Path) > 1 {
-						// Path format is typically ["data", "package", "rule"]
-						// We want the package part (index 1)
-						if len(a.Path) >= 2 {
-							packageName = strings.ReplaceAll(a.Path[1].String(), `"`, "")
-						}
-					}
-
-					// Try to extract code from rule body first, fallback to rule name
-					code := extractCodeFromRuleBody(ruleRef)
-
-					// If no code found in body, use rule name
-					if code == "" {
-						shortName := ruleRef.Head.Name.String()
-						code = fmt.Sprintf("%s.%s", packageName, shortName)
-					}
-
-					// Debug: Print non-annotated rule processing
-					log.Debugf("Non-annotated rule: packageName=%s, code=%s", packageName, code)
-
-					// Track for filtering but don't add to rules map for success computation
-					nonAnnotatedRules[code] = true
-				}
-			}
-		}
+	// Use RuleDiscoveryService to discover all rules (both annotated and non-annotated)
+	ruleDiscovery := NewRuleDiscoveryService()
+	rules, nonAnnotatedRules, err := ruleDiscovery.DiscoverRulesWithWorkDir(ctx, c.policySources, c.workDir)
+	if err != nil {
+		return nil, err
 	}
 
-	// Prepare all rules for policy resolution (both annotated and non-annotated)
-	// Combine annotated and non-annotated rules for filtering
-	allRules := make(PolicyRules)
-	for code, rule := range rules {
-		allRules[code] = rule
-	}
-	// Add non-annotated rules as minimal rule.Info for filtering
-	for code := range nonAnnotatedRules {
-		parts := strings.Split(code, ".")
-		if len(parts) >= 2 {
-			packageName := parts[len(parts)-2]
-			shortName := parts[len(parts)-1]
-			allRules[code] = rule.Info{
-				Code:      code,
-				Package:   packageName,
-				ShortName: shortName,
-			}
-		}
-	}
+	// Combine annotated and non-annotated rules for filtering using the service
+	allRules := ruleDiscovery.CombineRulesForFiltering(rules, nonAnnotatedRules)
 
 	var filteredNamespaces []string
 	if c.policyResolver != nil {
