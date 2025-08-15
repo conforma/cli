@@ -6,34 +6,52 @@ This document explains the rule filtering process that occurs in the `Evaluate` 
 
 The rule filtering process consists of several stages:
 
-1. **Pre-Evaluation Filtering** - Rules are filtered before execution based on pipeline intention and include/exclude criteria
+1. **Pre-Evaluation Filtering** - Rules are filtered before execution using PolicyResolver
 2. **Initial Rule Execution** - Filtered policy rules are executed by the conftest runner
-3. **Result Processing** - Each result type (warnings, failures, exceptions, skipped) is processed
-4. **Term Extraction and Analysis** - Terms are extracted from result metadata for matching
-5. **Inclusion/Exclusion Filtering** - Results are filtered based on policy configuration including terms
-6. **Severity-Based Filtering** - Results can be promoted or demoted between warning/failure categories
-7. **Effective Time Filtering** - Future-effective failures are demoted to warnings
-8. **Success Computation** - Success results are computed from unmatched rules
-9. **Missing Includes Handling** - Warnings are generated for unmatched include criteria
-10. **Dependency Trimming** - Results with unsatisfied dependencies are removed
-11. **Final Validation** - Ensures at least some rules were processed
+3. **Post-Evaluation Filtering** - Results are filtered using UnifiedPostEvaluationFilter
+4. **Result Processing** - Each result type (warnings, failures, exceptions, skipped) is processed
+5. **Term Extraction and Analysis** - Terms are extracted from result metadata for matching
+6. **Inclusion/Exclusion Filtering** - Results are filtered based on policy configuration including terms
+7. **Severity-Based Filtering** - Results can be promoted or demoted between warning/failure categories
+8. **Effective Time Filtering** - Future-effective failures are demoted to warnings
+9. **Success Computation** - Success results are computed from unmatched rules
+10. **Missing Includes Handling** - Warnings are generated for unmatched include criteria
+11. **Dependency Trimming** - Results with unsatisfied dependencies are removed
+12. **Final Validation** - Ensures at least some rules were processed
 
 ## Detailed Process
 
 ### 1. Pre-Evaluation Filtering
 
-Before rules are executed, they are filtered based on:
+Before rules are executed, they are filtered using the PolicyResolver:
 
-#### Pipeline Intention Filtering
 ```go
-// Pipeline intention is extracted from ruleData configuration
-intentions := extractStringArrayFromRuleData(source, "pipeline_intention")
+// Use unified policy resolution for pre-evaluation filtering
+var filteredNamespaces []string
+if c.policyResolver != nil {
+    // Use the same PolicyResolver for both pre-evaluation and post-evaluation filtering
+    // This ensures consistent logic and eliminates duplication
+    policyResolution := c.policyResolver.ResolvePolicy(allRules, target.Target)
 
-// Rules are filtered based on pipeline_intention metadata in their annotations
-func (f *PipelineIntentionFilter) Include(_ string, rules []rule.Info) bool {
-    if len(f.targetIntentions) == 0 {
+    // Extract included package names for conftest evaluation
+    for pkg := range policyResolution.IncludedPackages {
+        filteredNamespaces = append(filteredNamespaces, pkg)
+    }
+}
+```
+
+The PolicyResolver performs three phases of filtering:
+
+#### Phase 1: Pipeline Intention Filtering (ECPolicyResolver only)
+```go
+// When pipeline_intention is set in ruleData: only include packages with rules
+// that have matching pipeline_intention metadata
+// When pipeline_intention is NOT set in ruleData: only include packages with rules
+// that have NO pipeline_intention metadata (general-purpose rules)
+func (r *ECPolicyResolver) matchesPipelineIntention(pkgRules []rule.Info) bool {
+    if len(r.pipelineIntentions) == 0 {
         // When no pipeline_intention is configured, only include packages with no pipeline_intention metadata
-        for _, r := range rules {
+        for _, r := range pkgRules {
             if len(r.PipelineIntention) > 0 {
                 return false // Exclude packages with pipeline_intention metadata
             }
@@ -42,9 +60,9 @@ func (f *PipelineIntentionFilter) Include(_ string, rules []rule.Info) bool {
     }
 
     // When pipeline_intention is set, only include packages that contain rules with matching pipeline_intention metadata
-    for _, r := range rules {
+    for _, r := range pkgRules {
         for _, ruleIntention := range r.PipelineIntention {
-            for _, targetIntention := range f.targetIntentions {
+            for _, targetIntention := range r.pipelineIntentions {
                 if ruleIntention == targetIntention {
                     return true // Include packages with matching pipeline_intention metadata
                 }
@@ -55,34 +73,39 @@ func (f *PipelineIntentionFilter) Include(_ string, rules []rule.Info) bool {
 }
 ```
 
-#### Include List Filtering
+#### Phase 2: Rule-by-Rule Evaluation
 ```go
-// Rules are filtered based on include/exclude patterns
-func (f *IncludeListFilter) Include(pkg string, rules []rule.Info) bool {
-    for _, entry := range f.entries {
-        if strings.HasPrefix(entry, "@") {
-            // Collection-based filtering
-            collection := strings.TrimPrefix(entry, "@")
-            for _, rule := range rules {
-                for _, ruleCollection := range rule.Collections {
-                    if ruleCollection == collection {
-                        return true
-                    }
-                }
-            }
-        } else if strings.Contains(entry, ".") {
-            // Rule-specific filtering (package.rule)
-            if pkg+"."+rule.ShortName == entry {
-                return true
-            }
-        } else {
-            // Package-based filtering
-            if pkg == entry {
-                return true
-            }
+// Evaluate each rule in the package and determine if it should be included or excluded
+for _, ruleInfo := range pkgRules {
+    ruleID := ruleInfo.Code
+    r.baseEvaluateRuleInclusion(ruleID, ruleInfo, target, result)
+}
+```
+
+#### Phase 3: Package-Level Determination
+```go
+// If ANY rule in the package is included → Package is included
+// If NO rules are included but SOME rules are excluded → Package is excluded
+// If NO rules are included and NO rules are excluded → Package is not explicitly categorized
+func (r *basePolicyResolver) baseDeterminePackageInclusion(pkg string, pkgRules []rule.Info, result *PolicyResolutionResult) {
+    hasIncludedRules := false
+    hasExcludedRules := false
+
+    for _, ruleInfo := range pkgRules {
+        ruleID := ruleInfo.Code
+        if result.IncludedRules[ruleID] {
+            hasIncludedRules = true
+        }
+        if result.ExcludedRules[ruleID] {
+            hasExcludedRules = true
         }
     }
-    return false
+
+    if hasIncludedRules {
+        result.IncludedPackages[pkg] = true
+    } else if hasExcludedRules {
+        result.ExcludedPackages[pkg] = true
+    }
 }
 ```
 
@@ -99,7 +122,36 @@ The `conftestRunner` executes the filtered policy rules and returns raw results 
 - **Skipped**: Rules that were skipped
 - **Successes**: Count of successful rules (not detailed results)
 
-### 3. Result Processing by Type
+### 3. Post-Evaluation Filtering
+
+The system uses UnifiedPostEvaluationFilter for consistent filtering logic:
+
+```go
+// Use unified post-evaluation filter for consistent filtering logic
+unifiedFilter := NewUnifiedPostEvaluationFilter(c.policyResolver)
+
+// Collect all results for processing
+allResults := []Result{}
+allResults = append(allResults, result.Warnings...)
+allResults = append(allResults, result.Failures...)
+allResults = append(allResults, result.Exceptions...)
+allResults = append(allResults, result.Skipped...)
+
+// Add metadata to all results
+for j := range allResults {
+    addRuleMetadata(ctx, &allResults[j], rules)
+}
+
+// Filter results using the unified filter
+filteredResults, updatedMissingIncludes := unifiedFilter.FilterResults(
+    allResults, allRules, target.Target, missingIncludes, effectiveTime)
+
+// Categorize results using the unified filter
+warnings, failures, exceptions, skipped := unifiedFilter.CategorizeResults(
+    filteredResults, result, effectiveTime)
+```
+
+### 4. Result Processing by Type
 
 For each namespace result, the following processing occurs:
 
@@ -172,112 +224,7 @@ for i := range result.Skipped {
 - Exceptions and skipped results only have metadata added
 - No inclusion/exclusion filtering is applied to these result types
 
-### 4. Term Extraction and Analysis
-
-Terms are extracted from result metadata during the filtering process. Here's how terms flow through the system:
-
-#### Term Generation in Rego Policy Rules
-
-Terms are set in Rego policy rules using helper functions:
-
-```rego
-// Example from ec-policies/policy/release/cve/cve.rego
-warn contains result if {
-    some level, vulns in _grouped_vulns.warn_cve_security_levels
-    some vuln in vulns
-
-    name := _name(vuln)  // e.g., "CVE-2023-1234"
-    result := lib.result_helper_with_term(rego.metadata.chain(), [name, level], name)
-}
-```
-
-The `lib.result_helper_with_term` function adds the term to the result:
-
-```rego
-// From ec-policies/policy/lib/metadata_helper.rego
-result_helper_with_term(chain, failure_sprintf_params, term) := object.union(
-    result_helper(chain, failure_sprintf_params),
-    {"term": term},
-)
-```
-
-This creates a result with metadata like:
-```json
-{
-  "code": "cve.cve_warnings",
-  "msg": "Found CVE-2023-1234 vulnerability of high security level",
-  "term": "CVE-2023-1234",
-  "collections": ["minimal", "redhat"]
-}
-```
-
-#### Term Extraction During Result Analysis
-
-During result filtering, terms are extracted using the `extractStringsFromMetadata` function:
-
-```go
-// From internal/evaluator/conftest_evaluator.go
-func extractStringsFromMetadata(result Result, key string) []string {
-    if value, ok := result.Metadata[key].(string); ok && len(value) > 0 {
-        return []string{value}
-    }
-    if anyValues, ok := result.Metadata[key].([]any); ok {
-        var values []string
-        for _, anyValue := range anyValues {
-            if value, ok := anyValue.(string); ok && len(value) > 0 {
-                values = append(values, value)
-            }
-        }
-        return values
-    }
-    return []string{}
-}
-```
-
-When called with `key = "term"` (stored in `metadataTerm` constant), it extracts all terms from the result metadata.
-
-#### Matcher Generation with Terms
-
-The `LegacyMakeMatchers` function generates various matching patterns including term-specific ones:
-
-```go
-// From internal/evaluator/filters.go
-func LegacyMakeMatchers(result Result) []string {
-    code := ExtractStringFromMetadata(result, metadataCode)
-    terms := extractStringsFromMetadata(result, metadataTerm)
-    parts := strings.Split(code, ".")
-    pkg := ""
-    if len(parts) >= 2 {
-        pkg = parts[len(parts)-2]
-    }
-    rule := parts[len(parts)-1]
-
-    var matchers []string
-
-    if pkg != "" {
-        matchers = append(matchers, pkg, fmt.Sprintf("%s.*", pkg), fmt.Sprintf("%s.%s", pkg, rule))
-    }
-
-    // A term can be applied to any of the package matchers above
-    var termMatchers []string
-    for _, term := range terms {
-        if len(term) == 0 {
-            continue
-        }
-        for _, matcher := range matchers {
-            termMatchers = append(termMatchers, fmt.Sprintf("%s:%s", matcher, term))
-        }
-    }
-    matchers = append(matchers, termMatchers...)
-
-    matchers = append(matchers, "*")
-    matchers = append(matchers, extractCollections(result)...)
-
-    return matchers
-}
-```
-
-### 5. Inclusion/Exclusion Filtering with Term Matching
+### 5. Term Extraction and Analysis
 
 Terms are extracted from result metadata during the filtering process. Here's how terms flow through the system:
 
@@ -482,7 +429,7 @@ For the exclude pattern `tasks.required_untrusted_task_found:clamav-scan`:
 4. **Matching**: The exclude pattern `tasks.required_untrusted_task_found:clamav-scan` matches exactly
 5. **Decision**: If this is the highest-scoring exclude match, the result is excluded
 
-### 6. Success Computation
+### 7. Success Computation
 
 ```go
 result.Successes = c.computeSuccesses(result, rules, target.Target, missingIncludes, unifiedFilter)
@@ -493,7 +440,7 @@ Success results are computed by:
 2. Checking if each unmatched rule should be included based on include/exclude criteria
 3. Creating success results for included rules
 
-### 7. Missing Includes Handling
+### 8. Missing Includes Handling
 
 ```go
 for missingInclude, isMissing := range missingIncludes {
@@ -509,7 +456,7 @@ for missingInclude, isMissing := range missingIncludes {
 
 Any include criteria that didn't match any rules generate warning results.
 
-### 8. Dependency Trimming
+### 9. Dependency Trimming
 
 ```go
 trim(&results)
@@ -521,7 +468,7 @@ The `trim` function removes results that depend on rules that have been reported
 2. **Dependent Removal**: Removes any results that declare dependencies on those rules via `depends_on` metadata
 3. **Exclusion Notes**: Adds notes to remaining failures suggesting how to exclude them
 
-### 9. Final Validation
+### 10. Final Validation
 
 ```go
 if totalRules == 0 {
@@ -534,34 +481,6 @@ The process ensures that at least some rules were processed. If no rules were ev
 ## Key Considerations
 
 ### Term Matching Specifics
-
-1. **Term Storage**: Terms are stored in result metadata under the `"term"` key
-2. **Multiple Terms**: A single result can have multiple terms stored as an array
-3. **Term Specificity**: Terms add significant scoring weight (100 points) to matchers
-4. **Term Combinations**: Terms can be combined with any package or rule matcher
-5. **Case Sensitivity**: Term matching is case-sensitive
-
-### Filtering Order and Precedence
-
-1. **Pre-Evaluation First**: Pipeline intention and include/exclude filtering happens before rule execution
-2. **Post-Evaluation Refinement**: Additional filtering occurs after rule execution based on results
-3. **Scoring Precedence**: Higher-scoring matches take precedence over lower-scoring ones
-4. **Include vs Exclude**: Include scores must be higher than exclude scores for inclusion
-5. **Term Specificity**: Term-specific patterns (`pkg.rule:term`) score higher than general patterns (`pkg.*`)
-
-### Metadata Flow
-
-1. **Rego Rule**: Terms are set using `lib.result_helper_with_term()`
-2. **Result Metadata**: Terms are stored in the result object's metadata
-3. **Extraction**: `extractStringsFromMetadata()` extracts terms during filtering
-4. **Matcher Generation**: `LegacyMakeMatchers()` creates term-specific patterns
-5. **Scoring**: `LegacyScore()` assigns higher scores to term-specific patterns
-6. **Decision**: Term-specific patterns can override general patterns
-
-This filtering system provides fine-grained control over which policy violations are reported and how they're categorized, allowing for gradual policy rollouts and context-specific rule management with precise term-based filtering capabilities. 
-3. **Time-Based Logic**: Rules with future effective dates are treated as warnings until they become effective
-4. **Dependency Chains**: Failed dependencies can cascade to remove dependent rule results
-5. **Missing Includes**: Unmatched include patterns generate their own warning results
 
 1. **Term Storage**: Terms are stored in result metadata under the `"term"` key
 2. **Multiple Terms**: A single result can have multiple terms stored as an array
