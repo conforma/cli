@@ -47,7 +47,6 @@ import (
 
 type imageValidationFunc func(context.Context, app.SnapshotComponent, *app.SnapshotSpec, policy.Policy, []evaluator.Evaluator, bool) (*output.Output, error)
 
-var newConftestEvaluator = evaluator.NewConftestEvaluator
 var newOPAEvaluator = evaluator.NewOPAEvaluator
 
 func validateImageCmd(validate imageValidationFunc) *cobra.Command {
@@ -333,7 +332,9 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				if utils.IsOpaEnabled() {
 					c, err = newOPAEvaluator()
 				} else {
-					c, err = newConftestEvaluator(cmd.Context(), policySources, data.policy, sourceGroup)
+					// Use the unified filtering approach directly
+					c, err = evaluator.NewConftestEvaluatorWithNamespace(
+						cmd.Context(), policySources, data.policy, sourceGroup, nil)
 				}
 
 				if err != nil {

@@ -28,33 +28,12 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/conforma/cli/cmd/root"
-	"github.com/conforma/cli/internal/evaluator"
 	"github.com/conforma/cli/internal/utils/oci/fake"
 )
 
 func commonMockClient(client *fake.FakeClient) {
 	// TODO: Replace mock.Anything calls with specific values
 	client.On("Head", mock.Anything).Return(&v1.Descriptor{MediaType: types.OCIManifestSchema1}, nil)
-}
-
-type mockEvaluator struct {
-	mock.Mock
-}
-
-func (e *mockEvaluator) Evaluate(ctx context.Context, target evaluator.EvaluationTarget) ([]evaluator.Outcome, error) {
-	args := e.Called(ctx, target.Inputs)
-
-	return args.Get(0).([]evaluator.Outcome), args.Error(1)
-}
-
-func (e *mockEvaluator) Destroy() {
-	e.Called()
-}
-
-func (e *mockEvaluator) CapabilitiesPath() string {
-	args := e.Called()
-
-	return args.String(0)
 }
 
 type MockDownloader struct {
