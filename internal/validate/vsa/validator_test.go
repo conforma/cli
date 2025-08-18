@@ -231,6 +231,89 @@ func TestVSARuleValidatorImpl_ValidateVSARules(t *testing.T) {
 			},
 			expectError: false,
 		},
+		{
+			name: "real VSA scenario - minimal policy rules",
+			vsaRecords: []VSARecord{
+				createRealisticVSARecord(t),
+			},
+			requiredRules: map[string]bool{
+				"slsa_build_scripted_build.image_built_by_trusted_task": true,
+				"slsa_source_correlated.source_code_reference_provided": true,
+				"tasks.required_untrusted_task_found":                   true,
+				"trusted_task.trusted":                                  true,
+				"attestation_type.known_attestation_type":               true,
+				"builtin.attestation.signature_check":                   true,
+			},
+			expectedResult: &ValidationResult{
+				Passed:       false,
+				MissingRules: []MissingRule{},
+				FailingRules: []FailingRule{
+					{
+						RuleID:  "slsa_build_scripted_build.image_built_by_trusted_task",
+						Package: "slsa_build_scripted_build",
+						Message: "Image \"quay.io/redhat-user-workloads/rhtap-contract-tenant/golden-container/golden-container@sha256:5b836b3fff54b9c6959bab62503f70e28184e2de80c28ca70e7e57b297a4e693\" not built by a trusted task: Build Task(s) \"build-image-manifest,buildah\" are not trusted",
+						Reason:  "Rule failed validation in VSA",
+					},
+					{
+						RuleID:  "slsa_source_correlated.source_code_reference_provided",
+						Package: "slsa_source_correlated",
+						Message: "Expected source code reference was not provided for verification",
+						Reason:  "Rule failed validation in VSA",
+					},
+					{
+						RuleID:  "tasks.required_untrusted_task_found",
+						Package: "tasks",
+						Message: "Required task \"buildah\" is required and present but not from a trusted task",
+						Reason:  "Rule failed validation in VSA",
+					},
+					{
+						RuleID:  "trusted_task.trusted",
+						Package: "trusted_task",
+						Message: "PipelineTask \"build-container-amd64\" uses an untrusted task reference: oci://quay.io/konflux-ci/tekton-catalog/task-buildah:0.4@sha256:c777fdb0947aff3e4ac29a93ed6358c6f7994e6b150154427646788ec773c440. Please upgrade the task version to: sha256:4548c9d1783b00781073788d7b073ac150c0d22462f06d2d468ad8661892313a",
+						Reason:  "Rule failed validation in VSA",
+					},
+				},
+				PassingCount:  2, // attestation_type.known_attestation_type and builtin.attestation.signature_check
+				TotalRequired: 6,
+				Summary:       "FAIL: 0 missing rules, 4 failing rules",
+				ImageDigest:   "sha256:test123",
+			},
+			expectError: false,
+		},
+		{
+			name: "real VSA scenario with warnings",
+			vsaRecords: []VSARecord{
+				createRealisticVSARecordWithWarnings(t),
+			},
+			requiredRules: map[string]bool{
+				"labels.required_labels":                  true,
+				"labels.optional_labels":                  true,
+				"attestation_type.known_attestation_type": true,
+			},
+			expectedResult: &ValidationResult{
+				Passed:       false,
+				MissingRules: []MissingRule{},
+				FailingRules: []FailingRule{
+					{
+						RuleID:  "labels.required_labels",
+						Package: "labels",
+						Message: "The required \"cpe\" label is missing. Label description: The CPE (Common Platform Enumeration) identifier for the product, e.g., cpe:/a:redhat:openshift_gitops:1.16::el8. This label is required for on-prem product releases.",
+						Reason:  "Rule failed validation in VSA",
+					},
+					{
+						RuleID:  "labels.optional_labels",
+						Package: "labels",
+						Message: "The required \"org.opencontainers.image.created\" label is missing. Label description: The creation timestamp of the image. This label must always be set by the Konflux build task for on-prem product releases.",
+						Reason:  "Rule failed validation in VSA",
+					},
+				},
+				PassingCount:  1, // attestation_type.known_attestation_type
+				TotalRequired: 3,
+				Summary:       "FAIL: 0 missing rules, 2 failing rules",
+				ImageDigest:   "sha256:test123",
+			},
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -264,11 +347,29 @@ func TestVSARuleValidatorImpl_ValidateVSARules(t *testing.T) {
 
 				// Compare failing rules
 				assert.Len(t, result.FailingRules, len(tt.expectedResult.FailingRules))
-				for i, expected := range tt.expectedResult.FailingRules {
-					assert.Equal(t, expected.RuleID, result.FailingRules[i].RuleID)
-					assert.Equal(t, expected.Package, result.FailingRules[i].Package)
-					assert.Equal(t, expected.Message, result.FailingRules[i].Message)
-					assert.Equal(t, expected.Reason, result.FailingRules[i].Reason)
+
+				// Create maps to compare failing rules without requiring specific order
+				expectedFailingRules := make(map[string]FailingRule)
+				actualFailingRules := make(map[string]FailingRule)
+
+				for _, expected := range tt.expectedResult.FailingRules {
+					expectedFailingRules[expected.RuleID] = expected
+				}
+
+				for _, actual := range result.FailingRules {
+					actualFailingRules[actual.RuleID] = actual
+				}
+
+				// Compare each expected failing rule
+				for ruleID, expected := range expectedFailingRules {
+					actual, exists := actualFailingRules[ruleID]
+					assert.True(t, exists, "Expected failing rule %s not found", ruleID)
+					if exists {
+						assert.Equal(t, expected.RuleID, actual.RuleID)
+						assert.Equal(t, expected.Package, actual.Package)
+						assert.Equal(t, expected.Message, actual.Message)
+						assert.Equal(t, expected.Reason, actual.Reason)
+					}
 				}
 			}
 		})
@@ -317,6 +418,20 @@ func TestVSARuleValidatorImpl_ExtractRuleID(t *testing.T) {
 			},
 			expected: "",
 		},
+		{
+			name: "real rule ID from VSA",
+			result: evaluator.Result{
+				Metadata: map[string]interface{}{
+					"code": "slsa_build_scripted_build.image_built_by_trusted_task",
+					"collections": []interface{}{
+						"redhat",
+					},
+					"description": "Verify the digest of the image being validated is reported by a trusted Task in its IMAGE_DIGEST result.",
+					"title":       "Image built by trusted Task",
+				},
+			},
+			expected: "slsa_build_scripted_build.image_built_by_trusted_task",
+		},
 	}
 
 	for _, tt := range tests {
@@ -354,6 +469,16 @@ func TestVSARuleValidatorImpl_ExtractPackageFromRuleID(t *testing.T) {
 			name:     "multiple dots",
 			ruleID:   "package.subpackage.rule",
 			expected: "package",
+		},
+		{
+			name:     "real rule ID from VSA",
+			ruleID:   "slsa_build_scripted_build.image_built_by_trusted_task",
+			expected: "slsa_build_scripted_build",
+		},
+		{
+			name:     "tasks rule ID from VSA",
+			ruleID:   "tasks.required_untrusted_task_found",
+			expected: "tasks",
 		},
 	}
 
@@ -420,6 +545,234 @@ func createMockVSARecord(t *testing.T, ruleResults map[string]string) VSARecord 
 		Component: map[string]interface{}{
 			"name":           "test-component",
 			"containerImage": "test-image:tag",
+		},
+		Results: filteredReport,
+	}
+
+	// Serialize predicate to JSON
+	predicateJSON, err := json.Marshal(predicate)
+	if err != nil {
+		t.Fatalf("Failed to marshal predicate: %v", err)
+	}
+
+	// Encode as base64 for attestation data
+	attestationData := base64.StdEncoding.EncodeToString(predicateJSON)
+
+	return VSARecord{
+		LogIndex: 1,
+		LogID:    "test-log-id",
+		Body:     "test-body",
+		Attestation: &models.LogEntryAnonAttestation{
+			Data: strfmt.Base64(attestationData),
+		},
+	}
+}
+
+// createRealisticVSARecord creates a VSA record that mimics the structure of the real VSA example
+func createRealisticVSARecord(t *testing.T) VSARecord {
+	// Create a single component with multiple rule results (like the real VSA)
+	component := applicationsnapshot.Component{
+		SnapshotComponent: appapi.SnapshotComponent{
+			Name:           "Unnamed-sha256:5b836b3fff54b9c6959bab62503f70e28184e2de80c28ca70e7e57b297a4e693-arm64",
+			ContainerImage: "quay.io/redhat-user-workloads/rhtap-contract-tenant/golden-container/golden-container@sha256:5b836b3fff54b9c6959bab62503f70e28184e2de80c28ca70e7e57b297a4e693",
+		},
+	}
+
+	// Add violations (failures) - these are the rules that failed
+	component.Violations = []evaluator.Result{
+		{
+			Message: "Image \"quay.io/redhat-user-workloads/rhtap-contract-tenant/golden-container/golden-container@sha256:5b836b3fff54b9c6959bab62503f70e28184e2de80c28ca70e7e57b297a4e693\" not built by a trusted task: Build Task(s) \"build-image-manifest,buildah\" are not trusted",
+			Metadata: map[string]interface{}{
+				"code": "slsa_build_scripted_build.image_built_by_trusted_task",
+				"collections": []interface{}{
+					"redhat",
+				},
+				"description": "Verify the digest of the image being validated is reported by a trusted Task in its IMAGE_DIGEST result.",
+				"title":       "Image built by trusted Task",
+			},
+		},
+		{
+			Message: "Expected source code reference was not provided for verification",
+			Metadata: map[string]interface{}{
+				"code": "slsa_source_correlated.source_code_reference_provided",
+				"collections": []interface{}{
+					"minimal", "slsa3", "redhat", "redhat_rpms",
+				},
+				"description": "Check if the expected source code reference is provided.",
+				"title":       "Source code reference provided",
+			},
+		},
+		{
+			Message: "Required task \"buildah\" is required and present but not from a trusted task",
+			Metadata: map[string]interface{}{
+				"code": "tasks.required_untrusted_task_found",
+				"collections": []interface{}{
+					"redhat", "redhat_rpms",
+				},
+				"description": "Ensure that the all required tasks are resolved from trusted tasks.",
+				"title":       "All required tasks are from trusted tasks",
+				"term":        "buildah",
+			},
+		},
+		{
+			Message: "PipelineTask \"build-container-amd64\" uses an untrusted task reference: oci://quay.io/konflux-ci/tekton-catalog/task-buildah:0.4@sha256:c777fdb0947aff3e4ac29a93ed6358c6f7994e6b150154427646788ec773c440. Please upgrade the task version to: sha256:4548c9d1783b00781073788d7b073ac150c0d22462f06d2d468ad8661892313a",
+			Metadata: map[string]interface{}{
+				"code": "trusted_task.trusted",
+				"collections": []interface{}{
+					"redhat",
+				},
+				"description": "Check the trust of the Tekton Tasks used in the build Pipeline.",
+				"title":       "Tasks are trusted",
+				"term":        "buildah",
+			},
+		},
+	}
+
+	// Add successes - these are the rules that passed
+	component.Successes = []evaluator.Result{
+		{
+			Message: "Pass",
+			Metadata: map[string]interface{}{
+				"code": "attestation_type.known_attestation_type",
+				"collections": []interface{}{
+					"minimal", "redhat", "redhat_rpms",
+				},
+				"description": "Confirm the attestation found for the image has a known attestation type.",
+				"title":       "Known attestation type found",
+			},
+		},
+		{
+			Message: "Pass",
+			Metadata: map[string]interface{}{
+				"code":        "builtin.attestation.signature_check",
+				"description": "The attestation signature matches available signing materials.",
+				"title":       "Attestation signature check passed",
+			},
+		},
+	}
+
+	// Create filtered report
+	filteredReport := &FilteredReport{
+		Snapshot:      "",
+		Components:    []applicationsnapshot.Component{component},
+		Key:           "test-key",
+		Policy:        ecc.EnterpriseContractPolicySpec{},
+		EcVersion:     "test-version",
+		EffectiveTime: time.Now(),
+	}
+
+	// Create predicate
+	predicate := &Predicate{
+		ImageRef:     "quay.io/redhat-user-workloads/rhtap-contract-tenant/golden-container/golden-container@sha256:185f6c39e5544479863024565bb7e63c6f2f0547c3ab4ddf99ac9b5755075cc9",
+		Timestamp:    "2025-08-18T14:59:08Z",
+		Verifier:     "ec-cli",
+		PolicySource: "Minimal (deprecated)",
+		Component: map[string]interface{}{
+			"name":           "Unnamed",
+			"containerImage": "quay.io/redhat-user-workloads/rhtap-contract-tenant/golden-container/golden-container@sha256:185f6c39e5544479863024565bb7e63c6f2f0547c3ab4ddf99ac9b5755075cc9",
+			"source":         map[string]interface{}{},
+		},
+		Results: filteredReport,
+	}
+
+	// Serialize predicate to JSON
+	predicateJSON, err := json.Marshal(predicate)
+	if err != nil {
+		t.Fatalf("Failed to marshal predicate: %v", err)
+	}
+
+	// Encode as base64 for attestation data
+	attestationData := base64.StdEncoding.EncodeToString(predicateJSON)
+
+	return VSARecord{
+		LogIndex: 1,
+		LogID:    "test-log-id",
+		Body:     "test-body",
+		Attestation: &models.LogEntryAnonAttestation{
+			Data: strfmt.Base64(attestationData),
+		},
+	}
+}
+
+// createRealisticVSARecordWithWarnings creates a VSA record that includes warnings
+func createRealisticVSARecordWithWarnings(t *testing.T) VSARecord {
+	// Create a single component with violations and warnings
+	component := applicationsnapshot.Component{
+		SnapshotComponent: appapi.SnapshotComponent{
+			Name:           "Unnamed-sha256:5b836b3fff54b9c6959bab62503f70e28184e2de80c28ca70e7e57b297a4e693-arm64",
+			ContainerImage: "quay.io/redhat-user-workloads/rhtap-contract-tenant/golden-container/golden-container@sha256:5b836b3fff54b9c6959bab62503f70e28184e2de80c28ca70e7e57b297a4e693",
+		},
+	}
+
+	// Add violations (failures)
+	component.Violations = []evaluator.Result{
+		{
+			Message: "The required \"cpe\" label is missing. Label description: The CPE (Common Platform Enumeration) identifier for the product, e.g., cpe:/a:redhat:openshift_gitops:1.16::el8. This label is required for on-prem product releases.",
+			Metadata: map[string]interface{}{
+				"code": "labels.required_labels",
+				"collections": []interface{}{
+					"redhat",
+				},
+				"description":  "Check the image for the presence of labels that are required.",
+				"effective_on": "2026-06-07T00:00:00Z",
+				"title":        "Required labels",
+				"term":         "cpe",
+			},
+		},
+	}
+
+	// Add warnings
+	component.Warnings = []evaluator.Result{
+		{
+			Message: "The required \"org.opencontainers.image.created\" label is missing. Label description: The creation timestamp of the image. This label must always be set by the Konflux build task for on-prem product releases.",
+			Metadata: map[string]interface{}{
+				"code": "labels.optional_labels",
+				"collections": []interface{}{
+					"redhat",
+				},
+				"description":  "Check the image for the presence of labels that are required.",
+				"effective_on": "2026-06-07T00:00:00Z",
+				"title":        "Required labels",
+				"term":         "org.opencontainers.image.created",
+			},
+		},
+	}
+
+	// Add successes
+	component.Successes = []evaluator.Result{
+		{
+			Message: "Pass",
+			Metadata: map[string]interface{}{
+				"code": "attestation_type.known_attestation_type",
+				"collections": []interface{}{
+					"minimal", "redhat", "redhat_rpms",
+				},
+				"description": "Confirm the attestation found for the image has a known attestation type.",
+				"title":       "Known attestation type found",
+			},
+		},
+	}
+
+	// Create filtered report
+	filteredReport := &FilteredReport{
+		Snapshot:      "",
+		Components:    []applicationsnapshot.Component{component},
+		Key:           "test-key",
+		Policy:        ecc.EnterpriseContractPolicySpec{},
+		EcVersion:     "test-version",
+		EffectiveTime: time.Now(),
+	}
+
+	// Create predicate
+	predicate := &Predicate{
+		ImageRef:     "quay.io/redhat-user-workloads/rhtap-contract-tenant/golden-container/golden-container@sha256:185f6c39e5544479863024565bb7e63c6f2f0547c3ab4ddf99ac9b5755075cc9",
+		Timestamp:    "2025-08-18T14:59:08Z",
+		Verifier:     "ec-cli",
+		PolicySource: "Minimal (deprecated)",
+		Component: map[string]interface{}{
+			"name":           "Unnamed",
+			"containerImage": "quay.io/redhat-user-workloads/rhtap-contract-tenant/golden-container/golden-container@sha256:185f6c39e5544479863024565bb7e63c6f2f0547c3ab4ddf99ac9b5755075cc9",
+			"source":         map[string]interface{}{},
 		},
 		Results: filteredReport,
 	}

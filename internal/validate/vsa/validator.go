@@ -255,7 +255,7 @@ func (v *VSARuleValidatorImpl) compareRules(vsaRuleResults map[string]RuleResult
 				Package: v.extractPackageFromRuleID(ruleID),
 				Reason:  "Rule required by policy but not found in VSA",
 			})
-		} else if ruleResult.Status == "failure" {
+		} else if ruleResult.Status == "failure" || ruleResult.Status == "warning" {
 			result.FailingRules = append(result.FailingRules, FailingRule{
 				RuleID:  ruleID,
 				Package: v.extractPackageFromRuleID(ruleID),
