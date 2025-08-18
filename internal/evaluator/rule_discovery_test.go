@@ -115,12 +115,11 @@ func TestRuleDiscoveryService_DiscoverRules_NoPolicyFiles(t *testing.T) {
 	// Create the rule discovery service
 	service := NewRuleDiscoveryService()
 
-	// Discover rules - this should succeed but return no rules
-	rules, err := service.DiscoverRules(ctx, []source.PolicySource{policySource})
-	require.NoError(t, err)
-
-	// Verify that we found no rules
-	assert.Len(t, rules, 0, "Expected to find no rules in empty directory")
+	// Discover rules - this should fail because no rego files are found
+	// This maintains backward compatibility with the acceptance test scenario
+	_, err = service.DiscoverRules(ctx, []source.PolicySource{policySource})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no rego files found in policy subdirectory")
 }
 
 func TestRuleDiscoveryService_DiscoverRules_MultipleSources(t *testing.T) {
