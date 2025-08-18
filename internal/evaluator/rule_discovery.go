@@ -88,6 +88,7 @@ func (r *ruleDiscoveryService) DiscoverRulesWithNonAnnotated(ctx context.Context
 func (r *ruleDiscoveryService) DiscoverRulesWithWorkDir(ctx context.Context, policySources []source.PolicySource, workDir string) (PolicyRules, map[string]bool, error) {
 	rules := PolicyRules{}
 	nonAnnotatedRules := make(map[string]bool)
+	noRegoFilesError := false
 
 	// Download and collect rules from all policy sources
 	for _, s := range policySources {
@@ -107,6 +108,7 @@ func (r *ruleDiscoveryService) DiscoverRulesWithWorkDir(ctx context.Context, pol
 				// Handle the case where no Rego files are found gracefully
 				if err.Error() == "no rego files found in policy subdirectory" {
 					log.Debugf("No Rego files found in policy subdirectory for %s", s.PolicyUrl())
+					noRegoFilesError = true
 					continue // Skip this source and continue with others
 				}
 
@@ -173,6 +175,15 @@ func (r *ruleDiscoveryService) DiscoverRulesWithWorkDir(ctx context.Context, pol
 
 	log.Debugf("Discovered %d annotated rules and %d non-annotated rules from %d policy sources",
 		len(rules), len(nonAnnotatedRules), len(policySources))
+
+	// If no rego files were found in any policy source and no rules were discovered,
+	// return the original error message for backward compatibility.
+	// This maintains the expected behavior for the acceptance test scenario where
+	// a policy repository is downloaded but contains no valid rego files.
+	if noRegoFilesError && len(rules) == 0 && len(nonAnnotatedRules) == 0 {
+		return nil, nil, fmt.Errorf("no rego files found in policy subdirectory")
+	}
+
 	return rules, nonAnnotatedRules, nil
 }
 

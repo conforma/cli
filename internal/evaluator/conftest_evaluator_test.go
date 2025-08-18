@@ -3459,3 +3459,70 @@ deny contains result if {
 		})
 	}
 }
+
+// TestConftestEvaluatorEvaluateWithNoRegoFiles verifies that when no rego files are found
+// in policy sources, the evaluator returns the original error message format
+// "no rego files found in policy subdirectory" instead of the conftest runner's
+// "no policies found in [path]" error message. This ensures backward compatibility
+// with acceptance tests.
+func TestConftestEvaluatorEvaluateWithNoRegoFiles(t *testing.T) {
+	// Create a temporary directory for the test
+	tempDir := t.TempDir()
+
+	// Create an empty policy directory (no rego files)
+	policyDir := filepath.Join(tempDir, "policy")
+	err := os.MkdirAll(policyDir, 0755)
+	require.NoError(t, err)
+
+	// Create a mock policy source that returns the empty policy directory
+	mockSource := &emptyPolicySource{
+		policyPath: policyDir,
+	}
+
+	// Create the evaluator with the mock source
+	ctx := context.Background()
+	pol, err := policy.NewOfflinePolicy(ctx, policy.Now)
+	require.NoError(t, err)
+
+	evaluator, err := NewConftestEvaluatorWithNamespace(ctx, []source.PolicySource{
+		mockSource,
+	}, pol, ecc.Source{}, []string{})
+	require.NoError(t, err)
+
+	// Create a test input file
+	testInputFile := filepath.Join(tempDir, "test.json")
+	err = os.WriteFile(testInputFile, []byte(`{"test": "data"}`), 0644)
+	require.NoError(t, err)
+
+	// Create evaluation target
+	inputs := EvaluationTarget{Inputs: []string{testInputFile}}
+
+	// Evaluate and expect the specific error message
+	_, err = evaluator.Evaluate(ctx, inputs)
+
+	// Verify that the error message matches the expected format
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no rego files found in policy subdirectory")
+}
+
+// emptyPolicySource implements source.PolicySource for testing with empty policy directory
+type emptyPolicySource struct {
+	policyPath string
+}
+
+func (m *emptyPolicySource) GetPolicy(ctx context.Context, dest string, showMsg bool) (string, error) {
+	// Simply return the empty policy directory path
+	return m.policyPath, nil
+}
+
+func (m *emptyPolicySource) PolicyUrl() string {
+	return "https://example.com/real-policy"
+}
+
+func (m *emptyPolicySource) Subdir() string {
+	return "policy"
+}
+
+func (m *emptyPolicySource) Type() source.PolicyType {
+	return source.PolicyKind
+}
