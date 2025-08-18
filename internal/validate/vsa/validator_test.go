@@ -24,15 +24,15 @@ import (
 	"testing"
 	"time"
 
+	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
 	"github.com/go-openapi/strfmt"
+	appapi "github.com/konflux-ci/application-api/api/v1alpha1"
 	"github.com/sigstore/rekor/pkg/generated/models"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/conforma/cli/internal/applicationsnapshot"
 	"github.com/conforma/cli/internal/evaluator"
 	"github.com/conforma/cli/internal/opa/rule"
-	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
-	appapi "github.com/konflux-ci/application-api/api/v1alpha1"
 )
 
 // MockPolicyResolver implements PolicyResolver for testing

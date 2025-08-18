@@ -3491,7 +3491,7 @@ func TestConftestEvaluatorEvaluateWithNoRegoFiles(t *testing.T) {
 
 	// Create a test input file
 	testInputFile := filepath.Join(tempDir, "test.json")
-	err = os.WriteFile(testInputFile, []byte(`{"test": "data"}`), 0644)
+	err = os.WriteFile(testInputFile, []byte(`{"test": "data"}`), 0600)
 	require.NoError(t, err)
 
 	// Create evaluation target
