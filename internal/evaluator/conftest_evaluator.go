@@ -380,9 +380,6 @@ func (c conftestEvaluator) CapabilitiesPath() string {
 
 type PolicyRules map[string]rule.Info
 
-// Add a new type to track non-annotated rules separately
-type nonAnnotatedRules map[string]bool
-
 func (r *PolicyRules) collect(a *ast.AnnotationsRef) error {
 	if a.Annotations == nil {
 		return nil
