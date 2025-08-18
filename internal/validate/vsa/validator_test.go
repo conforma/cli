@@ -291,7 +291,7 @@ func TestVSARuleValidatorImpl_ValidateVSARules(t *testing.T) {
 				"attestation_type.known_attestation_type": true,
 			},
 			expectedResult: &ValidationResult{
-				Passed:       false,
+				Passed:       false, // Still fails because of the violation (failure)
 				MissingRules: []MissingRule{},
 				FailingRules: []FailingRule{
 					{
@@ -300,19 +300,12 @@ func TestVSARuleValidatorImpl_ValidateVSARules(t *testing.T) {
 						Message: "The required \"cpe\" label is missing. Label description: The CPE (Common Platform Enumeration) identifier for the product, e.g., cpe:/a:redhat:openshift_gitops:1.16::el8. This label is required for on-prem product releases.",
 						Reason:  "Rule failed validation in VSA",
 					},
-					{
-						RuleID:  "labels.optional_labels",
-						Package: "labels",
-						Message: "The required \"org.opencontainers.image.created\" label is missing. Label description: The creation timestamp of the image. This label must always be set by the Konflux build task for on-prem product releases.",
-						Reason:  "Rule failed validation in VSA",
-					},
 				},
-				PassingCount:  1, // attestation_type.known_attestation_type
+				PassingCount:  2, // 1 success + 1 warning (warnings are now acceptable)
 				TotalRequired: 3,
-				Summary:       "FAIL: 0 missing rules, 2 failing rules",
 				ImageDigest:   "sha256:test123",
+				Summary:       "FAIL: 0 missing rules, 1 failing rules",
 			},
-			expectError: false,
 		},
 	}
 

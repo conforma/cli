@@ -247,22 +247,25 @@ func (v *VSARuleValidatorImpl) compareRules(vsaRuleResults map[string]RuleResult
 		ImageDigest:   imageDigest,
 	}
 
-	// Check for missing rules
+	// Check for missing rules and rule status
 	for ruleID := range requiredRules {
 		if ruleResult, exists := vsaRuleResults[ruleID]; !exists {
+			// Rule is required by policy but not found in VSA - this is a failure
 			result.MissingRules = append(result.MissingRules, MissingRule{
 				RuleID:  ruleID,
 				Package: v.extractPackageFromRuleID(ruleID),
 				Reason:  "Rule required by policy but not found in VSA",
 			})
-		} else if ruleResult.Status == "failure" || ruleResult.Status == "warning" {
+		} else if ruleResult.Status == "failure" {
+			// Rule failed validation - this is a failure
 			result.FailingRules = append(result.FailingRules, FailingRule{
 				RuleID:  ruleID,
 				Package: v.extractPackageFromRuleID(ruleID),
 				Message: ruleResult.Message,
 				Reason:  "Rule failed validation in VSA",
 			})
-		} else if ruleResult.Status == "success" {
+		} else if ruleResult.Status == "success" || ruleResult.Status == "warning" {
+			// Rule passed or has warning - both are acceptable
 			result.PassingCount++
 		}
 	}
