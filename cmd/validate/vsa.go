@@ -29,6 +29,7 @@ import (
 
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/utils"
+	validate_utils "github.com/conforma/cli/internal/validate"
 	"github.com/conforma/cli/internal/validate/vsa"
 )
 
@@ -46,8 +47,10 @@ func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 		strict              bool
 		noColor             bool
 		forceColor          bool
+		effectiveTime       string
 	}{
-		strict: true,
+		strict:        true,
+		effectiveTime: policy.Now,
 	}
 
 	cmd := &cobra.Command{
@@ -78,9 +81,26 @@ func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 				cmd.SetContext(ctx)
 			}
 
-			// For now, create a simple policy for testing
-			// TODO: Implement full policy setup
-			data.policy = nil
+			// Load policy configuration
+			policyConfiguration, err := validate_utils.GetPolicyConfig(ctx, data.policyConfiguration)
+			if err != nil {
+				return fmt.Errorf("failed to load policy configuration: %w", err)
+			}
+			data.policyConfiguration = policyConfiguration
+
+			// Create policy options
+			policyOptions := policy.Options{
+				EffectiveTime: data.effectiveTime,
+				PolicyRef:     data.policyConfiguration,
+				PublicKey:     data.publicKey,
+			}
+
+			// Load the policy
+			if p, _, err := policy.PreProcessPolicy(ctx, policyOptions); err != nil {
+				return fmt.Errorf("failed to load policy: %w", err)
+			} else {
+				data.policy = p
+			}
 
 			return
 		},
@@ -170,10 +190,14 @@ func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 
 	// Add flags with required validation
 	cmd.Flags().StringVarP(&data.imageRef, "image", "i", "", "OCI image reference")
-	cmd.MarkFlagRequired("image") // Cobra will handle required validation
+	if err := cmd.MarkFlagRequired("image"); err != nil {
+		panic(err)
+	}
 
 	cmd.Flags().StringVarP(&data.policyConfiguration, "policy", "p", "", "Policy configuration")
-	cmd.MarkFlagRequired("policy") // Cobra will handle required validation
+	if err := cmd.MarkFlagRequired("policy"); err != nil {
+		panic(err)
+	}
 
 	cmd.Flags().StringVarP(&data.vsaPath, "vsa", "", "", "Path to VSA file (optional - if omitted, retrieves from Rekor)")
 	cmd.Flags().StringVarP(&data.publicKey, "public-key", "", "", "Public key for VSA signature verification")

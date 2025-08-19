@@ -24,11 +24,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/conforma/cli/internal/policy"
 	"github.com/google/go-containerregistry/pkg/name"
 	ssldsse "github.com/secure-systems-lab/go-securesystemslib/dsse"
 	"github.com/sigstore/sigstore/pkg/signature"
 	sigd "github.com/sigstore/sigstore/pkg/signature/dsse"
+
+	"github.com/conforma/cli/internal/evaluator"
+	"github.com/conforma/cli/internal/policy"
+	"github.com/conforma/cli/internal/policy/source"
 )
 
 // DSSEEnvelope represents a DSSE (Dead Simple Signing Envelope) structure
@@ -109,6 +112,118 @@ func ParseVSAContent(content string) (*Predicate, error) {
 	return &predicate, nil
 }
 
+// extractRuleResultsFromPredicate extracts rule results from VSA predicate
+func extractRuleResultsFromPredicate(predicate *Predicate) map[string]RuleResult {
+	ruleResults := make(map[string]RuleResult)
+
+	if predicate.Results == nil {
+		return ruleResults
+	}
+
+	for _, component := range predicate.Results.Components {
+		// Process successes
+		for _, success := range component.Successes {
+			ruleID := extractRuleID(success)
+			if ruleID != "" {
+				ruleResults[ruleID] = RuleResult{
+					RuleID:  ruleID,
+					Status:  "success",
+					Message: success.Message,
+				}
+			}
+		}
+
+		// Process violations (failures)
+		for _, violation := range component.Violations {
+			ruleID := extractRuleID(violation)
+			if ruleID != "" {
+				ruleResults[ruleID] = RuleResult{
+					RuleID:  ruleID,
+					Status:  "failure",
+					Message: violation.Message,
+				}
+			}
+		}
+
+		// Process warnings
+		for _, warning := range component.Warnings {
+			ruleID := extractRuleID(warning)
+			if ruleID != "" {
+				ruleResults[ruleID] = RuleResult{
+					RuleID:  ruleID,
+					Status:  "warning",
+					Message: warning.Message,
+				}
+			}
+		}
+	}
+
+	return ruleResults
+}
+
+// extractRuleID extracts the rule ID from an evaluator result
+func extractRuleID(result evaluator.Result) string {
+	if result.Metadata == nil {
+		return ""
+	}
+
+	// Look for the "code" field in metadata which contains the rule ID
+	if code, exists := result.Metadata["code"]; exists {
+		if codeStr, ok := code.(string); ok {
+			return codeStr
+		}
+	}
+
+	return ""
+}
+
+// compareRules compares VSA rule results against required rules
+func compareRules(vsaRuleResults map[string]RuleResult, requiredRules map[string]bool, imageDigest string) *ValidationResult {
+	result := &ValidationResult{
+		MissingRules:  []MissingRule{},
+		FailingRules:  []FailingRule{},
+		PassingCount:  0,
+		TotalRequired: len(requiredRules),
+		ImageDigest:   imageDigest,
+	}
+
+	// Check for missing rules and rule status
+	for ruleID := range requiredRules {
+		if ruleResult, exists := vsaRuleResults[ruleID]; !exists {
+			// Rule is required by policy but not found in VSA - this is a failure
+			result.MissingRules = append(result.MissingRules, MissingRule{
+				RuleID:  ruleID,
+				Package: extractPackageFromCode(ruleID),
+				Reason:  "Rule required by policy but not found in VSA",
+			})
+		} else if ruleResult.Status == "failure" {
+			// Rule failed validation - this is a failure
+			result.FailingRules = append(result.FailingRules, FailingRule{
+				RuleID:  ruleID,
+				Package: extractPackageFromCode(ruleID),
+				Message: ruleResult.Message,
+				Reason:  "Rule failed validation in VSA",
+			})
+		} else if ruleResult.Status == "success" || ruleResult.Status == "warning" {
+			// Rule passed or has warning - both are acceptable
+			result.PassingCount++
+		}
+	}
+
+	// Determine overall pass/fail status
+	result.Passed = len(result.MissingRules) == 0 && len(result.FailingRules) == 0
+
+	// Generate summary
+	if result.Passed {
+		result.Summary = fmt.Sprintf("VSA validation PASSED: All %d required rules are present and passing", result.TotalRequired)
+	} else {
+		result.Summary = fmt.Sprintf("VSA validation FAILED: %d missing rules, %d failing rules",
+			len(result.MissingRules), len(result.FailingRules))
+	}
+
+	return result
+}
+
 // ValidateVSA is the main validation function called by the command
 func ValidateVSA(ctx context.Context, imageRef string, policy policy.Policy, retriever VSADataRetriever, publicKey string) (*ValidationResult, error) {
 	// Extract digest from image reference
@@ -147,46 +262,58 @@ func ValidateVSA(ctx context.Context, imageRef string, policy policy.Policy, ret
 		return nil, fmt.Errorf("failed to parse VSA content: %w", err)
 	}
 
-	// Extract violations and successes from VSA predicate
-	var violations []FailingRule
-	var successCount int
+	// Create policy resolver and discover available rules
+	var policyResolver evaluator.PolicyResolver
+	var availableRules evaluator.PolicyRules
 
-	// The predicate.Results contains the FilteredReport with components
-	if predicate.Results != nil {
-		for _, component := range predicate.Results.Components {
-			// Count violations
-			for _, violation := range component.Violations {
-				failingRule := FailingRule{
-					RuleID:  violation.Metadata["code"].(string),
-					Package: extractPackageFromCode(violation.Metadata["code"].(string)),
-					Message: violation.Message,
-					Reason:  violation.Metadata["description"].(string),
-				}
-				violations = append(violations, failingRule)
-			}
+	if policy != nil && len(policy.Spec().Sources) > 0 {
+		// Use the first source to create the policy resolver
+		// This ensures consistent logic with the evaluator
+		sourceGroup := policy.Spec().Sources[0]
 
-			// Count successes
-			successCount += len(component.Successes)
+		policyResolver = evaluator.NewIncludeExcludePolicyResolver(sourceGroup, policy)
+
+		// Convert ecc.Source to []source.PolicySource for rule discovery
+		policySources := source.PolicySourcesFrom(sourceGroup)
+
+		// Discover available rules from policy sources using the rule discovery service
+		ruleDiscovery := evaluator.NewRuleDiscoveryService()
+		rules, nonAnnotatedRules, err := ruleDiscovery.DiscoverRulesWithNonAnnotated(ctx, policySources)
+		if err != nil {
+			return nil, fmt.Errorf("failed to discover rules from policy sources: %w", err)
+		}
+
+		// Combine rules for filtering
+		availableRules = ruleDiscovery.CombineRulesForFiltering(rules, nonAnnotatedRules)
+	}
+
+	// Create the VSA policy resolver adapter
+	var vsaPolicyResolver PolicyResolver
+	if policyResolver != nil {
+		vsaPolicyResolver = NewPolicyResolver(policyResolver, availableRules)
+	}
+
+	// Extract rule results from VSA predicate
+	vsaRuleResults := extractRuleResultsFromPredicate(predicate)
+
+	// Get required rules from policy resolver
+	var requiredRules map[string]bool
+	if vsaPolicyResolver != nil {
+		requiredRules, err = vsaPolicyResolver.GetRequiredRules(ctx, digest)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get required rules from policy: %w", err)
+		}
+	} else {
+		// If no policy resolver is available, consider all rules in VSA as required
+		requiredRules = make(map[string]bool)
+		for ruleID := range vsaRuleResults {
+			requiredRules[ruleID] = true
 		}
 	}
 
-	// Calculate total rules (violations + successes)
-	totalRules := len(violations) + successCount
-
-	// Determine if validation passed (no violations)
-	passed := len(violations) == 0
-
-	// Create validation result
-	result := &ValidationResult{
-		Passed:            passed,
-		SignatureVerified: signatureVerified,
-		MissingRules:      []MissingRule{}, // TODO: Implement missing rules detection
-		FailingRules:      violations,
-		PassingCount:      successCount,
-		TotalRequired:     totalRules,
-		Summary:           fmt.Sprintf("VSA validation %s: %d violations, %d successes", getPassFailText(passed), len(violations), successCount),
-		ImageDigest:       digest,
-	}
+	// Compare VSA rules against required rules
+	result := compareRules(vsaRuleResults, requiredRules, digest)
+	result.SignatureVerified = signatureVerified
 
 	return result, nil
 }
@@ -197,14 +324,6 @@ func extractPackageFromCode(code string) string {
 		return code[:idx]
 	}
 	return code
-}
-
-// getPassFailText returns "PASSED" or "FAILED" based on the passed boolean
-func getPassFailText(passed bool) string {
-	if passed {
-		return "PASSED"
-	}
-	return "FAILED"
 }
 
 // verifyVSASignature verifies the signature of a VSA file using cosign's DSSE verification
