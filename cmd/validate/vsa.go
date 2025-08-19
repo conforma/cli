@@ -32,7 +32,7 @@ import (
 	"github.com/conforma/cli/internal/validate/vsa"
 )
 
-type vsaValidationFunc func(context.Context, string, policy.Policy, vsa.VSADataRetriever) (*vsa.ValidationResult, error)
+type vsaValidationFunc func(context.Context, string, policy.Policy, vsa.VSADataRetriever, string) (*vsa.ValidationResult, error)
 
 func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 	data := struct {
@@ -40,6 +40,7 @@ func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 		policyConfiguration string
 		policy              policy.Policy
 		vsaPath             string
+		publicKey           string
 		output              []string
 		outputFile          string
 		strict              bool
@@ -116,7 +117,7 @@ func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 			}
 
 			// Call the validation function
-			result, err := validate(ctx, data.imageRef, data.policy, retriever)
+			result, err := validate(ctx, data.imageRef, data.policy, retriever, data.publicKey)
 			if err != nil {
 				return err
 			}
@@ -134,6 +135,7 @@ func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 					case "yaml":
 						// Simple YAML-like output for now
 						fmt.Printf("Passed: %t\n", result.Passed)
+						fmt.Printf("Signature Verified: %t\n", result.SignatureVerified)
 						fmt.Printf("Summary: %s\n", result.Summary)
 						fmt.Printf("Image Digest: %s\n", result.ImageDigest)
 						fmt.Printf("Passing Count: %d\n", result.PassingCount)
@@ -174,6 +176,7 @@ func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 	cmd.MarkFlagRequired("policy") // Cobra will handle required validation
 
 	cmd.Flags().StringVarP(&data.vsaPath, "vsa", "", "", "Path to VSA file (optional - if omitted, retrieves from Rekor)")
+	cmd.Flags().StringVarP(&data.publicKey, "public-key", "", "", "Public key for VSA signature verification")
 	cmd.Flags().StringSliceVarP(&data.output, "output", "o", []string{"yaml"}, "Output format (json, yaml)")
 	cmd.Flags().StringVarP(&data.outputFile, "output-file", "", "", "Output file path")
 	cmd.Flags().BoolVarP(&data.strict, "strict", "", data.strict, "Return non-zero exit code on validation failure")

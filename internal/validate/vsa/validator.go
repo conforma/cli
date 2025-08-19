@@ -69,13 +69,14 @@ func (p *policyResolverWrapper) GetRequiredRules(ctx context.Context, imageDiges
 
 // ValidationResult contains the results of VSA rule validation
 type ValidationResult struct {
-	Passed        bool          `json:"passed"`
-	MissingRules  []MissingRule `json:"missing_rules,omitempty"`
-	FailingRules  []FailingRule `json:"failing_rules,omitempty"`
-	PassingCount  int           `json:"passing_count"`
-	TotalRequired int           `json:"total_required"`
-	Summary       string        `json:"summary"`
-	ImageDigest   string        `json:"image_digest"`
+	Passed            bool          `json:"passed"`
+	SignatureVerified bool          `json:"signature_verified"`
+	MissingRules      []MissingRule `json:"missing_rules,omitempty"`
+	FailingRules      []FailingRule `json:"failing_rules,omitempty"`
+	PassingCount      int           `json:"passing_count"`
+	TotalRequired     int           `json:"total_required"`
+	Summary           string        `json:"summary"`
+	ImageDigest       string        `json:"image_digest"`
 }
 
 // MissingRule represents a rule that is required by the policy but not found in the VSA
