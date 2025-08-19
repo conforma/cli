@@ -1,0 +1,54 @@
+= ec validate vsa
+
+Validate VSA (Vulnerability Scanning Artifacts) against policies
+
+== Synopsis
+
+Validate VSA records against the provided policies.
+
+If --vsa is provided, reads VSA from the specified file.
+If --vsa is omitted, retrieves VSA records from Rekor using the image digest.
+
+[source,shell]
+----
+ec validate vsa [flags]
+----
+
+== Examples
+Validate VSA from file:
+  ec validate vsa --image quay.io/acme/app@sha256:... --policy .ec/policy.yaml --vsa ./vsa.json
+
+Validate VSA from Rekor:
+  ec validate vsa --image quay.io/acme/app@sha256:... --policy .ec/policy.yaml
+
+== Options
+
+--force-color:: Force color output (Default: false)
+-h, --help:: help for vsa (Default: false)
+-i, --image:: OCI image reference
+--no-color:: Disable color output (Default: false)
+-o, --output:: Output format (json, yaml) (Default: [yaml])
+--output-file:: Output file path
+-p, --policy:: Policy configuration
+--strict:: Return non-zero exit code on validation failure (Default: true)
+--vsa:: Path to VSA file (optional - if omitted, retrieves from Rekor)
+
+== Options inherited from parent commands
+
+--debug:: same as verbose but also show function names and line numbers (Default: false)
+--kubeconfig:: path to the Kubernetes config file to use
+--logfile:: file to write the logging output. If not specified logging output will be written to stderr
+--quiet:: less verbose output (Default: false)
+--retry-duration:: base duration for exponential backoff calculation (Default: 1s)
+--retry-factor:: exponential backoff multiplier (Default: 2)
+--retry-jitter:: randomness factor for backoff calculation (0.0-1.0) (Default: 0.1)
+--retry-max-retry:: maximum number of retry attempts (Default: 3)
+--retry-max-wait:: maximum wait time between retries (Default: 3s)
+--show-successes::  (Default: false)
+--timeout:: max overall execution duration (Default: 5m0s)
+--trace:: enable trace logging, set one or more comma separated values: none,all,perf,cpu,mem,opa,log (Default: none)
+--verbose:: more verbose output (Default: false)
+
+== See also
+
+ * xref:ec_validate.adoc[ec validate - Validate conformance with the provided policies]
