@@ -27,7 +27,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/sigstore/cosign/v2/cmd/cosign/cli/rekor"
 	"github.com/sigstore/rekor/pkg/generated/client"
@@ -1250,61 +1249,22 @@ func NewRekorVSADataRetriever(opts RetrievalOptions, imageDigest string) (*Rekor
 	}, nil
 }
 
-// RetrieveVSAData retrieves VSA data from Rekor and converts it to VSAFile format
-func (r *RekorVSADataRetriever) RetrieveVSAData(ctx context.Context) (*VSAFile, error) {
+// RetrieveVSAData retrieves VSA data from Rekor and returns it as a string
+func (r *RekorVSADataRetriever) RetrieveVSAData(ctx context.Context) (string, error) {
 	// Retrieve VSA records from Rekor
 	records, err := r.rekorRetriever.RetrieveVSA(ctx, r.imageDigest)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve VSA records from Rekor: %w", err)
+		return "", fmt.Errorf("failed to retrieve VSA records from Rekor: %w", err)
 	}
 
 	if len(records) == 0 {
-		return nil, fmt.Errorf("no VSA records found for image digest: %s", r.imageDigest)
+		return "", fmt.Errorf("no VSA records found for image digest: %s", r.imageDigest)
 	}
 
 	// For now, use the first record (we could extend this to handle multiple records)
 	record := records[0]
 
-	// Parse the attestation data to extract VSA information
-	// This is a simplified implementation - in practice, you'd need to parse the attestation
-	// and extract the actual VSA data structure
-	vsaFile := &VSAFile{
-		ImageRef:  fmt.Sprintf("sha256:%s", r.imageDigest),
-		Timestamp: time.Unix(record.IntegratedTime, 0).Format(time.RFC3339),
-		Verifier:  "ec-cli",
-		Results: struct {
-			Components []struct {
-				Violations []struct {
-					Msg      string `json:"msg"`
-					Metadata struct {
-						Code        string   `json:"code"`
-						Collections []string `json:"collections"`
-						Description string   `json:"description"`
-						Solution    string   `json:"solution"`
-						Title       string   `json:"title"`
-						Term        string   `json:"term,omitempty"`
-						DependsOn   []string `json:"depends_on,omitempty"`
-					} `json:"metadata"`
-				} `json:"violations"`
-				Successes []struct {
-					Msg      string `json:"msg"`
-					Metadata struct {
-						Code        string   `json:"code"`
-						Collections []string `json:"collections"`
-						Description string   `json:"description"`
-						Solution    string   `json:"solution"`
-						Title       string   `json:"title"`
-						Term        string   `json:"term,omitempty"`
-						DependsOn   []string `json:"depends_on,omitempty"`
-					} `json:"metadata"`
-				} `json:"successes"`
-			} `json:"components"`
-		}{},
-	}
-
-	// TODO: Parse the actual attestation data to extract violations and successes
-	// For now, return an empty VSA file structure
-	// This would need to be implemented based on the actual attestation format
-
-	return vsaFile, nil
+	// Return the raw body content from the Rekor record
+	// This should contain the original VSA data that was stored in Rekor
+	return record.Body, nil
 }

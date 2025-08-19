@@ -63,18 +63,13 @@ func NewFileVSADataRetriever(fs afero.Fs, vsaPath string) *FileVSADataRetriever 
 	}
 }
 
-// RetrieveVSAData reads and parses a VSA file
-func (f *FileVSADataRetriever) RetrieveVSAData(ctx context.Context) (*VSAFile, error) {
-	// Read and parse VSA file
+// RetrieveVSAData reads and returns VSA data as a string
+func (f *FileVSADataRetriever) RetrieveVSAData(ctx context.Context) (string, error) {
+	// Read VSA file
 	data, err := afero.ReadFile(f.fs, f.vsaPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read VSA file: %w", err)
+		return "", fmt.Errorf("failed to read VSA file: %w", err)
 	}
 
-	var vsaFile VSAFile
-	if err := json.Unmarshal(data, &vsaFile); err != nil {
-		return nil, fmt.Errorf("failed to parse VSA file: %w", err)
-	}
-
-	return &vsaFile, nil
+	return string(data), nil
 }
