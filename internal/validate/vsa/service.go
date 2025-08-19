@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/go-containerregistry/pkg/name"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 
@@ -145,6 +146,67 @@ func (s *Service) ProcessAllVSAs(ctx context.Context, report applicationsnapshot
 	}
 
 	result.SnapshotEnvelope = snapshotEnvelopePath
+
+	return result, nil
+}
+
+// VSAService orchestrates VSA validation
+type VSAService struct {
+	retriever      VSARetriever
+	validator      VSARuleValidator
+	policyResolver PolicyResolver
+	fs             afero.Fs
+}
+
+// NewVSAService creates a new VSA service with dependency injection
+func NewVSAService(
+	retriever VSARetriever,
+	validator VSARuleValidator,
+	policyResolver PolicyResolver,
+	fs afero.Fs,
+) *VSAService {
+	return &VSAService{
+		retriever:      retriever,
+		validator:      validator,
+		policyResolver: policyResolver,
+		fs:             fs,
+	}
+}
+
+// ValidateVSA validates VSA records against policy
+func (s *VSAService) ValidateVSA(ctx context.Context, imageRef, vsaPath string) (*ValidationResult, error) {
+	// Extract digest from image reference
+	ref, err := name.ParseReference(imageRef)
+	if err != nil {
+		return nil, fmt.Errorf("invalid image reference: %w", err)
+	}
+
+	digest := ref.Identifier()
+
+	// Retrieve VSA records
+	var vsaRecords []VSARecord
+	if vsaPath != "" {
+		// Use file retriever
+		fileRetriever := NewFileVSARetriever(s.fs)
+		vsaRecords, err = fileRetriever.RetrieveVSA(ctx, vsaPath)
+	} else {
+		// Use Rekor retriever
+		vsaRecords, err = s.retriever.RetrieveVSA(ctx, digest)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve VSA records: %w", err)
+	}
+
+	if len(vsaRecords) == 0 {
+		return nil, fmt.Errorf("no VSA records found")
+	}
+
+	// Validate VSA records
+	result, err := s.validator.ValidateVSARules(ctx, vsaRecords, s.policyResolver, digest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate VSA: %w", err)
+	}
 
 	return result, nil
 }
