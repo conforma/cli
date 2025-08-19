@@ -24,13 +24,15 @@ import (
 	"runtime/trace"
 
 	hd "github.com/MakeNowJust/heredoc"
+	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/spf13/cobra"
 
 	"github.com/conforma/cli/internal/policy"
+	"github.com/conforma/cli/internal/utils"
 	"github.com/conforma/cli/internal/validate/vsa"
 )
 
-type vsaValidationFunc func(context.Context, string, policy.Policy, string) (*vsa.ValidationResult, error)
+type vsaValidationFunc func(context.Context, string, policy.Policy, vsa.VSADataRetriever) (*vsa.ValidationResult, error)
 
 func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 	data := struct {
@@ -83,14 +85,38 @@ func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 		},
 
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
 			if trace.IsEnabled() {
-				ctx, task := trace.NewTask(cmd.Context(), "ec:validate-vsa")
-				cmd.SetContext(ctx)
+				var task *trace.Task
+				ctx, task = trace.NewTask(ctx, "ec:validate-vsa")
 				defer task.End()
+				cmd.SetContext(ctx)
+			}
+
+			// Create the appropriate retriever based on whether vsaPath is provided
+			var retriever vsa.VSADataRetriever
+			if data.vsaPath != "" {
+				// Use file-based retriever
+				fs := utils.FS(ctx)
+				retriever = vsa.NewFileVSADataRetriever(fs, data.vsaPath)
+			} else {
+				// Use Rekor-based retriever
+				// Extract digest from image reference for Rekor lookup
+				ref, err := name.ParseReference(data.imageRef)
+				if err != nil {
+					return fmt.Errorf("invalid image reference: %w", err)
+				}
+				digest := ref.Identifier()
+
+				rekorRetriever, err := vsa.NewRekorVSADataRetriever(vsa.DefaultRetrievalOptions(), digest)
+				if err != nil {
+					return fmt.Errorf("failed to create Rekor retriever: %w", err)
+				}
+				retriever = rekorRetriever
 			}
 
 			// Call the validation function
-			result, err := validate(cmd.Context(), data.imageRef, data.policy, data.vsaPath)
+			result, err := validate(ctx, data.imageRef, data.policy, retriever)
 			if err != nil {
 				return err
 			}

@@ -18,14 +18,10 @@ package vsa
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/spf13/afero"
-
 	"github.com/conforma/cli/internal/policy"
-	"github.com/conforma/cli/internal/utils"
 	"github.com/google/go-containerregistry/pkg/name"
 )
 
@@ -64,8 +60,14 @@ type VSAFile struct {
 	} `json:"results"`
 }
 
+// VSADataRetriever defines the interface for retrieving VSA data
+type VSADataRetriever interface {
+	// RetrieveVSAData retrieves VSA data
+	RetrieveVSAData(ctx context.Context) (*VSAFile, error)
+}
+
 // ValidateVSA is the main validation function called by the command
-func ValidateVSA(ctx context.Context, imageRef string, policy policy.Policy, vsaPath string) (*ValidationResult, error) {
+func ValidateVSA(ctx context.Context, imageRef string, policy policy.Policy, retriever VSADataRetriever) (*ValidationResult, error) {
 	// Extract digest from image reference
 	ref, err := name.ParseReference(imageRef)
 	if err != nil {
@@ -74,21 +76,10 @@ func ValidateVSA(ctx context.Context, imageRef string, policy policy.Policy, vsa
 
 	digest := ref.Identifier()
 
-	// If no VSA path provided, return error for now
-	if vsaPath == "" {
-		return nil, fmt.Errorf("VSA file path is required for validation")
-	}
-
-	// Read and parse VSA file
-	fs := utils.FS(ctx)
-	data, err := afero.ReadFile(fs, vsaPath)
+	// Retrieve VSA data using the provided retriever
+	vsaFile, err := retriever.RetrieveVSAData(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read VSA file: %w", err)
-	}
-
-	var vsaFile VSAFile
-	if err := json.Unmarshal(data, &vsaFile); err != nil {
-		return nil, fmt.Errorf("failed to parse VSA file: %w", err)
+		return nil, fmt.Errorf("failed to retrieve VSA data: %w", err)
 	}
 
 	// Extract violations and successes from VSA file
