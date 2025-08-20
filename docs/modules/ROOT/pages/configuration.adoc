@@ -46,7 +46,7 @@ The strings in the list should be one of the following:
 A "package name"::
 
 Package names can be found in the policy documentation, for example the
-xref:policy:ROOT:release_policy.adoc#attestation_type_package[Attestation Type] package
+xref:policy:ROOT:packages/release_attestation_type.adoc[Attestation Type] package
 name is `attestation_type`. Specifing a package name by itself in the include
 or exclude list means every rule from that package should be included or
 excluded.
@@ -55,15 +55,15 @@ A "rule name"::
 
 A rule name consists of the rule's package name and the rule's "code" separated
 by a dot. Rule codes can be see in the documentation also. For example the
-xref:policy:ROOT:release_policy.adoc#attestation_type__unknown_att_type[Unknown attestation type found] rule
-name is `attestation_type.unknown_att_type`.
+xref:policy:ROOT:packages/release_attestation_type.adoc#attestation_type__known_attestation_type[Known attestation type found] rule
+name is `attestation_type.known_attestation_type`.
 
 A "package name:term"::
 
 Some policy rules process a list of items, "term" allows a particular item to
 be excluded or included. This matcher behaves like "package name" but only
 applies to policy rules in the package that match the "term". For example, the
-xref:policy:ROOT:release_policy.adoc#test_package[Test package] emits results for each
+xref:policy:ROOT:packages/release_test.adoc[Test package] emits results for each
 test case. A particular test case can be ignored without ignoring the remaining
 ones.
 
