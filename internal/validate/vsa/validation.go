@@ -113,8 +113,8 @@ func ParseVSAContent(content string) (*Predicate, error) {
 }
 
 // extractRuleResultsFromPredicate extracts rule results from VSA predicate
-func extractRuleResultsFromPredicate(predicate *Predicate) map[string]RuleResult {
-	ruleResults := make(map[string]RuleResult)
+func extractRuleResultsFromPredicate(predicate *Predicate) map[string][]RuleResult {
+	ruleResults := make(map[string][]RuleResult)
 
 	if predicate.Results == nil {
 		return ruleResults
@@ -125,11 +125,11 @@ func extractRuleResultsFromPredicate(predicate *Predicate) map[string]RuleResult
 		for _, success := range component.Successes {
 			ruleID := extractRuleID(success)
 			if ruleID != "" {
-				ruleResults[ruleID] = RuleResult{
+				ruleResults[ruleID] = append(ruleResults[ruleID], RuleResult{
 					RuleID:  ruleID,
 					Status:  "success",
 					Message: success.Message,
-				}
+				})
 			}
 		}
 
@@ -137,11 +137,11 @@ func extractRuleResultsFromPredicate(predicate *Predicate) map[string]RuleResult
 		for _, violation := range component.Violations {
 			ruleID := extractRuleID(violation)
 			if ruleID != "" {
-				ruleResults[ruleID] = RuleResult{
+				ruleResults[ruleID] = append(ruleResults[ruleID], RuleResult{
 					RuleID:  ruleID,
 					Status:  "failure",
 					Message: violation.Message,
-				}
+				})
 			}
 		}
 
@@ -149,11 +149,11 @@ func extractRuleResultsFromPredicate(predicate *Predicate) map[string]RuleResult
 		for _, warning := range component.Warnings {
 			ruleID := extractRuleID(warning)
 			if ruleID != "" {
-				ruleResults[ruleID] = RuleResult{
+				ruleResults[ruleID] = append(ruleResults[ruleID], RuleResult{
 					RuleID:  ruleID,
 					Status:  "warning",
 					Message: warning.Message,
-				}
+				})
 			}
 		}
 	}
@@ -178,7 +178,7 @@ func extractRuleID(result evaluator.Result) string {
 }
 
 // compareRules compares VSA rule results against required rules
-func compareRules(vsaRuleResults map[string]RuleResult, requiredRules map[string]bool, imageDigest string) *ValidationResult {
+func compareRules(vsaRuleResults map[string][]RuleResult, requiredRules map[string]bool, imageDigest string) *ValidationResult {
 	result := &ValidationResult{
 		MissingRules:  []MissingRule{},
 		FailingRules:  []FailingRule{},
@@ -189,24 +189,29 @@ func compareRules(vsaRuleResults map[string]RuleResult, requiredRules map[string
 
 	// Check for missing rules and rule status
 	for ruleID := range requiredRules {
-		if ruleResult, exists := vsaRuleResults[ruleID]; !exists {
+		if ruleResults, exists := vsaRuleResults[ruleID]; !exists {
 			// Rule is required by policy but not found in VSA - this is a failure
 			result.MissingRules = append(result.MissingRules, MissingRule{
 				RuleID:  ruleID,
 				Package: extractPackageFromCode(ruleID),
 				Reason:  "Rule required by policy but not found in VSA",
 			})
-		} else if ruleResult.Status == "failure" {
-			// Rule failed validation - this is a failure
-			result.FailingRules = append(result.FailingRules, FailingRule{
-				RuleID:  ruleID,
-				Package: extractPackageFromCode(ruleID),
-				Message: ruleResult.Message,
-				Reason:  "Rule failed validation in VSA",
-			})
-		} else if ruleResult.Status == "success" || ruleResult.Status == "warning" {
-			// Rule passed or has warning - both are acceptable
-			result.PassingCount++
+		} else {
+			// Process all results for this ruleID
+			for _, ruleResult := range ruleResults {
+				if ruleResult.Status == "failure" {
+					// Rule failed validation - this is a failure
+					result.FailingRules = append(result.FailingRules, FailingRule{
+						RuleID:  ruleID,
+						Package: extractPackageFromCode(ruleID),
+						Message: ruleResult.Message,
+						Reason:  "Rule failed validation in VSA",
+					})
+				} else if ruleResult.Status == "success" || ruleResult.Status == "warning" {
+					// Rule passed or has warning - both are acceptable
+					result.PassingCount++
+				}
+			}
 		}
 	}
 

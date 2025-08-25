@@ -32,15 +32,16 @@ Validate VSA for multiple images from inline ApplicationSnapshot:
 
 == Options
 
+--effective-time:: Effective time for policy evaluation (Default: now)
 -h, --help:: help for vsa (Default: false)
 -i, --image:: OCI image reference
 --images:: path to ApplicationSnapshot Spec JSON file or JSON representation of an ApplicationSnapshot Spec
 -o, --output:: Output format (json, yaml) (Default: [yaml])
--p, --policy:: Policy configuration
+-p, --policy:: Policy configuration (optional for testing)
 --public-key:: Public key for VSA signature verification
---strict:: Return non-zero exit code on validation failure (Default: true)
+--strict:: Exit with non-zero code if validation fails (Default: true)
 --vsa:: Path to VSA file (optional - if omitted, retrieves from Rekor)
--w, --workers:: Number of workers to use for parallel validation (Default: 5)
+--workers:: Number of worker threads for parallel processing (Default: 5)
 
 == Options inherited from parent commands
 

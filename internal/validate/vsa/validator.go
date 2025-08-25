@@ -136,8 +136,8 @@ func (v *VSARuleValidatorImpl) ValidateVSARules(ctx context.Context, vsaRecords 
 }
 
 // extractRuleResults extracts rule results from VSA records
-func (v *VSARuleValidatorImpl) extractRuleResults(vsaRecords []VSARecord) (map[string]RuleResult, error) {
-	ruleResults := make(map[string]RuleResult)
+func (v *VSARuleValidatorImpl) extractRuleResults(vsaRecords []VSARecord) (map[string][]RuleResult, error) {
+	ruleResults := make(map[string][]RuleResult)
 
 	for _, record := range vsaRecords {
 		// Parse VSA predicate to extract rule results
@@ -154,11 +154,11 @@ func (v *VSARuleValidatorImpl) extractRuleResults(vsaRecords []VSARecord) (map[s
 				for _, success := range component.Successes {
 					ruleID := v.extractRuleID(success)
 					if ruleID != "" {
-						ruleResults[ruleID] = RuleResult{
+						ruleResults[ruleID] = append(ruleResults[ruleID], RuleResult{
 							RuleID:  ruleID,
 							Status:  "success",
 							Message: success.Message,
-						}
+						})
 					}
 				}
 
@@ -166,11 +166,11 @@ func (v *VSARuleValidatorImpl) extractRuleResults(vsaRecords []VSARecord) (map[s
 				for _, violation := range component.Violations {
 					ruleID := v.extractRuleID(violation)
 					if ruleID != "" {
-						ruleResults[ruleID] = RuleResult{
+						ruleResults[ruleID] = append(ruleResults[ruleID], RuleResult{
 							RuleID:  ruleID,
 							Status:  "failure",
 							Message: violation.Message,
-						}
+						})
 					}
 				}
 
@@ -178,11 +178,11 @@ func (v *VSARuleValidatorImpl) extractRuleResults(vsaRecords []VSARecord) (map[s
 				for _, warning := range component.Warnings {
 					ruleID := v.extractRuleID(warning)
 					if ruleID != "" {
-						ruleResults[ruleID] = RuleResult{
+						ruleResults[ruleID] = append(ruleResults[ruleID], RuleResult{
 							RuleID:  ruleID,
 							Status:  "warning",
 							Message: warning.Message,
-						}
+						})
 					}
 				}
 
@@ -239,7 +239,7 @@ func (v *VSARuleValidatorImpl) extractPackageFromRuleID(ruleID string) string {
 }
 
 // compareRules compares VSA rule results against required rules
-func (v *VSARuleValidatorImpl) compareRules(vsaRuleResults map[string]RuleResult, requiredRules map[string]bool, imageDigest string) *ValidationResult {
+func (v *VSARuleValidatorImpl) compareRules(vsaRuleResults map[string][]RuleResult, requiredRules map[string]bool, imageDigest string) *ValidationResult {
 	result := &ValidationResult{
 		MissingRules:  []MissingRule{},
 		FailingRules:  []FailingRule{},
@@ -250,24 +250,29 @@ func (v *VSARuleValidatorImpl) compareRules(vsaRuleResults map[string]RuleResult
 
 	// Check for missing rules and rule status
 	for ruleID := range requiredRules {
-		if ruleResult, exists := vsaRuleResults[ruleID]; !exists {
+		if ruleResults, exists := vsaRuleResults[ruleID]; !exists {
 			// Rule is required by policy but not found in VSA - this is a failure
 			result.MissingRules = append(result.MissingRules, MissingRule{
 				RuleID:  ruleID,
 				Package: v.extractPackageFromRuleID(ruleID),
 				Reason:  "Rule required by policy but not found in VSA",
 			})
-		} else if ruleResult.Status == "failure" {
-			// Rule failed validation - this is a failure
-			result.FailingRules = append(result.FailingRules, FailingRule{
-				RuleID:  ruleID,
-				Package: v.extractPackageFromRuleID(ruleID),
-				Message: ruleResult.Message,
-				Reason:  "Rule failed validation in VSA",
-			})
-		} else if ruleResult.Status == "success" || ruleResult.Status == "warning" {
-			// Rule passed or has warning - both are acceptable
-			result.PassingCount++
+		} else {
+			// Check for violations (failures)
+			for _, ruleResult := range ruleResults {
+				if ruleResult.Status == "failure" {
+					// Rule failed validation - this is a failure
+					result.FailingRules = append(result.FailingRules, FailingRule{
+						RuleID:  ruleID,
+						Package: v.extractPackageFromRuleID(ruleID),
+						Message: ruleResult.Message,
+						Reason:  "Rule failed validation in VSA",
+					})
+				} else if ruleResult.Status == "success" || ruleResult.Status == "warning" {
+					// Rule passed or has warning - both are acceptable
+					result.PassingCount++
+				}
+			}
 		}
 	}
 
