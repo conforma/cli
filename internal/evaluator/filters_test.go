@@ -29,7 +29,6 @@ import (
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	"github.com/conforma/cli/internal/opa/rule"
-	"github.com/conforma/cli/internal/policy"
 )
 
 //////////////////////////////////////////////////////////////////////////////
@@ -349,23 +348,6 @@ func TestECPolicyResolver(t *testing.T) {
 	assert.Contains(t, result.Explanations["slsa3.provenance"], "excluded")
 }
 
-// simpleConfigProvider is a simple implementation for testing
-type simpleConfigProvider struct {
-	effectiveTime time.Time
-}
-
-func (s *simpleConfigProvider) EffectiveTime() time.Time {
-	return s.effectiveTime
-}
-
-func (s *simpleConfigProvider) SigstoreOpts() (policy.SigstoreOpts, error) {
-	return policy.SigstoreOpts{}, nil
-}
-
-func (s *simpleConfigProvider) Spec() ecc.EnterpriseContractPolicySpec {
-	return ecc.EnterpriseContractPolicySpec{}
-}
-
 func TestECPolicyResolver_DefaultBehavior(t *testing.T) {
 	// Create a source with no explicit includes (should default to "*")
 	source := ecc.Source{
@@ -670,19 +652,12 @@ func TestUnifiedPostEvaluationFilter(t *testing.T) {
 		filteredResults, updatedMissingIncludes := filter.FilterResults(
 			results, rules, "test-target", missingIncludes, time.Now())
 
-		// With legacy filtering, both results are included because pipeline intention filtering
-		// happens at the pre-evaluation level, not post-evaluation level
-		assert.Len(t, filteredResults, 2)
+		assert.Len(t, filteredResults, 1)
 
-		// Check that both results are included (legacy filtering doesn't handle pipeline intentions)
-		codes := make([]string, 0, len(filteredResults))
-		for _, result := range filteredResults {
-			if code, ok := result.Metadata[metadataCode].(string); ok {
-				codes = append(codes, code)
-			}
+		if len(filteredResults) > 0 {
+			code := filteredResults[0].Metadata[metadataCode].(string)
+			assert.Equal(t, "release.security_check", code)
 		}
-		assert.Contains(t, codes, "release.security_check")
-		assert.Contains(t, codes, "build.build_task")
 
 		// Check that missing includes were updated
 		assert.Len(t, updatedMissingIncludes, 0) // Wildcard should be matched

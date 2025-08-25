@@ -1040,8 +1040,35 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 	missingIncludes map[string]bool,
 	effectiveTime time.Time,
 ) ([]Result, map[string]bool) {
-	// Always use legacy filtering - it handles all cases correctly and consistently
 	var filteredResults []Result
+	if ecResolver, ok := f.policyResolver.(*ECPolicyResolver); ok {
+		// Use policy resolution for ECPolicyResolver to handle pipeline intentions
+		policyResolution := ecResolver.ResolvePolicy(rules, target)
+
+		for _, result := range results {
+			code := ExtractStringFromMetadata(result, metadataCode)
+			// For results without codes, always include them (matches legacy behavior)
+			if code == "" {
+				filteredResults = append(filteredResults, result)
+				continue
+			}
+
+			// Check if the result's rule is included based on policy resolution
+			if policyResolution.IncludedRules[code] {
+				filteredResults = append(filteredResults, result)
+			}
+		}
+
+		// Update missing includes based on policy resolution
+		for include := range missingIncludes {
+			if !policyResolution.MissingIncludes[include] {
+				delete(missingIncludes, include)
+			}
+		}
+
+		return filteredResults, missingIncludes
+	}
+
 	for _, result := range results {
 		code := ExtractStringFromMetadata(result, metadataCode)
 		// For results without codes, always include them (matches legacy behavior)

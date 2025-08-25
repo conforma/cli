@@ -349,32 +349,6 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				defer c.Destroy()
 			}
 
-			// Example: How to get availableRules for VSA validation using RuleDiscoveryService
-			// This can be used when you need to validate VSA records against policy expectations
-			/*
-				ruleDiscovery := evaluator.NewRuleDiscoveryService()
-				allAvailableRules := evaluator.PolicyRules{}
-
-				// Collect all available rules from all policy sources
-				for _, sourceGroup := range data.policy.Spec().Sources {
-					policySources := source.PolicySourcesFrom(sourceGroup)
-
-					rules, err := ruleDiscovery.DiscoverRules(cmd.Context(), policySources)
-					if err != nil {
-						log.Debug("Failed to discover rules from policy sources!")
-						return err
-					}
-
-					// Merge rules from all sources
-					for code, rule := range rules {
-						allAvailableRules[code] = rule
-					}
-				}
-
-				// Use with VSA validation
-				// policyResolver := vsa.NewPolicyResolver(evaluatorResolver, allAvailableRules)
-			*/
-
 			showSuccesses, _ := cmd.Flags().GetBool("show-successes")
 
 			// worker is responsible for processing one component at a time from the jobs channel,
