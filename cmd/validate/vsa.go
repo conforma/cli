@@ -43,10 +43,7 @@ func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 		vsaPath             string
 		publicKey           string
 		output              []string
-		outputFile          string
 		strict              bool
-		noColor             bool
-		forceColor          bool
 		effectiveTime       string
 	}{
 		strict:        true,
