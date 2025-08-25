@@ -9,30 +9,38 @@ Validate VSA records against the provided policies.
 If --vsa is provided, reads VSA from the specified file.
 If --vsa is omitted, retrieves VSA records from Rekor using the image digest.
 
+Can validate a single image with --image or multiple images from an ApplicationSnapshot
+with --images.
+
 [source,shell]
 ----
 ec validate vsa [flags]
 ----
 
 == Examples
-Validate VSA from file:
+Validate VSA from file for a single image:
   ec validate vsa --image quay.io/acme/app@sha256:... --policy .ec/policy.yaml --vsa ./vsa.json
 
-Validate VSA from Rekor:
+Validate VSA from Rekor for a single image:
   ec validate vsa --image quay.io/acme/app@sha256:... --policy .ec/policy.yaml
+
+Validate VSA for multiple images from ApplicationSnapshot file:
+  ec validate vsa --images my-app.yaml --policy .ec/policy.yaml
+
+Validate VSA for multiple images from inline ApplicationSnapshot:
+  ec validate vsa --images '{"components":[{"containerImage":"quay.io/acme/app@sha256:..."}]}' --policy .ec/policy.yaml
 
 == Options
 
---force-color:: Force color output (Default: false)
 -h, --help:: help for vsa (Default: false)
 -i, --image:: OCI image reference
---no-color:: Disable color output (Default: false)
+--images:: path to ApplicationSnapshot Spec JSON file or JSON representation of an ApplicationSnapshot Spec
 -o, --output:: Output format (json, yaml) (Default: [yaml])
---output-file:: Output file path
 -p, --policy:: Policy configuration
 --public-key:: Public key for VSA signature verification
 --strict:: Return non-zero exit code on validation failure (Default: true)
 --vsa:: Path to VSA file (optional - if omitted, retrieves from Rekor)
+-w, --workers:: Number of workers to use for parallel validation (Default: 5)
 
 == Options inherited from parent commands
 
