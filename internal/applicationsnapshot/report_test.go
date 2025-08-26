@@ -20,6 +20,7 @@ package applicationsnapshot
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -1173,4 +1174,52 @@ func Test_DocumentationLink_EmptyReport(t *testing.T) {
 	hasDocLink := strings.Contains(outputStr, "https://conforma.dev/docs/policy/")
 
 	assert.False(t, hasDocLink, "Documentation link should NOT appear for empty reports")
+}
+
+func TestNewVSAReport(t *testing.T) {
+	components := []VSAComponent{
+		{
+			Name:           "test-component",
+			ContainerImage: "quay.io/test/image:latest",
+			Success:        true,
+		},
+		{
+			Name:           "failing-component",
+			ContainerImage: "quay.io/test/failing:latest",
+			Success:        false,
+			Error:          "validation failed",
+		},
+	}
+
+	report := NewVSAReport(components)
+
+	assert.False(t, report.Success, "Report should be false when any component fails")
+	assert.Equal(t, 2, len(report.Components), "Report should have 2 components")
+	assert.Contains(t, report.Summary, "failed", "Summary should indicate failure")
+}
+
+func TestWriteVSAReport(t *testing.T) {
+	components := []VSAComponent{
+		{
+			Name:           "test-component",
+			ContainerImage: "quay.io/test/image:latest",
+			Success:        true,
+		},
+	}
+
+	report := NewVSAReport(components)
+
+	// Test JSON output
+	var buf bytes.Buffer
+	p := format.NewTargetParser("json", format.Options{}, &buf, utils.FS(context.Background()))
+
+	err := WriteVSAReport(report, []string{"json"}, p)
+	assert.NoError(t, err)
+
+	// Verify the output is valid JSON
+	var result VSAReport
+	err = json.Unmarshal(buf.Bytes(), &result)
+	assert.NoError(t, err)
+	assert.True(t, result.Success)
+	assert.Equal(t, 1, len(result.Components))
 }
