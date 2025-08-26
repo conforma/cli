@@ -24,6 +24,8 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
 	"time"
 
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
@@ -214,7 +216,7 @@ func (r *Report) toFormat(format string) (data []byte, err error) {
 	case PolicyInput:
 		data = bytes.Join(r.PolicyInput, []byte("\n"))
 	case VSA:
-		data, err = r.toVSA()
+		data, err = r.toVSAReport()
 	default:
 		return nil, fmt.Errorf("%q is not a valid report format", format)
 	}
@@ -228,6 +230,23 @@ func (r *Report) toVSA() ([]byte, error) {
 		return []byte{}, err
 	}
 	return json.Marshal(predicate)
+}
+
+// toVSAReport converts the report to VSA format
+func (r *Report) toVSAReport() ([]byte, error) {
+	// Convert existing components to VSA components
+	var vsaComponents []VSAComponent
+	for _, comp := range r.Components {
+		vsaComp := VSAComponent{
+			Name:           comp.Name,
+			ContainerImage: comp.ContainerImage,
+			Success:        comp.Success,
+		}
+		vsaComponents = append(vsaComponents, vsaComp)
+	}
+
+	vsaReport := NewVSAReport(vsaComponents)
+	return json.Marshal(vsaReport)
 }
 
 // toSummary returns a condensed version of the report.
@@ -313,6 +332,81 @@ func generateMarkdownSummary(r *Report) ([]byte, error) {
 	writeMarkdownField(&markdownBuffer, "Warnings", totalWarnings, writeIcon(totalWarnings == 0))
 	writeMarkdownField(&markdownBuffer, "Result", "", writeIcon(r.Success))
 	return markdownBuffer.Bytes(), nil
+}
+
+// WriteVSAReport writes a VSA report using the format system
+func WriteVSAReport(report VSAReport, targets []string, p format.TargetParser) error {
+	if len(targets) == 0 {
+		targets = append(targets, "text")
+	}
+
+	for _, targetName := range targets {
+		target, err := p.Parse(targetName)
+		if err != nil {
+			return err
+		}
+
+		data, err := vsaReportToFormat(report, target.Format)
+		if err != nil {
+			return err
+		}
+
+		if _, err := target.Write(data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// vsaReportToFormat converts the VSA report into the given format
+func vsaReportToFormat(report VSAReport, format string) ([]byte, error) {
+	switch format {
+	case "json":
+		return json.MarshalIndent(report, "", "  ")
+	case "yaml":
+		return yaml.Marshal(report)
+	case "text":
+		return generateVSATextReport(report), nil
+	default:
+		return nil, fmt.Errorf("%q is not a valid report format", format)
+	}
+}
+
+// generateVSATextReport generates a human-readable text report for VSA
+func generateVSATextReport(report VSAReport) []byte {
+	var buf strings.Builder
+
+	buf.WriteString("VSA Validation Report\n")
+	buf.WriteString("=====================\n\n")
+
+	buf.WriteString(fmt.Sprintf("Summary: %s\n", report.Summary))
+	buf.WriteString(fmt.Sprintf("Overall Success: %t\n\n", report.Success))
+
+	// Display violations in the detailed format
+	if len(report.Violations) > 0 {
+		buf.WriteString("Results:\n")
+		for _, violation := range report.Violations {
+			buf.WriteString(fmt.Sprintf("✕ [Violation] %s\n", violation.RuleID))
+			buf.WriteString(fmt.Sprintf("  ImageRef: %s\n", violation.ImageRef))
+			buf.WriteString(fmt.Sprintf("  Reason: %s\n", violation.Reason))
+
+			if violation.Title != "" {
+				buf.WriteString(fmt.Sprintf("  Title: %s\n", violation.Title))
+			}
+
+			if violation.Description != "" {
+				buf.WriteString(fmt.Sprintf("  Description: %s\n", violation.Description))
+			}
+
+			if violation.Solution != "" {
+				buf.WriteString(fmt.Sprintf("  Solution: %s\n", violation.Solution))
+			}
+
+			buf.WriteString("\n")
+		}
+	}
+
+	return []byte(buf.String())
 }
 
 //go:embed templates/*.tmpl
@@ -414,5 +508,96 @@ func AppstudioReportForError(prefix string, err error) TestReport {
 		Failures:  0,
 		Result:    "ERROR",
 		Note:      fmt.Sprintf("Error: %s: %s", prefix, err.Error()),
+	}
+}
+
+// VSAComponent represents a VSA validation result for a single component
+type VSAComponent struct {
+	Name             string      `json:"name"`
+	ContainerImage   string      `json:"container_image"`
+	Success          bool        `json:"success"`
+	ValidationResult interface{} `json:"validation_result,omitempty"` // Using interface{} to avoid import cycle
+	Error            string      `json:"error,omitempty"`
+}
+
+// VSAViolation represents a single violation with all its details
+type VSAViolation struct {
+	RuleID      string `json:"rule_id"`
+	ImageRef    string `json:"image_ref"`
+	Reason      string `json:"reason"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	Solution    string `json:"solution,omitempty"`
+}
+
+// VSAReport represents the overall VSA validation report
+type VSAReport struct {
+	Success    bool           `json:"success"`
+	Summary    string         `json:"summary"`
+	Violations []VSAViolation `json:"violations"`
+	Components []VSAComponent `json:"components,omitempty"` // Keep for backward compatibility
+}
+
+// NewVSAReport creates a new VSA report from validation results
+func NewVSAReport(components []VSAComponent) VSAReport {
+	success := true
+	var violations []VSAViolation
+
+	for _, comp := range components {
+		if !comp.Success {
+			success = false
+		}
+
+		// Extract violations from the component using reflection to avoid import cycles
+		if comp.ValidationResult != nil {
+			// Use reflection to access the ValidationResult fields
+			validationResultValue := reflect.ValueOf(comp.ValidationResult)
+			if validationResultValue.Kind() == reflect.Ptr && !validationResultValue.IsNil() {
+				validationResultValue = validationResultValue.Elem()
+			}
+
+			// Try to get FailingRules field
+			if failingRulesField := validationResultValue.FieldByName("FailingRules"); failingRulesField.IsValid() {
+				if failingRulesField.Kind() == reflect.Slice {
+					for i := 0; i < failingRulesField.Len(); i++ {
+						rule := failingRulesField.Index(i)
+						violation := VSAViolation{
+							ImageRef: comp.ContainerImage,
+						}
+
+						// Extract rule fields using reflection
+						if ruleIDField := rule.FieldByName("RuleID"); ruleIDField.IsValid() {
+							violation.RuleID = ruleIDField.String()
+						}
+						if reasonField := rule.FieldByName("Reason"); reasonField.IsValid() {
+							violation.Reason = reasonField.String()
+						}
+						if titleField := rule.FieldByName("Title"); titleField.IsValid() {
+							violation.Title = titleField.String()
+						}
+						if descField := rule.FieldByName("Description"); descField.IsValid() {
+							violation.Description = descField.String()
+						}
+						if solutionField := rule.FieldByName("Solution"); solutionField.IsValid() {
+							violation.Solution = solutionField.String()
+						}
+
+						violations = append(violations, violation)
+					}
+				}
+			}
+		}
+	}
+
+	summary := fmt.Sprintf("VSA validation completed with %d components", len(components))
+	if !success {
+		summary = fmt.Sprintf("VSA validation failed for some components")
+	}
+
+	return VSAReport{
+		Success:    success,
+		Summary:    summary,
+		Violations: violations,
+		Components: components, // Keep for backward compatibility
 	}
 }

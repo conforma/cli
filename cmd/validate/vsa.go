@@ -28,10 +28,6 @@ import (
 	app "github.com/konflux-ci/application-api/api/v1alpha1"
 	"github.com/spf13/cobra"
 
-	"encoding/json"
-
-	"gopkg.in/yaml.v3"
-
 	"github.com/conforma/cli/internal/applicationsnapshot"
 	"github.com/conforma/cli/internal/format"
 	"github.com/conforma/cli/internal/policy"
@@ -43,72 +39,6 @@ import (
 )
 
 type vsaValidationFunc func(context.Context, string, policy.Policy, vsa.VSADataRetriever, string) (*vsa.ValidationResult, error)
-
-// VSAComponent represents a VSA validation result for a single component
-type VSAComponent struct {
-	Name             string                `json:"name"`
-	ContainerImage   string                `json:"container_image"`
-	Success          bool                  `json:"success"`
-	ValidationResult *vsa.ValidationResult `json:"validation_result"`
-	Error            string                `json:"error,omitempty"`
-}
-
-// VSAViolation represents a single violation with all its details
-type VSAViolation struct {
-	RuleID      string `json:"rule_id"`
-	ImageRef    string `json:"image_ref"`
-	Reason      string `json:"reason"`
-	Title       string `json:"title,omitempty"`
-	Description string `json:"description,omitempty"`
-	Solution    string `json:"solution,omitempty"`
-}
-
-// VSAReport represents the overall VSA validation report
-type VSAReport struct {
-	Success    bool           `json:"success"`
-	Summary    string         `json:"summary"`
-	Violations []VSAViolation `json:"violations"`
-	Components []VSAComponent `json:"components,omitempty"` // Keep for backward compatibility
-}
-
-// NewVSAReport creates a new VSA report from validation results
-func NewVSAReport(components []VSAComponent) VSAReport {
-	success := true
-	var violations []VSAViolation
-
-	for _, comp := range components {
-		if !comp.Success {
-			success = false
-		}
-
-		// Extract violations from the component
-		if comp.ValidationResult != nil && len(comp.ValidationResult.FailingRules) > 0 {
-			for _, rule := range comp.ValidationResult.FailingRules {
-				violation := VSAViolation{
-					RuleID:      rule.RuleID,
-					ImageRef:    comp.ContainerImage,
-					Reason:      rule.Reason,
-					Title:       rule.Title,
-					Description: rule.Description,
-					Solution:    rule.Solution,
-				}
-				violations = append(violations, violation)
-			}
-		}
-	}
-
-	summary := fmt.Sprintf("VSA validation completed with %d components", len(components))
-	if !success {
-		summary = fmt.Sprintf("VSA validation failed for some components")
-	}
-
-	return VSAReport{
-		Success:    success,
-		Summary:    summary,
-		Violations: violations,
-		Components: components, // Keep for backward compatibility
-	}
-}
 
 func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 	data := struct {
@@ -321,7 +251,7 @@ func validateVSAFile(ctx context.Context, cmd *cobra.Command, data struct {
 	}
 
 	// Create VSA component
-	component := VSAComponent{
+	component := applicationsnapshot.VSAComponent{
 		Name:             "vsa-file",
 		ContainerImage:   imageRef,
 		Success:          validationResult.Passed,
@@ -329,7 +259,7 @@ func validateVSAFile(ctx context.Context, cmd *cobra.Command, data struct {
 	}
 
 	// Create VSA report
-	report := NewVSAReport([]VSAComponent{component})
+	report := applicationsnapshot.NewVSAReport([]applicationsnapshot.VSAComponent{component})
 
 	// Handle output
 	if len(data.outputFile) > 0 {
@@ -466,9 +396,9 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 	close(results)
 
 	// Convert results to VSA components
-	var vsaComponents []VSAComponent
+	var vsaComponents []applicationsnapshot.VSAComponent
 	for _, r := range componentResults {
-		component := VSAComponent{
+		component := applicationsnapshot.VSAComponent{
 			Name:           r.component.Name,
 			ContainerImage: r.component.ContainerImage,
 		}
@@ -493,7 +423,7 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 	})
 
 	// Create VSA report
-	report := NewVSAReport(vsaComponents)
+	report := applicationsnapshot.NewVSAReport(vsaComponents)
 
 	// Handle output
 	if len(data.outputFile) > 0 {
@@ -519,76 +449,6 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 }
 
 // writeVSAReport writes the VSA report using the format system
-func writeVSAReport(report VSAReport, targets []string, p format.TargetParser) error {
-	if len(targets) == 0 {
-		targets = append(targets, "text")
-	}
-
-	for _, targetName := range targets {
-		target, err := p.Parse(targetName)
-		if err != nil {
-			return err
-		}
-
-		data, err := reportToFormat(report, target.Format)
-		if err != nil {
-			return err
-		}
-
-		if _, err := target.Write(data); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// reportToFormat converts the VSA report into the given format
-func reportToFormat(report VSAReport, format string) ([]byte, error) {
-	switch format {
-	case "json":
-		return json.MarshalIndent(report, "", "  ")
-	case "yaml":
-		return yaml.Marshal(report)
-	case "text":
-		return generateTextReport(report), nil
-	default:
-		return nil, fmt.Errorf("%q is not a valid report format", format)
-	}
-}
-
-// generateTextReport generates a human-readable text report
-func generateTextReport(report VSAReport) []byte {
-	var buf strings.Builder
-
-	buf.WriteString("VSA Validation Report\n")
-	buf.WriteString("=====================\n\n")
-
-	buf.WriteString(fmt.Sprintf("Summary: %s\n", report.Summary))
-	buf.WriteString(fmt.Sprintf("Overall Success: %t\n\n", report.Success))
-
-	// Display violations in the detailed format
-	if len(report.Violations) > 0 {
-		buf.WriteString("Results:\n")
-		for _, violation := range report.Violations {
-			buf.WriteString(fmt.Sprintf("✕ [Violation] %s\n", violation.RuleID))
-			buf.WriteString(fmt.Sprintf("  ImageRef: %s\n", violation.ImageRef))
-			buf.WriteString(fmt.Sprintf("  Reason: %s\n", violation.Reason))
-
-			if violation.Title != "" {
-				buf.WriteString(fmt.Sprintf("  Title: %s\n", violation.Title))
-			}
-
-			if violation.Description != "" {
-				buf.WriteString(fmt.Sprintf("  Description: %s\n", violation.Description))
-			}
-
-			if violation.Solution != "" {
-				buf.WriteString(fmt.Sprintf("  Solution: %s\n", violation.Solution))
-			}
-
-			buf.WriteString("\n")
-		}
-	}
-
-	return []byte(buf.String())
+func writeVSAReport(report applicationsnapshot.VSAReport, targets []string, p format.TargetParser) error {
+	return applicationsnapshot.WriteVSAReport(report, targets, p)
 }
