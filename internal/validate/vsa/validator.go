@@ -88,17 +88,23 @@ type MissingRule struct {
 
 // FailingRule represents a rule that is present in the VSA but failed validation
 type FailingRule struct {
-	RuleID  string `json:"rule_id"`
-	Package string `json:"package"`
-	Message string `json:"message"`
-	Reason  string `json:"reason"`
+	RuleID      string `json:"rule_id"`
+	Package     string `json:"package"`
+	Message     string `json:"message"`
+	Reason      string `json:"reason"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	Solution    string `json:"solution,omitempty"`
 }
 
 // RuleResult represents a rule result extracted from the VSA
 type RuleResult struct {
-	RuleID  string `json:"rule_id"`
-	Status  string `json:"status"` // "success", "failure", "warning", "skipped", "exception"
-	Message string `json:"message"`
+	RuleID      string `json:"rule_id"`
+	Status      string `json:"status"` // "success", "failure", "warning", "skipped", "exception"
+	Message     string `json:"message"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	Solution    string `json:"solution,omitempty"`
 }
 
 // VSARuleValidatorImpl implements VSARuleValidator with comprehensive validation logic
@@ -167,9 +173,12 @@ func (v *VSARuleValidatorImpl) extractRuleResults(vsaRecords []VSARecord) (map[s
 					ruleID := v.extractRuleID(violation)
 					if ruleID != "" {
 						ruleResults[ruleID] = append(ruleResults[ruleID], RuleResult{
-							RuleID:  ruleID,
-							Status:  "failure",
-							Message: violation.Message,
+							RuleID:      ruleID,
+							Status:      "failure",
+							Message:     violation.Message,
+							Title:       v.extractMetadataString(violation, "title"),
+							Description: v.extractMetadataString(violation, "description"),
+							Solution:    v.extractMetadataString(violation, "solution"),
 						})
 					}
 				}
@@ -230,6 +239,21 @@ func (v *VSARuleValidatorImpl) extractRuleID(result evaluator.Result) string {
 	return ""
 }
 
+// extractMetadataString extracts a string value from the metadata map
+func (v *VSARuleValidatorImpl) extractMetadataString(result evaluator.Result, key string) string {
+	if result.Metadata == nil {
+		return ""
+	}
+
+	if value, exists := result.Metadata[key]; exists {
+		if str, ok := value.(string); ok {
+			return str
+		}
+	}
+
+	return ""
+}
+
 // extractPackageFromRuleID extracts the package name from a rule ID
 func (v *VSARuleValidatorImpl) extractPackageFromRuleID(ruleID string) string {
 	if idx := strings.Index(ruleID, "."); idx != -1 {
@@ -263,10 +287,13 @@ func (v *VSARuleValidatorImpl) compareRules(vsaRuleResults map[string][]RuleResu
 				if ruleResult.Status == "failure" {
 					// Rule failed validation - this is a failure
 					result.FailingRules = append(result.FailingRules, FailingRule{
-						RuleID:  ruleID,
-						Package: v.extractPackageFromRuleID(ruleID),
-						Message: ruleResult.Message,
-						Reason:  "Rule failed validation in VSA",
+						RuleID:      ruleID,
+						Package:     v.extractPackageFromRuleID(ruleID),
+						Message:     ruleResult.Message,
+						Reason:      "Rule failed validation in VSA",
+						Title:       ruleResult.Title,
+						Description: ruleResult.Description,
+						Solution:    ruleResult.Solution,
 					})
 				} else if ruleResult.Status == "success" || ruleResult.Status == "warning" {
 					// Rule passed or has warning - both are acceptable
