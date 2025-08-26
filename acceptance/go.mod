@@ -15,7 +15,7 @@ require (
 	github.com/go-openapi/strfmt v0.23.0
 	github.com/google/go-containerregistry v0.20.7
 	github.com/in-toto/in-toto-golang v0.9.1-0.20240317085821-8e2966059a09
-	github.com/konflux-ci/application-api v0.0.0-20240812090716-e7eb2ecfb409
+	github.com/konflux-ci/application-api v0.0.0-20250324201748-5a9670bf7679
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/otiai10/copy v1.14.0
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
