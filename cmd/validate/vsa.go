@@ -21,6 +21,8 @@ import (
 	"errors"
 	"fmt"
 	"runtime/trace"
+	"sort"
+	"strings"
 
 	hd "github.com/MakeNowJust/heredoc"
 	app "github.com/konflux-ci/application-api/api/v1alpha1"
@@ -28,7 +30,10 @@ import (
 
 	"encoding/json"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/conforma/cli/internal/applicationsnapshot"
+	"github.com/conforma/cli/internal/format"
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/utils"
 	validate_utils "github.com/conforma/cli/internal/validate"
@@ -39,6 +44,72 @@ import (
 
 type vsaValidationFunc func(context.Context, string, policy.Policy, vsa.VSADataRetriever, string) (*vsa.ValidationResult, error)
 
+// VSAComponent represents a VSA validation result for a single component
+type VSAComponent struct {
+	Name             string                `json:"name"`
+	ContainerImage   string                `json:"container_image"`
+	Success          bool                  `json:"success"`
+	ValidationResult *vsa.ValidationResult `json:"validation_result"`
+	Error            string                `json:"error,omitempty"`
+}
+
+// VSAViolation represents a single violation with all its details
+type VSAViolation struct {
+	RuleID      string `json:"rule_id"`
+	ImageRef    string `json:"image_ref"`
+	Reason      string `json:"reason"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	Solution    string `json:"solution,omitempty"`
+}
+
+// VSAReport represents the overall VSA validation report
+type VSAReport struct {
+	Success    bool           `json:"success"`
+	Summary    string         `json:"summary"`
+	Violations []VSAViolation `json:"violations"`
+	Components []VSAComponent `json:"components,omitempty"` // Keep for backward compatibility
+}
+
+// NewVSAReport creates a new VSA report from validation results
+func NewVSAReport(components []VSAComponent) VSAReport {
+	success := true
+	var violations []VSAViolation
+
+	for _, comp := range components {
+		if !comp.Success {
+			success = false
+		}
+
+		// Extract violations from the component
+		if comp.ValidationResult != nil && len(comp.ValidationResult.FailingRules) > 0 {
+			for _, rule := range comp.ValidationResult.FailingRules {
+				violation := VSAViolation{
+					RuleID:      rule.RuleID,
+					ImageRef:    comp.ContainerImage,
+					Reason:      rule.Reason,
+					Title:       rule.Title,
+					Description: rule.Description,
+					Solution:    rule.Solution,
+				}
+				violations = append(violations, violation)
+			}
+		}
+	}
+
+	summary := fmt.Sprintf("VSA validation completed with %d components", len(components))
+	if !success {
+		summary = fmt.Sprintf("VSA validation failed for some components")
+	}
+
+	return VSAReport{
+		Success:    success,
+		Summary:    summary,
+		Violations: violations,
+		Components: components, // Keep for backward compatibility
+	}
+}
+
 func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 	data := struct {
 		imageRef            string
@@ -48,15 +119,20 @@ func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 		vsaPath             string
 		publicKey           string
 		output              []string
+		outputFile          string
 		strict              bool
 		effectiveTime       string
 		spec                *app.SnapshotSpec
 		workers             int
+		noColor             bool
+		forceColor          bool
 	}{
 		strict:        true,
 		effectiveTime: policy.Now,
 		workers:       5,
 	}
+
+	validOutputFormats := []string{"json", "yaml", "text"}
 
 	cmd := &cobra.Command{
 		Use:   "vsa",
@@ -84,6 +160,12 @@ func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 			
 			Validate VSA for multiple images from inline ApplicationSnapshot:
 			  ec validate vsa --images '{"components":[{"containerImage":"quay.io/acme/app@sha256:..."}]}' --policy .ec/policy.yaml
+
+			Write output in JSON format to a file:
+			  ec validate vsa --image quay.io/acme/app@sha256:... --policy .ec/policy.yaml --output json=results.json
+
+			Write output in YAML format to stdout and in JSON format to a file:
+			  ec validate vsa --image quay.io/acme/app@sha256:... --policy .ec/policy.yaml --output yaml --output json=results.json
 		`),
 
 		PreRunE: func(cmd *cobra.Command, args []string) (allErrors error) {
@@ -171,10 +253,24 @@ func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 
 	cmd.Flags().StringVarP(&data.vsaPath, "vsa", "", "", "Path to VSA file (optional - if omitted, retrieves from Rekor)")
 	cmd.Flags().StringVarP(&data.publicKey, "public-key", "", "", "Public key for VSA signature verification")
-	cmd.Flags().StringSliceVarP(&data.output, "output", "o", []string{"yaml"}, "Output format (json, yaml)")
+
+	cmd.Flags().StringSliceVar(&data.output, "output", data.output, hd.Doc(`
+		write output to a file in a specific format. Use empty string path for stdout.
+		May be used multiple times. Possible formats are:
+		`+strings.Join(validOutputFormats, ", ")+`. In following format and file path
+		additional options can be provided in key=value form following the question
+		mark (?) sign, for example: --output text=output.txt?show-successes=false
+	`))
+
+	cmd.Flags().StringVarP(&data.outputFile, "output-file", "o", data.outputFile,
+		"[DEPRECATED] write output to a file. Use empty string for stdout, default behavior")
+
 	cmd.Flags().BoolVar(&data.strict, "strict", true, "Exit with non-zero code if validation fails")
 	cmd.Flags().StringVar(&data.effectiveTime, "effective-time", policy.Now, "Effective time for policy evaluation")
 	cmd.Flags().IntVar(&data.workers, "workers", 5, "Number of worker threads for parallel processing")
+
+	cmd.Flags().BoolVar(&data.noColor, "no-color", false, "Disable color when using text output even when the current terminal supports it")
+	cmd.Flags().BoolVar(&data.forceColor, "color", false, "Enable color when using text output even when the current terminal does not support it")
 
 	return cmd
 }
@@ -188,10 +284,13 @@ func validateVSAFile(ctx context.Context, cmd *cobra.Command, data struct {
 	vsaPath             string
 	publicKey           string
 	output              []string
+	outputFile          string
 	strict              bool
 	effectiveTime       string
 	spec                *app.SnapshotSpec
 	workers             int
+	noColor             bool
+	forceColor          bool
 }, validate vsaValidationFunc) error {
 	// Create file-based retriever
 	fs := utils.FS(ctx)
@@ -221,10 +320,31 @@ func validateVSAFile(ctx context.Context, cmd *cobra.Command, data struct {
 		return fmt.Errorf("validation failed: %w", err)
 	}
 
-	// Output results
-	outputResults(validationResult, data.output)
+	// Create VSA component
+	component := VSAComponent{
+		Name:             "vsa-file",
+		ContainerImage:   imageRef,
+		Success:          validationResult.Passed,
+		ValidationResult: validationResult,
+	}
 
-	if data.strict && !validationResult.Passed {
+	// Create VSA report
+	report := NewVSAReport([]VSAComponent{component})
+
+	// Handle output
+	if len(data.outputFile) > 0 {
+		data.output = append(data.output, fmt.Sprintf("%s=%s", "json", data.outputFile))
+	}
+
+	// Use the format system for output
+	p := format.NewTargetParser("json", format.Options{}, cmd.OutOrStdout(), utils.FS(cmd.Context()))
+	utils.SetColorEnabled(data.noColor, data.forceColor)
+
+	if err := writeVSAReport(report, data.output, p); err != nil {
+		return err
+	}
+
+	if data.strict && !report.Success {
 		return errors.New("success criteria not met")
 	}
 
@@ -240,10 +360,13 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 	vsaPath             string
 	publicKey           string
 	output              []string
+	outputFile          string
 	strict              bool
 	effectiveTime       string
 	spec                *app.SnapshotSpec
 	workers             int
+	noColor             bool
+	forceColor          bool
 }, validate vsaValidationFunc) error {
 	type result struct {
 		err              error
@@ -329,7 +452,6 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 	}
 	close(jobs)
 
-	allPassed := true
 	var allErrors error
 	var componentResults []result
 
@@ -339,35 +461,54 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 		componentResults = append(componentResults, r)
 		if r.err != nil {
 			allErrors = errors.Join(allErrors, r.err)
-			allPassed = false
-		} else if r.validationResult == nil {
-			allPassed = false
-		} else if !r.validationResult.Passed {
-			allPassed = false
 		}
 	}
 	close(results)
 
-	// Output results for each component
+	// Convert results to VSA components
+	var vsaComponents []VSAComponent
 	for _, r := range componentResults {
-		if r.err != nil {
-			// Output error for this component
-			if len(data.output) > 0 {
-				fmt.Printf("=== Validation Results for %s ===\n", r.component.ContainerImage)
-				fmt.Printf("Error: %v\n\n", r.err)
-			}
-			continue
+		component := VSAComponent{
+			Name:           r.component.Name,
+			ContainerImage: r.component.ContainerImage,
 		}
 
-		// Output the result for this component
-		if len(data.output) > 0 {
-			fmt.Printf("=== Validation Results for %s ===\n", r.component.ContainerImage)
-			outputResults(r.validationResult, data.output)
-			fmt.Println()
+		if r.err != nil {
+			component.Success = false
+			component.Error = r.err.Error()
+		} else if r.validationResult != nil {
+			component.Success = r.validationResult.Passed
+			component.ValidationResult = r.validationResult
+		} else {
+			component.Success = false
+			component.Error = "no validation result available"
 		}
+
+		vsaComponents = append(vsaComponents, component)
 	}
 
-	if data.strict && !allPassed {
+	// Ensure some consistency in output.
+	sort.Slice(vsaComponents, func(i, j int) bool {
+		return vsaComponents[i].ContainerImage > vsaComponents[j].ContainerImage
+	})
+
+	// Create VSA report
+	report := NewVSAReport(vsaComponents)
+
+	// Handle output
+	if len(data.outputFile) > 0 {
+		data.output = append(data.output, fmt.Sprintf("%s=%s", "json", data.outputFile))
+	}
+
+	// Use the format system for output
+	p := format.NewTargetParser("json", format.Options{}, cmd.OutOrStdout(), utils.FS(cmd.Context()))
+	utils.SetColorEnabled(data.noColor, data.forceColor)
+
+	if err := writeVSAReport(report, data.output, p); err != nil {
+		return err
+	}
+
+	if data.strict && !report.Success {
 		if allErrors != nil {
 			return fmt.Errorf("validation failed: %w", allErrors)
 		}
@@ -377,41 +518,77 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 	return allErrors
 }
 
-// outputResults outputs validation results in the specified format
-func outputResults(validationResult *vsa.ValidationResult, outputFormats []string) {
-	for _, outputFormat := range outputFormats {
-		switch outputFormat {
-		case "json":
-			jsonData, err := json.MarshalIndent(validationResult, "", "  ")
-			if err != nil {
-				fmt.Printf("Error marshaling to JSON: %v\n", err)
-				continue
-			}
-			fmt.Println(string(jsonData))
-		case "yaml":
-			// Simple YAML-like output
-			fmt.Printf("Passed: %t\n", validationResult.Passed)
-			fmt.Printf("Signature Verified: %t\n", validationResult.SignatureVerified)
-			fmt.Printf("Summary: %s\n", validationResult.Summary)
-			fmt.Printf("Image Digest: %s\n", validationResult.ImageDigest)
-			fmt.Printf("Passing Count: %d\n", validationResult.PassingCount)
-			fmt.Printf("Total Required: %d\n", validationResult.TotalRequired)
+// writeVSAReport writes the VSA report using the format system
+func writeVSAReport(report VSAReport, targets []string, p format.TargetParser) error {
+	if len(targets) == 0 {
+		targets = append(targets, "text")
+	}
 
-			if len(validationResult.MissingRules) > 0 {
-				fmt.Printf("Missing Rules: %d\n", len(validationResult.MissingRules))
-				for _, rule := range validationResult.MissingRules {
-					fmt.Printf("  - %s (%s): %s\n", rule.RuleID, rule.Package, rule.Reason)
-				}
-			}
+	for _, targetName := range targets {
+		target, err := p.Parse(targetName)
+		if err != nil {
+			return err
+		}
 
-			if len(validationResult.FailingRules) > 0 {
-				fmt.Printf("Failing Rules: %d\n", len(validationResult.FailingRules))
-				for _, rule := range validationResult.FailingRules {
-					fmt.Printf("  - %s (%s): %s - %s\n", rule.RuleID, rule.Package, rule.Message, rule.Reason)
-				}
-			}
-		default:
-			fmt.Printf("Unsupported output format: %s\n", outputFormat)
+		data, err := reportToFormat(report, target.Format)
+		if err != nil {
+			return err
+		}
+
+		if _, err := target.Write(data); err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+// reportToFormat converts the VSA report into the given format
+func reportToFormat(report VSAReport, format string) ([]byte, error) {
+	switch format {
+	case "json":
+		return json.MarshalIndent(report, "", "  ")
+	case "yaml":
+		return yaml.Marshal(report)
+	case "text":
+		return generateTextReport(report), nil
+	default:
+		return nil, fmt.Errorf("%q is not a valid report format", format)
+	}
+}
+
+// generateTextReport generates a human-readable text report
+func generateTextReport(report VSAReport) []byte {
+	var buf strings.Builder
+
+	buf.WriteString("VSA Validation Report\n")
+	buf.WriteString("=====================\n\n")
+
+	buf.WriteString(fmt.Sprintf("Summary: %s\n", report.Summary))
+	buf.WriteString(fmt.Sprintf("Overall Success: %t\n\n", report.Success))
+
+	// Display violations in the detailed format
+	if len(report.Violations) > 0 {
+		buf.WriteString("Results:\n")
+		for _, violation := range report.Violations {
+			buf.WriteString(fmt.Sprintf("✕ [Violation] %s\n", violation.RuleID))
+			buf.WriteString(fmt.Sprintf("  ImageRef: %s\n", violation.ImageRef))
+			buf.WriteString(fmt.Sprintf("  Reason: %s\n", violation.Reason))
+
+			if violation.Title != "" {
+				buf.WriteString(fmt.Sprintf("  Title: %s\n", violation.Title))
+			}
+
+			if violation.Description != "" {
+				buf.WriteString(fmt.Sprintf("  Description: %s\n", violation.Description))
+			}
+
+			if violation.Solution != "" {
+				buf.WriteString(fmt.Sprintf("  Solution: %s\n", violation.Solution))
+			}
+
+			buf.WriteString("\n")
+		}
+	}
+
+	return []byte(buf.String())
 }

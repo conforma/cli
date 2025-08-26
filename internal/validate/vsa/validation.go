@@ -138,9 +138,12 @@ func extractRuleResultsFromPredicate(predicate *Predicate) map[string][]RuleResu
 			ruleID := extractRuleID(violation)
 			if ruleID != "" {
 				ruleResults[ruleID] = append(ruleResults[ruleID], RuleResult{
-					RuleID:  ruleID,
-					Status:  "failure",
-					Message: violation.Message,
+					RuleID:      ruleID,
+					Status:      "failure",
+					Message:     violation.Message,
+					Title:       extractMetadataString(violation, "title"),
+					Description: extractMetadataString(violation, "description"),
+					Solution:    extractMetadataString(violation, "solution"),
 				})
 			}
 		}
@@ -177,6 +180,21 @@ func extractRuleID(result evaluator.Result) string {
 	return ""
 }
 
+// extractMetadataString extracts a string value from the metadata map
+func extractMetadataString(result evaluator.Result, key string) string {
+	if result.Metadata == nil {
+		return ""
+	}
+
+	if value, exists := result.Metadata[key]; exists {
+		if str, ok := value.(string); ok {
+			return str
+		}
+	}
+
+	return ""
+}
+
 // compareRules compares VSA rule results against required rules
 func compareRules(vsaRuleResults map[string][]RuleResult, requiredRules map[string]bool, imageDigest string) *ValidationResult {
 	result := &ValidationResult{
@@ -202,10 +220,13 @@ func compareRules(vsaRuleResults map[string][]RuleResult, requiredRules map[stri
 				if ruleResult.Status == "failure" {
 					// Rule failed validation - this is a failure
 					result.FailingRules = append(result.FailingRules, FailingRule{
-						RuleID:  ruleID,
-						Package: extractPackageFromCode(ruleID),
-						Message: ruleResult.Message,
-						Reason:  "Rule failed validation in VSA",
+						RuleID:      ruleID,
+						Package:     extractPackageFromCode(ruleID),
+						Message:     ruleResult.Message,
+						Reason:      ruleResult.Message,
+						Title:       ruleResult.Title,
+						Description: ruleResult.Description,
+						Solution:    ruleResult.Solution,
 					})
 				} else if ruleResult.Status == "success" || ruleResult.Status == "warning" {
 					// Rule passed or has warning - both are acceptable
