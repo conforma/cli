@@ -18,7 +18,6 @@ package applicationsnapshot
 
 import (
 	"bytes"
-	"context"
 	"embed"
 	"encoding/json"
 	"encoding/xml"
@@ -219,15 +218,6 @@ func (r *Report) toFormat(format string) (data []byte, err error) {
 		return nil, fmt.Errorf("%q is not a valid report format", format)
 	}
 	return
-}
-
-func (r *Report) toVSA() ([]byte, error) {
-	generator := NewSnapshotVSAGenerator(*r)
-	predicate, err := generator.GeneratePredicate(context.Background())
-	if err != nil {
-		return []byte{}, err
-	}
-	return json.Marshal(predicate)
 }
 
 // toVSAReport converts the report to VSA format
@@ -589,7 +579,7 @@ func NewVSAReport(components []VSAComponent) VSAReport {
 
 	summary := fmt.Sprintf("VSA validation completed with %d components", len(components))
 	if !success {
-		summary = fmt.Sprintf("VSA validation failed for some components")
+		summary = "VSA validation failed for some components"
 	}
 
 	return VSAReport{
