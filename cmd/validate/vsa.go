@@ -25,7 +25,9 @@ import (
 	"strings"
 
 	hd "github.com/MakeNowJust/heredoc"
+	"github.com/google/go-containerregistry/pkg/name"
 	app "github.com/konflux-ci/application-api/api/v1alpha1"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/conforma/cli/internal/applicationsnapshot"
@@ -34,8 +36,6 @@ import (
 	"github.com/conforma/cli/internal/utils"
 	validate_utils "github.com/conforma/cli/internal/validate"
 	"github.com/conforma/cli/internal/validate/vsa"
-	"github.com/google/go-containerregistry/pkg/name"
-	"github.com/sirupsen/logrus"
 )
 
 type vsaValidationFunc func(context.Context, string, policy.Policy, vsa.VSADataRetriever, string) (*vsa.ValidationResult, error)
