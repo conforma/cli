@@ -16,7 +16,7 @@
 
 ## Build
 
-FROM docker.io/library/golang:1.24.4 AS build
+FROM docker.io/library/golang:1.25.0 AS build
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -43,7 +43,7 @@ RUN /build/build.sh "${BUILD_LIST}" "${BUILD_SUFFIX}"
 
 ## Final image
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:8d905a93f1392d4a8f7fb906bd49bf540290674b28d82de3536bb4d0898bf9d7
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:2f06ae0e6d3d9c4f610d32c480338eef474867f435d8d28625f2985e8acde6e8
 
 ARG TARGETOS
 ARG TARGETARCH
