@@ -2,7 +2,7 @@ module github.com/enterprise-contract/ec-cli/tools/kubectl
 
 go 1.23.6
 
-require k8s.io/kubernetes v1.31.3
+require k8s.io/kubernetes v1.31.12
 
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
