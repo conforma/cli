@@ -4,15 +4,15 @@ go 1.23.6
 
 require (
 	github.com/daixiang0/gci v0.13.5
-	github.com/golangci/golangci-lint v1.63.4
-	github.com/google/addlicense v1.1.1
-	github.com/open-policy-agent/conftest v0.55.0
-	github.com/tektoncd/chains v0.22.2
-	github.com/tektoncd/cli v0.38.0
+	github.com/golangci/golangci-lint v1.64.8
+	github.com/google/addlicense v1.2.0
+	github.com/open-policy-agent/conftest v0.62.0
+	github.com/tektoncd/chains v0.25.1
+	github.com/tektoncd/cli v0.42.0
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
-	helm.sh/helm/v3 v3.16.4
+	helm.sh/helm/v3 v3.18.6
 	k8s.io/kubernetes v1.31.3
-	sigs.k8s.io/kustomize/kustomize/v5 v5.5.0
+	sigs.k8s.io/kustomize/kustomize/v5 v5.7.1
 )
 
 require (
