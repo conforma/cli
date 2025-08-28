@@ -3,15 +3,15 @@ module github.com/conforma/cli/tools
 go 1.24.4
 
 require (
-	github.com/daixiang0/gci v0.13.5
+	github.com/daixiang0/gci v0.13.7
 	github.com/golangci/golangci-lint v1.63.4
 	github.com/google/addlicense v1.1.1
 	github.com/open-policy-agent/conftest v0.62.0
-	github.com/tektoncd/chains v0.22.2
-	github.com/tektoncd/cli v0.38.0
+	github.com/tektoncd/chains v0.22.3
+	github.com/tektoncd/cli v0.38.2
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
-	gotest.tools/gotestsum v1.12.1
-	helm.sh/helm/v3 v3.18.5
+	gotest.tools/gotestsum v1.12.3
+	helm.sh/helm/v3 v3.18.6
 	k8s.io/kubernetes v1.31.6
 	sigs.k8s.io/kustomize/kustomize/v5 v5.6.0
 )
@@ -459,7 +459,7 @@ require (
 	github.com/tdakkota/asciicheck v0.3.0 // indirect
 	github.com/tektoncd/hub v1.18.0 // indirect
 	github.com/tektoncd/pipeline v0.66.0 // indirect
-	github.com/tektoncd/triggers v0.29.0 // indirect
+	github.com/tektoncd/triggers v0.29.1 // indirect
 	github.com/tetafro/godot v1.4.20 // indirect
 	github.com/thales-e-security/pool v0.0.2 // indirect
 	github.com/theupdateframework/go-tuf v0.7.0 // indirect
