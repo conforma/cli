@@ -46,7 +46,7 @@ The strings in the list should be one of the following:
 A "package name"::
 
 Package names can be found in the policy documentation, for example the
-xref:policy:ROOT:release_policy.adoc#attestation_type_package[Attestation Type] package
+xref:policy:ROOT:packages/release_attestation_type.adoc[Attestation Type] package
 name is `attestation_type`. Specifing a package name by itself in the include
 or exclude list means every rule from that package should be included or
 excluded.
@@ -55,15 +55,15 @@ A "rule name"::
 
 A rule name consists of the rule's package name and the rule's "code" separated
 by a dot. Rule codes can be see in the documentation also. For example the
-xref:policy:ROOT:release_policy.adoc#attestation_type__unknown_att_type[Unknown attestation type found] rule
-name is `attestation_type.unknown_att_type`.
+xref:policy:ROOT:packages/release_attestation_type.adoc#attestation_type__known_attestation_type[Known attestation type found] rule
+name is `attestation_type.known_attestation_type`.
 
 A "package name:term"::
 
 Some policy rules process a list of items, "term" allows a particular item to
 be excluded or included. This matcher behaves like "package name" but only
 applies to policy rules in the package that match the "term". For example, the
-xref:policy:ROOT:release_policy.adoc#test_package[Test package] emits results for each
+xref:policy:ROOT:packages/release_test.adoc[Test package] emits results for each
 test case. A particular test case can be ignored without ignoring the remaining
 ones.
 
@@ -295,7 +295,7 @@ sources:
       include:
         - "@minimal"
       exclude:
-        - attestation_task_bundle
+        - attestation_type
         - slsa_build_scripted_build
 ----
 JSON::
@@ -309,7 +309,7 @@ JSON::
             "data": ["git::https://github.com/conforma/policy//example/data"],
             "config": {
                 "include": ["@minimal"],
-                "exclude": ["attestation_task_bundle", "slsa_build_scripted_build"]
+                "exclude": ["attestation_type", "slsa_build_scripted_build"]
             }
         }
     ]
@@ -358,9 +358,9 @@ JSON::
 
 === Excluding just one rule
 
-This would include all rules except for the `unacceptable_task_bundle` rule in
-the `attestation_task_bundle` package. The other rules in the
-`attestation_task_bundle` would be included.
+This would include all rules except for the `pipelinerun_attestation_found` rule in
+the `attestation_type` package. The other rules in the `attestation_type` would
+be included.
 
 [tabs]
 ====
@@ -375,7 +375,7 @@ sources:
       - git::https://github.com/conforma/policy//example/data
     config:
       exclude:
-        - attestation_task_bundle.unacceptable_task_bundle
+        - attestation_type.pipelinerun_attestation_found
 ----
 JSON::
 +
@@ -387,7 +387,7 @@ JSON::
             "policy": ["oci::quay.io/enterprise-contract/ec-release-policy:latest"],
             "data": ["git::https://github.com/conforma/policy//example/data"],
             "config": {
-                "exclude": ["attestation_task_bundle.unacceptable_task_bundle"]
+                "exclude": ["attestation_type.pipelinerun_attestation_found"]
             }
         }
     ]
@@ -439,9 +439,9 @@ JSON::
 You can specify both `include` and `exclude` to pick out just the
 rules you want.
 
-This example specifies that only the `unacceptable_task_bundle` rule from the
-`attestation_task_bundle` package should be included. The other rules in the
-`attestation_task_bundle` would be excluded.
+This example specifies that only the `pipelinerun_attestation_found` rule from the
+`attestation_type` package should be included. The other rules in the
+`attestation_type` would be excluded.
 
 Notice the higher specificity include rule takes precedence over the exclude
 rule in this example.
@@ -460,9 +460,9 @@ sources:
     config:
       include:
         - *
-        - attestation_task_bundle.unacceptable_task_bundle
+        - attestation_type.pipelinerun_attestation_found
       exclude:
-        - attestation_task_bundle.*
+        - attestation_type.*
 ----
 JSON::
 +
@@ -474,8 +474,8 @@ JSON::
             "policy": ["oci::quay.io/enterprise-contract/ec-release-policy:latest"],
             "data": ["git::https://github.com/conforma/policy//example/data"],
             "config": {
-                "include": ["*", "attestation_task_bundle.unacceptable_task_bundle"],
-                "exclude": ["attestation_task_bundle.*"]
+                "include": ["*", "attestation_type.pipelinerun_attestation_found"],
+                "exclude": ["attestation_type.*"]
             }
         }
     ]

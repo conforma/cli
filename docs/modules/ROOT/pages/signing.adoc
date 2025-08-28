@@ -62,7 +62,7 @@ expression match if additional flexibility is needed.
 
 Any certificate involved in the signature is also provided as xref:policy_input.adoc[policy input].
 Use this data to establish a fine-grained verification process by leveraging rego policies. See the
-xref:policy:ROOT:release_policy.adoc#github_certificate_package[GitHub Certificate Checks] as
+xref:policy:ROOT:packages/release_github_certificate.adoc[GitHub Certificate Checks] as
 an example.
 
 As with the previous level, it is also possible to use an <<Alternative Rekor>> instance during

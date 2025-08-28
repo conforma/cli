@@ -136,7 +136,7 @@ func TestDescription(t *testing.T) {
 				import rego.v1
 				# METADATA
 				# description: >-
-				#   See xref:release_policy.adoc#attestation_task_bundle_package[here] and
+				#   See xref:packages/release_attestation_type.adoc[here] and
 				#   xref:attachment$trusted_tekton_tasks.yml[over there] for details.
 				deny if { true }`)),
 			expected: "See here and over there for details.",
@@ -358,7 +358,7 @@ func TestSolution(t *testing.T) {
 				# METADATA
 				# custom:
 				#  solution: >-
-				#    See xref:release_policy.adoc#attestation_task_bundle_package[here] and
+				#    See xref:packages/release_attestation_type.adoc[here] and
 				#    xref:attachment$trusted_tekton_tasks.yml[over there] for details.
 				deny if { true }`)),
 			expected: "See here and over there for details.",
