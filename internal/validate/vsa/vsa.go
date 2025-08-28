@@ -201,3 +201,59 @@ func NoopUploader(ctx context.Context, att oci.Signature, location string) (stri
 	log.Infof("Upload type is 'none'; skipping upload for %s", location)
 	return "", nil
 }
+
+// VSALookupResult represents the result of looking up an existing VSA
+type VSALookupResult struct {
+	Found     bool
+	Expired   bool
+	VSA       *Predicate
+	Timestamp time.Time
+}
+
+// VSAChecker handles checking for existing VSAs in Rekor
+type VSAChecker struct {
+	RekorURL string
+	Timeout  time.Duration
+}
+
+// NewVSAChecker creates a new VSA checker
+func NewVSAChecker(rekorURL string, timeout time.Duration) *VSAChecker {
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+	return &VSAChecker{
+		RekorURL: rekorURL,
+		Timeout:  timeout,
+	}
+}
+
+// CheckExistingVSA looks up existing VSAs for an image in Rekor and determines if they're valid/expired
+func (c *VSAChecker) CheckExistingVSA(ctx context.Context, imageRef string, expirationThreshold time.Duration) (*VSALookupResult, error) {
+	result := &VSALookupResult{
+		Found:   false,
+		Expired: false,
+	}
+
+	// TODO: Implement Rekor search for existing VSAs
+	// For now, we'll implement the basic structure and return "not found"
+	// The actual implementation would:
+	// 1. Create Rekor client
+	// 2. Search for VSA attestations for the given image
+	// 3. Parse the VSA predicate
+	// 4. Check the timestamp against the expiration threshold
+
+	log.Debugf("Checking for existing VSA for image %s", imageRef)
+
+	// Placeholder implementation - will be enhanced in next step
+	return result, nil
+}
+
+// IsVSAExpired checks if a VSA is expired based on the timestamp and threshold
+func IsVSAExpired(vsaTimestamp time.Time, expirationThreshold time.Duration) bool {
+	// Zero threshold means "never expires"
+	if expirationThreshold == 0 {
+		return false
+	}
+	cutoffTime := time.Now().Add(-expirationThreshold)
+	return vsaTimestamp.Before(cutoffTime)
+}
