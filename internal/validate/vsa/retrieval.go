@@ -49,6 +49,7 @@ type RetrievalOptions struct {
 // DefaultRetrievalOptions returns default options for VSA retrieval
 func DefaultRetrievalOptions() RetrievalOptions {
 	return RetrievalOptions{
+		URL:     "https://rekor.sigstore.dev",
 		Timeout: 30 * time.Second,
 	}
 }

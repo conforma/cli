@@ -340,3 +340,42 @@ func (rc *rekorClient) GetLogEntryByUUID(ctx context.Context, uuid string) (*mod
 
 	return nil, fmt.Errorf("log entry not found for UUID: %s", uuid)
 }
+
+// RekorVSADataRetriever implements VSADataRetriever for Rekor-based VSA retrieval
+type RekorVSADataRetriever struct {
+	rekorRetriever *RekorVSARetriever
+	imageDigest    string
+}
+
+// NewRekorVSADataRetriever creates a new Rekor-based VSA data retriever
+func NewRekorVSADataRetriever(opts RetrievalOptions, imageDigest string) (*RekorVSADataRetriever, error) {
+	rekorRetriever, err := NewRekorVSARetriever(opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Rekor retriever: %w", err)
+	}
+
+	return &RekorVSADataRetriever{
+		rekorRetriever: rekorRetriever,
+		imageDigest:    imageDigest,
+	}, nil
+}
+
+// RetrieveVSAData retrieves VSA data from Rekor and returns it as a string
+func (r *RekorVSADataRetriever) RetrieveVSAData(ctx context.Context) (string, error) {
+	// Retrieve VSA records from Rekor
+	records, err := r.rekorRetriever.RetrieveVSA(ctx, r.imageDigest)
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve VSA records from Rekor: %w", err)
+	}
+
+	if len(records) == 0 {
+		return "", fmt.Errorf("no VSA records found for image digest: %s", r.imageDigest)
+	}
+
+	// For now, use the first record (we could extend this to handle multiple records)
+	record := records[0]
+
+	// Return the raw body content from the Rekor record
+	// This should contain the original VSA data that was stored in Rekor
+	return record.Body, nil
+}
