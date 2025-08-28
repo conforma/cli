@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -123,6 +124,69 @@ func (r *RekorVSARetriever) RetrieveVSA(ctx context.Context, imageDigest string)
 	return vsaRecords, nil
 }
 
+// FindByPayloadHash implements VSARetriever.FindByPayloadHash
+func (r *RekorVSARetriever) FindByPayloadHash(ctx context.Context, payloadHashHex string) (*DualEntryPair, error) {
+	if payloadHashHex == "" {
+		return nil, fmt.Errorf("payload hash cannot be empty")
+	}
+
+	// Validate payload hash format (should be hex)
+	if !r.IsValidHexHash(payloadHashHex) {
+		return nil, fmt.Errorf("invalid payload hash format: %s", payloadHashHex)
+	}
+
+	// Create context with timeout if specified
+	if r.options.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, r.options.Timeout)
+		defer cancel()
+	}
+
+	log.Debugf("Finding dual entries for payload hash: %s", payloadHashHex)
+
+	// Search for entries containing the payload hash
+	entries, err := r.searchForPayloadHash(ctx, payloadHashHex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search Rekor for payload hash: %w", err)
+	}
+
+	log.Debugf("FindByPayloadHash: search returned %d entries", len(entries))
+
+	// Classify entries by kind and find the pair
+	dualPair := &DualEntryPair{
+		PayloadHash: payloadHashHex,
+	}
+
+	for _, entry := range entries {
+		entryKind := r.classifyEntryKind(entry)
+		switch entryKind {
+		case "intoto":
+			if dualPair.IntotoEntry == nil {
+				dualPair.IntotoEntry = &entry
+				log.Debugf("Found in-toto entry: LogIndex=%d, LogID=%s", *entry.LogIndex, *entry.LogID)
+			}
+		case "dsse":
+			if dualPair.DSSEEntry == nil {
+				dualPair.DSSEEntry = &entry
+				log.Debugf("Found DSSE entry: LogIndex=%d, LogID=%s", *entry.LogIndex, *entry.LogID)
+			}
+		default:
+			log.Debugf("Ignoring entry of unknown kind: %s", entryKind)
+		}
+	}
+
+	// Check if we found at least one entry
+	if dualPair.IntotoEntry == nil && dualPair.DSSEEntry == nil {
+		log.Debugf("No entries found for payload hash: %s", payloadHashHex)
+		return nil, fmt.Errorf("no entries found for payload hash: %s", payloadHashHex)
+	}
+
+	log.Debugf("Found dual entries for payload hash %s: intoto=%v, dsse=%v",
+		payloadHashHex, dualPair.IntotoEntry != nil, dualPair.DSSEEntry != nil)
+
+	return dualPair, nil
+}
+
 // searchForImageDigest searches Rekor for entries containing the given image digest
 func (r *RekorVSARetriever) searchForImageDigest(ctx context.Context, imageDigest string) ([]models.LogEntryAnon, error) {
 	log.Debugf("searchForImageDigest called with imageDigest: %s", imageDigest)
@@ -143,6 +207,27 @@ func (r *RekorVSARetriever) searchForImageDigest(ctx context.Context, imageDiges
 
 	// The search index should return only entries containing our image digest
 	// No need for additional filtering
+	return entries, nil
+}
+
+// searchForPayloadHash searches Rekor for entries containing the given payload hash
+func (r *RekorVSARetriever) searchForPayloadHash(ctx context.Context, payloadHashHex string) ([]models.LogEntryAnon, error) {
+	log.Debugf("searchForPayloadHash called with payloadHashHex: %s", payloadHashHex)
+
+	// Create search query using the search index API
+	query := &models.SearchIndex{
+		Hash: payloadHashHex,
+	}
+
+	log.Debugf("Calling client.SearchIndex")
+	entries, err := r.client.SearchIndex(ctx, query)
+	if err != nil {
+		log.Debugf("SearchIndex returned error: %v", err)
+		return nil, fmt.Errorf("failed to search Rekor index: %w", err)
+	}
+
+	log.Debugf("Search returned %d entries", len(entries))
+
 	return entries, nil
 }
 
@@ -167,6 +252,17 @@ func isValidImageDigest(digest string) bool {
 	}
 
 	// Validate hex format
+	_, err := hex.DecodeString(hash)
+	return err == nil
+}
+
+// IsValidHexHash validates that a string is a valid hex hash
+func (r *RekorVSARetriever) IsValidHexHash(hash string) bool {
+	if len(hash) == 0 {
+		return false
+	}
+
+	// Check if it's a valid hex string
 	_, err := hex.DecodeString(hash)
 	return err == nil
 }
@@ -229,6 +325,114 @@ func (r *RekorVSARetriever) parseVSARecord(entry models.LogEntryAnon) (VSARecord
 	}
 
 	return record, nil
+}
+
+// classifyEntryKind determines the kind of a Rekor entry (intoto, dsse, etc.)
+func (r *RekorVSARetriever) classifyEntryKind(entry models.LogEntryAnon) string {
+	// Check the body field for entry type information
+	if entry.Body != nil {
+		if bodyStr, ok := entry.Body.(string); ok {
+			// Look for type indicators in the body
+			if strings.Contains(bodyStr, `"intoto"`) {
+				return "intoto"
+			}
+			if strings.Contains(bodyStr, `"dsse"`) {
+				return "dsse"
+			}
+		}
+	}
+
+	// Check attestation data for VSA predicate type (indicates in-toto entry)
+	if entry.Attestation != nil && entry.Attestation.Data != nil {
+		attestationData, err := base64.StdEncoding.DecodeString(string(entry.Attestation.Data))
+		if err == nil {
+			attestationStr := string(attestationData)
+			if strings.Contains(attestationStr, "https://conforma.dev/verification_summary/v1") {
+				return "intoto"
+			}
+		}
+	}
+
+	// Default to unknown if we can't determine the type
+	return "unknown"
+}
+
+// ExtractStatementFromIntoto extracts the Statement JSON from an in-toto entry
+func (r *RekorVSARetriever) ExtractStatementFromIntoto(entry *models.LogEntryAnon) ([]byte, error) {
+	if entry == nil {
+		return nil, fmt.Errorf("entry cannot be nil")
+	}
+
+	// Check if this is an in-toto entry
+	entryKind := r.classifyEntryKind(*entry)
+	if entryKind != "intoto" {
+		return nil, fmt.Errorf("entry is not an in-toto entry (kind: %s)", entryKind)
+	}
+
+	// Extract the DSSE envelope from the entry
+	envelopeBytes, err := r.extractDSSEEnvelopeFromEntry(entry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract DSSE envelope from entry: %w", err)
+	}
+
+	// Parse the DSSE envelope
+	var envelope map[string]interface{}
+	if err := json.Unmarshal(envelopeBytes, &envelope); err != nil {
+		return nil, fmt.Errorf("failed to parse DSSE envelope: %w", err)
+	}
+
+	// Extract the payload
+	payloadBase64, ok := envelope["payload"].(string)
+	if !ok {
+		return nil, fmt.Errorf("payload not found in DSSE envelope")
+	}
+
+	// Decode the base64 payload
+	payloadBytes, err := base64.StdEncoding.DecodeString(payloadBase64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode base64 payload: %w", err)
+	}
+
+	// The payload should contain the Statement JSON
+	return payloadBytes, nil
+}
+
+// extractDSSEEnvelopeFromEntry extracts the DSSE envelope from a Rekor entry
+func (r *RekorVSARetriever) extractDSSEEnvelopeFromEntry(entry *models.LogEntryAnon) ([]byte, error) {
+	// Try to extract from attestation data first
+	if entry.Attestation != nil && entry.Attestation.Data != nil {
+		attestationData, err := base64.StdEncoding.DecodeString(string(entry.Attestation.Data))
+		if err == nil {
+			// Check if this contains a DSSE envelope
+			var attestation map[string]interface{}
+			if err := json.Unmarshal(attestationData, &attestation); err == nil {
+				// If it has payload and signatures, it's likely a DSSE envelope
+				if _, hasPayload := attestation["payload"]; hasPayload {
+					if _, hasSignatures := attestation["signatures"]; hasSignatures {
+						return attestationData, nil
+					}
+				}
+			}
+		}
+	}
+
+	// Try to extract from body field
+	if entry.Body != nil {
+		if bodyStr, ok := entry.Body.(string); ok {
+			// Try to parse as JSON
+			var body map[string]interface{}
+			if err := json.Unmarshal([]byte(bodyStr), &body); err == nil {
+				// If it has payload and signatures, it's likely a DSSE envelope
+				if _, hasPayload := body["payload"]; hasPayload {
+					if _, hasSignatures := body["signatures"]; hasSignatures {
+						return []byte(bodyStr), nil
+					}
+				}
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("could not extract DSSE envelope from entry")
 }
 
 // rekorClient wraps the actual Rekor client to implement our interface

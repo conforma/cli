@@ -17,10 +17,12 @@
 package vsa
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"io"
 	"testing"
@@ -205,4 +207,139 @@ func TestRekorBackend_DefaultConfiguration(t *testing.T) {
 	assert.Equal(t, "https://rekor.sigstore.dev", rekorBackend.serverURL)
 	assert.Equal(t, 30*time.Second, rekorBackend.timeout)
 	assert.Equal(t, 3, rekorBackend.retries)
+}
+
+func TestRekorBackend_CanonicalizeBase64(t *testing.T) {
+	backend := &RekorBackend{}
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "standard base64 with padding",
+			input:    "SGVsbG8gV29ybGQ=",
+			expected: "SGVsbG8gV29ybGQ=",
+		},
+		{
+			name:     "raw base64 without padding",
+			input:    "SGVsbG8gV29ybGQ",
+			expected: "SGVsbG8gV29ybGQ=",
+		},
+		{
+			name:     "base64 with newlines",
+			input:    "SGVsbG8g\nV29ybGQ=",
+			expected: "SGVsbG8gV29ybGQ=",
+		},
+		{
+			name:     "base64 with multiple newlines and padding",
+			input:    "SGVsbG8g\nV29ybGQ=\n",
+			expected: "SGVsbG8gV29ybGQ=",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "string with only newlines",
+			input:    "\n\n\n",
+			expected: "",
+		},
+		{
+			name:     "string with only padding",
+			input:    "====",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := backend.canonicalizeBase64([]byte(tt.input))
+			if err != nil {
+				t.Fatalf("canonicalizeBase64() error = %v", err)
+			}
+
+			if string(result) != tt.expected {
+				t.Errorf("canonicalizeBase64() = %v, want %v", string(result), tt.expected)
+			}
+		})
+	}
+}
+
+func TestRekorBackend_PrepareDSSEForRekor(t *testing.T) {
+	backend := &RekorBackend{}
+
+	// Test DSSE envelope with standard base64
+	dsseEnvelope := `{
+		"payload": "SGVsbG8gV29ybGQ=",
+		"signatures": [
+			{
+				"keyid": "test-key",
+				"sig": "dGVzdC1zaWduYXR1cmU="
+			}
+		]
+	}`
+
+	pubKeyBytes := []byte("-----BEGIN PUBLIC KEY-----\ntest-key\n-----END PUBLIC KEY-----")
+
+	preparedEnvelope, payloadHash, err := backend.prepareDSSEForRekor([]byte(dsseEnvelope), pubKeyBytes)
+	if err != nil {
+		t.Fatalf("prepareDSSEForRekor() error = %v", err)
+	}
+
+	// Verify the envelope was canonicalized
+	var envelope map[string]interface{}
+	if err := json.Unmarshal(preparedEnvelope, &envelope); err != nil {
+		t.Fatalf("failed to unmarshal prepared envelope: %v", err)
+	}
+
+	// Check that payload was canonicalized
+	if payload, ok := envelope["payload"].(string); ok {
+		if payload != "SGVsbG8gV29ybGQ=" {
+			t.Errorf("payload not canonicalized correctly, got %s, want SGVsbG8gV29ybGQ=", payload)
+		}
+	} else {
+		t.Error("payload not found in envelope")
+	}
+
+	// Check that signature was canonicalized and public key was injected
+	if signatures, ok := envelope["signatures"].([]interface{}); ok {
+		if len(signatures) > 0 {
+			if sigMap, ok := signatures[0].(map[string]interface{}); ok {
+				if sig, ok := sigMap["sig"].(string); ok {
+					if sig != "dGVzdC1zaWduYXR1cmU=" {
+						t.Errorf("signature not canonicalized correctly, got %s, want dGVzdC1zaWduYXR1cmU=", sig)
+					}
+				}
+				if pubKey, ok := sigMap["publicKey"].(string); ok {
+					if pubKey != string(pubKeyBytes) {
+						t.Errorf("public key not injected correctly")
+					}
+				} else {
+					t.Error("public key not found in signature")
+				}
+			}
+		}
+	}
+
+	// Verify payload hash is not empty
+	if payloadHash == "" {
+		t.Error("payload hash is empty")
+	}
+
+	// Test that the same input produces the same output (deterministic)
+	preparedEnvelope2, payloadHash2, err := backend.prepareDSSEForRekor([]byte(dsseEnvelope), pubKeyBytes)
+	if err != nil {
+		t.Fatalf("prepareDSSEForRekor() error on second call = %v", err)
+	}
+
+	if !bytes.Equal(preparedEnvelope, preparedEnvelope2) {
+		t.Error("prepared envelope is not deterministic")
+	}
+
+	if payloadHash != payloadHash2 {
+		t.Error("payload hash is not deterministic")
+	}
 }
