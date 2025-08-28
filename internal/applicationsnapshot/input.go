@@ -54,6 +54,7 @@ type Input struct {
 
 type snapshot struct {
 	app.SnapshotSpec
+	Expansion *ExpansionInfo
 }
 
 func (s *snapshot) merge(snap app.SnapshotSpec) {
@@ -89,7 +90,7 @@ func (s *snapshot) merge(snap app.SnapshotSpec) {
 	}
 }
 
-func DetermineInputSpec(ctx context.Context, input Input) (*app.SnapshotSpec, error) {
+func DetermineInputSpec(ctx context.Context, input Input) (*app.SnapshotSpec, *ExpansionInfo, error) {
 	var snapshot snapshot
 	provided := false
 
@@ -106,7 +107,7 @@ func DetermineInputSpec(ctx context.Context, input Input) (*app.SnapshotSpec, er
 
 		file, err := readSnapshotSource(content)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		snapshot.merge(file)
 		provided = true
@@ -117,11 +118,11 @@ func DetermineInputSpec(ctx context.Context, input Input) (*app.SnapshotSpec, er
 		fs := utils.FS(ctx)
 		content, err := afero.ReadFile(fs, input.File)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		file, err := readSnapshotSource(content)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		snapshot.merge(file)
 		provided = true
@@ -131,7 +132,7 @@ func DetermineInputSpec(ctx context.Context, input Input) (*app.SnapshotSpec, er
 	if input.JSON != "" {
 		json, err := readSnapshotSource([]byte(input.JSON))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		snapshot.merge(json)
 		provided = true
@@ -156,13 +157,13 @@ func DetermineInputSpec(ctx context.Context, input Input) (*app.SnapshotSpec, er
 		client, err := kubernetes.NewClient(ctx)
 		if err != nil {
 			log.Debugf("Unable to initialize Kubernetes Client: %v", err)
-			return nil, err
+			return nil, nil, err
 		}
 
 		cluster, err := client.FetchSnapshot(ctx, input.Snapshot)
 		if err != nil {
 			log.Debugf("Unable to fetch snapshot %s from Kubernetes cluster: %v", input.Snapshot, err)
-			return nil, err
+			return nil, nil, err
 		}
 		snapshot.merge(cluster.Spec)
 		provided = true
@@ -170,11 +171,15 @@ func DetermineInputSpec(ctx context.Context, input Input) (*app.SnapshotSpec, er
 
 	if !provided {
 		log.Debug("No application snapshot available")
-		return nil, errors.New("neither Snapshot nor image reference provided to validate")
+		return nil, nil, errors.New("neither Snapshot nor image reference provided to validate")
 	}
-	expandImageIndex(ctx, &snapshot.SnapshotSpec)
+	exp := expandImageIndex(ctx, &snapshot.SnapshotSpec)
 
-	return &snapshot.SnapshotSpec, nil
+	// Store expansion info in the snapshot for later use
+	// This will be used when building the Report
+	snapshot.Expansion = exp
+
+	return &snapshot.SnapshotSpec, exp, nil
 }
 
 func readSnapshotSource(input []byte) (app.SnapshotSpec, error) {
@@ -192,7 +197,7 @@ func readSnapshotSource(input []byte) (app.SnapshotSpec, error) {
 // For an image index, remove the original component and replace it with an expanded component with all its image manifests
 // Do not raise an error if the image is inaccessible, it will be handled as a violation when evaluated against the policy
 // This is to retain the original behavior of the `ec validate` command.
-func imageIndexWorker(client oci.Client, component app.SnapshotComponent, componentChan chan<- []app.SnapshotComponent, errorsChan chan<- error) {
+func imageIndexWorker(client oci.Client, component app.SnapshotComponent, componentChan chan<- []app.SnapshotComponent, errorsChan chan<- error, exp *ExpansionInfo) {
 	var components []app.SnapshotComponent
 	components = append(components, component)
 	// to avoid adding to componentsChan before each return
@@ -228,6 +233,10 @@ func imageIndexWorker(client oci.Client, component app.SnapshotComponent, compon
 		return
 	}
 
+	// Track expansion metadata
+	idxPinned := fmt.Sprintf("%s@%s", ref.Context().Name(), desc.Digest)
+	exp.IndexAliases[ref.Name()] = idxPinned
+
 	// Add the platform-specific image references (Image Manifests) to the list of components so
 	// each is validated as well as the multi-platform image reference (Image Index).
 	for i, manifest := range indexManifest.Manifests {
@@ -241,15 +250,21 @@ func imageIndexWorker(client oci.Client, component app.SnapshotComponent, compon
 		archComponent.Name = fmt.Sprintf("%s-%s-%s", component.Name, manifest.Digest, arch)
 		archComponent.ContainerImage = fmt.Sprintf("%s@%s", ref.Context().Name(), manifest.Digest)
 		components = append(components, archComponent)
+
+		// Track parent-child relationships
+		childPinned := archComponent.ContainerImage
+		exp.ChildrenByIndex[idxPinned] = append(exp.ChildrenByIndex[idxPinned], childPinned)
+		exp.ParentByChild[childPinned] = idxPinned
 	}
 }
 
-func expandImageIndex(ctx context.Context, snap *app.SnapshotSpec) {
+func expandImageIndex(ctx context.Context, snap *app.SnapshotSpec) *ExpansionInfo {
 	if trace.IsEnabled() {
 		region := trace.StartRegion(ctx, "ec:expand-image-index")
 		defer region.End()
 	}
 
+	exp := NewExpansionInfo()
 	client := oci.NewClient(ctx)
 
 	componentChan := make(chan []app.SnapshotComponent, len(snap.Components))
@@ -259,7 +274,7 @@ func expandImageIndex(ctx context.Context, snap *app.SnapshotSpec) {
 	for _, component := range snap.Components {
 		// fetch manifests concurrently
 		g.Go(func() error {
-			imageIndexWorker(client, component, componentChan, errorsChan)
+			imageIndexWorker(client, component, componentChan, errorsChan, exp)
 			return nil
 		})
 	}
@@ -289,6 +304,8 @@ func expandImageIndex(ctx context.Context, snap *app.SnapshotSpec) {
 		log.Warnf("Encountered error while checking for Image Index: %v", allErrors)
 	}
 	log.Debugf("Snap component after expanding the image index is %v", snap.Components)
+
+	return exp
 }
 
 func imageWorkers() int {

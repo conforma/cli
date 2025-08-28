@@ -177,7 +177,7 @@ func Test_DetermineInputSpec(t *testing.T) {
 					panic(err)
 				}
 			}
-			got, err := DetermineInputSpec(ctx, tc.input)
+			got, _, err := DetermineInputSpec(ctx, tc.input)
 			// expect an error so check for nil
 			if tc.want != nil {
 				assert.NoError(t, err)

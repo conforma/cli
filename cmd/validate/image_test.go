@@ -323,7 +323,7 @@ func Test_determineInputSpec(t *testing.T) {
 	ctx := oci.WithClient(context.Background(), &client)
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			s, err := applicationsnapshot.DetermineInputSpec(ctx, applicationsnapshot.Input{
+			s, _, err := applicationsnapshot.DetermineInputSpec(ctx, applicationsnapshot.Input{
 				File:   c.arguments.filePath,
 				JSON:   c.arguments.input,
 				Image:  c.arguments.imageRef,

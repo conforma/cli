@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
@@ -40,7 +39,7 @@ type Predicate struct {
 	Verifier     string                 `json:"verifier"`
 	PolicySource string                 `json:"policySource"`
 	Component    map[string]interface{} `json:"component"`
-	Results      *FilteredReport        `json:"results,omitempty"` // Filtered report containing target component and its variants
+	Results      *FilteredReport        `json:"results,omitempty"` // Filtered report containing the target and its children if it's a manifest
 }
 
 // Generator handles VSA predicate generation
@@ -58,7 +57,7 @@ func NewGenerator(report applicationsnapshot.Report, comp applicationsnapshot.Co
 }
 
 // FilteredReport represents a filtered version of the application snapshot report
-// that contains only the target component and its architecture variants.
+// that contains the target component and its architecture variants if it's a manifest.
 type FilteredReport struct {
 	Snapshot      string                           `json:"snapshot"`
 	Components    []applicationsnapshot.Component  `json:"components"`
@@ -68,38 +67,58 @@ type FilteredReport struct {
 	EffectiveTime time.Time                        `json:"effective-time"`
 }
 
-// FilterReportForComponent filters the report to include only the target component and its architecture variants.
-// It returns a filtered report that excludes the top-level "success" field and includes only components
-// that match the target component name or are architecture variants of the same base component.
+// normalizeIndexRef normalizes an image reference to its pinned digest form if it's an index
+func normalizeIndexRef(ref string, exp *applicationsnapshot.ExpansionInfo) string {
+	if exp == nil {
+		return ref
+	}
+	if pinned, ok := exp.IndexAliases[ref]; ok {
+		return pinned
+	}
+	return ref
+}
+
+// FilterReportForTargetRef filters the report based on the target image reference.
+// If the target is an image index (manifest), it includes the index and all its child manifests.
+// If the target is a single-arch image, it includes only that image.
 //
 // Parameters:
 //   - report: The complete application snapshot report
-//   - targetComponentName: The name of the component to filter for
+//   - targetRef: The container image reference to filter for
 //
 // Returns:
-//   - A FilteredReport containing only the target component and its variants
-func FilterReportForComponent(report applicationsnapshot.Report, targetComponentName string) *FilteredReport {
-	// Extract the base component name (before the first dash)
-	baseName := targetComponentName
-	if idx := strings.Index(targetComponentName, "-"); idx != -1 {
-		baseName = targetComponentName[:idx]
+//   - A FilteredReport containing the target and its children if it's a manifest
+func FilterReportForTargetRef(report applicationsnapshot.Report, targetRef string) *FilteredReport {
+	exp := report.Expansion
+	targetRef = normalizeIndexRef(targetRef, exp)
+
+	include := map[string]struct{}{}
+	if exp != nil {
+		if imgs, ok := exp.ChildrenByIndex[targetRef]; ok {
+			// This is an image index, include the index and all its children
+			include[targetRef] = struct{}{}
+			for _, c := range imgs {
+				include[c] = struct{}{}
+			}
+		} else {
+			// This is a single-arch image, include only itself
+			include[targetRef] = struct{}{}
+		}
+	} else {
+		// No expansion info available, include only the target
+		include[targetRef] = struct{}{}
 	}
 
-	// Filter components that match the base name or are architecture variants
-	var filteredComponents []applicationsnapshot.Component
-	for _, comp := range report.Components {
-		// Check if this component is the target, the base component, or a variant
-		if comp.Name == targetComponentName ||
-			comp.Name == baseName ||
-			strings.HasPrefix(comp.Name, baseName+"-") {
-			filteredComponents = append(filteredComponents, comp)
+	comps := make([]applicationsnapshot.Component, 0, len(report.Components))
+	for _, c := range report.Components {
+		if _, ok := include[c.ContainerImage]; ok {
+			comps = append(comps, c)
 		}
 	}
 
-	// Create a filtered report without the success field
 	return &FilteredReport{
 		Snapshot:      report.Snapshot,
-		Components:    filteredComponents,
+		Components:    comps,
 		Key:           report.Key,
 		Policy:        report.Policy,
 		EcVersion:     report.EcVersion,
@@ -123,8 +142,8 @@ func (g *Generator) GeneratePredicate(ctx context.Context) (*Predicate, error) {
 		policySource = g.Report.Policy.Name
 	}
 
-	// Filter the report to include only the target component and its architecture variants
-	filteredReport := FilterReportForComponent(g.Report, g.Component.Name)
+	// Filter the report to include the target component and its architecture variants if it's a manifest
+	filteredReport := FilterReportForTargetRef(g.Report, g.Component.ContainerImage)
 
 	return &Predicate{
 		ImageRef:     g.Component.ContainerImage,

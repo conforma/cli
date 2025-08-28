@@ -70,14 +70,16 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 		rekorURL                    string
 		snapshot                    string
 		spec                        *app.SnapshotSpec
-		strict                      bool
-		images                      string
-		noColor                     bool
-		forceColor                  bool
-		workers                     int
-		vsaEnabled                  bool
-		vsaSigningKey               string
-		vsaUpload                   []string
+		// Only used to pass the expansion info to the report. Not a cli flag.
+		expansion     *applicationsnapshot.ExpansionInfo
+		strict        bool
+		images        string
+		noColor       bool
+		forceColor    bool
+		workers       int
+		vsaEnabled    bool
+		vsaSigningKey string
+		vsaUpload     []string
 	}{
 		strict:  true,
 		workers: 5,
@@ -200,7 +202,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				cmd.SetContext(ctx)
 			}
 
-			if s, err := applicationsnapshot.DetermineInputSpec(ctx, applicationsnapshot.Input{
+			if s, exp, err := applicationsnapshot.DetermineInputSpec(ctx, applicationsnapshot.Input{
 				File:     data.filePath,
 				JSON:     data.input,
 				Image:    data.imageRef,
@@ -210,6 +212,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				allErrors = errors.Join(allErrors, err)
 			} else {
 				data.spec = s
+				data.expansion = exp
 			}
 
 			policyConfiguration, err := validate_utils.GetPolicyConfig(ctx, data.policyConfiguration)
@@ -450,7 +453,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				data.output = append(data.output, fmt.Sprintf("%s=%s", applicationsnapshot.JSON, data.outputFile))
 			}
 
-			report, err := applicationsnapshot.NewReport(data.snapshot, components, data.policy, manyPolicyInput, showSuccesses)
+			report, err := applicationsnapshot.NewReport(data.snapshot, components, data.policy, manyPolicyInput, showSuccesses, data.expansion)
 			if err != nil {
 				return err
 			}

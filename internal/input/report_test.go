@@ -233,7 +233,7 @@ func Test_ReportSummary(t *testing.T) {
 		t.Run(fmt.Sprintf("NewReport=%s", tc.name), func(t *testing.T) {
 			ctx := context.Background()
 			report, err := NewReport(tc.input, createTestPolicy(t, ctx), nil)
-			// report, err := NewReport(tc.snapshot, []Component{tc.input}, createTestPolicy(t, ctx), nil)
+			// report, err := NewReport(tc.snapshot, []Component{tc.input}, createTestPolicy(t, ctx), nil, nil)
 			assert.NoError(t, err)
 			fmt.Println("\n\nExpected:\n", tc.want, "\n\nActual:\n", report.toSummary())
 			assert.Equal(t, tc.want, report.toSummary())

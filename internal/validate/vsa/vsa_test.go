@@ -326,9 +326,9 @@ func TestGeneratePredicate(t *testing.T) {
 	assert.Equal(t, report.EcVersion, pred.Results.EcVersion)
 	assert.Equal(t, report.EffectiveTime, pred.Results.EffectiveTime)
 
-	// Verify filtered components include target and variants but not other components
+	// Verify filtered components include only the target component, not variants or other components
 	filteredComponents := pred.Results.Components
-	assert.Len(t, filteredComponents, 3) // test-component + 2 variants
+	assert.Len(t, filteredComponents, 1) // only test-component
 
 	componentNames := make([]string, len(filteredComponents))
 	for i, comp := range filteredComponents {
@@ -336,94 +336,84 @@ func TestGeneratePredicate(t *testing.T) {
 	}
 
 	assert.Contains(t, componentNames, "test-component")
-	assert.Contains(t, componentNames, "test-component-sha256:abc123-amd64")
-	assert.Contains(t, componentNames, "test-component-sha256:def456-arm64")
+	assert.NotContains(t, componentNames, "test-component-sha256:abc123-amd64")
+	assert.NotContains(t, componentNames, "test-component-sha256:def456-arm64")
 	assert.NotContains(t, componentNames, "other-component")
 }
 
-func TestFilterReportForComponent(t *testing.T) {
+func TestFilterReportForTargetRef(t *testing.T) {
 	tests := []struct {
-		name                string
-		targetComponentName string
-		components          []applicationsnapshot.Component
-		expectedCount       int
-		expectedNames       []string
+		name           string
+		targetRef      string
+		components     []applicationsnapshot.Component
+		expansion      *applicationsnapshot.ExpansionInfo
+		expectedCount  int
+		expectedImages []string
 	}{
 		{
-			name:                "base component with variants",
-			targetComponentName: "Unnamed",
+			name:      "image index with variants - includes all",
+			targetRef: "quay.io/test/image@sha256:index123",
 			components: []applicationsnapshot.Component{
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed"}},
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed-sha256:abc123-amd64"}},
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed-sha256:def456-arm64"}},
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "OtherComponent"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed", ContainerImage: "quay.io/test/image@sha256:index123"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed-sha256:abc123-amd64", ContainerImage: "quay.io/test/image@sha256:abc123"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed-sha256:def456-arm64", ContainerImage: "quay.io/test/image@sha256:def456"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "OtherComponent", ContainerImage: "quay.io/other/image@sha256:other123"}},
 			},
-			expectedCount: 3,
-			expectedNames: []string{"Unnamed", "Unnamed-sha256:abc123-amd64", "Unnamed-sha256:def456-arm64"},
+			expansion: &applicationsnapshot.ExpansionInfo{
+				ChildrenByIndex: map[string][]string{
+					"quay.io/test/image@sha256:index123": {
+						"quay.io/test/image@sha256:abc123",
+						"quay.io/test/image@sha256:def456",
+					},
+				},
+				IndexAliases: map[string]string{
+					"quay.io/test/image:latest": "quay.io/test/image@sha256:index123",
+				},
+			},
+			expectedCount:  3,
+			expectedImages: []string{"quay.io/test/image@sha256:index123", "quay.io/test/image@sha256:abc123", "quay.io/test/image@sha256:def456"},
 		},
 		{
-			name:                "specific variant component",
-			targetComponentName: "Unnamed-sha256:abc123-amd64",
+			name:      "single-arch image - includes only itself",
+			targetRef: "quay.io/test/image@sha256:abc123",
 			components: []applicationsnapshot.Component{
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed"}},
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed-sha256:abc123-amd64"}},
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed-sha256:def456-arm64"}},
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "OtherComponent"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed", ContainerImage: "quay.io/test/image@sha256:index123"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed-sha256:abc123-amd64", ContainerImage: "quay.io/test/image@sha256:abc123"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "Unnamed-sha256:def456-arm64", ContainerImage: "quay.io/test/image@sha256:def456"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "OtherComponent", ContainerImage: "quay.io/other/image@sha256:other123"}},
 			},
-			expectedCount: 3,
-			expectedNames: []string{"Unnamed", "Unnamed-sha256:abc123-amd64", "Unnamed-sha256:def456-arm64"},
+			expansion: &applicationsnapshot.ExpansionInfo{
+				ChildrenByIndex: map[string][]string{
+					"quay.io/test/image@sha256:index123": {
+						"quay.io/test/image@sha256:abc123",
+						"quay.io/test/image@sha256:def456",
+					},
+				},
+			},
+			expectedCount:  1,
+			expectedImages: []string{"quay.io/test/image@sha256:abc123"},
 		},
 		{
-			name:                "component without variants",
-			targetComponentName: "SimpleComponent",
+			name:      "no expansion info - includes only target",
+			targetRef: "quay.io/test/image@sha256:abc123",
 			components: []applicationsnapshot.Component{
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "SimpleComponent"}},
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "OtherComponent"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "TestComponent", ContainerImage: "quay.io/test/image@sha256:abc123"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "OtherComponent", ContainerImage: "quay.io/other/image@sha256:other123"}},
 			},
-			expectedCount: 1,
-			expectedNames: []string{"SimpleComponent"},
+			expansion:      nil,
+			expectedCount:  1,
+			expectedImages: []string{"quay.io/test/image@sha256:abc123"},
 		},
 		{
-			name:                "component with different base name",
-			targetComponentName: "MyApp",
+			name:      "target not found",
+			targetRef: "quay.io/test/image@sha256:nonexistent",
 			components: []applicationsnapshot.Component{
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "MyApp"}},
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "MyApp-sha256:abc123-amd64"}},
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "MyApp-sha256:def456-arm64"}},
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "MyAppHelper"}}, // Should not match
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "OtherComponent"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "TestComponent", ContainerImage: "quay.io/test/image@sha256:abc123"}},
+				{SnapshotComponent: appapi.SnapshotComponent{Name: "OtherComponent", ContainerImage: "quay.io/other/image@sha256:other123"}},
 			},
-			expectedCount: 3,
-			expectedNames: []string{"MyApp", "MyApp-sha256:abc123-amd64", "MyApp-sha256:def456-arm64"},
-		},
-		{
-			name:                "empty component list",
-			targetComponentName: "TestComponent",
-			components:          []applicationsnapshot.Component{},
-			expectedCount:       0,
-			expectedNames:       []string{},
-		},
-		{
-			name:                "component with dash in name but no variant pattern",
-			targetComponentName: "Test-Component",
-			components: []applicationsnapshot.Component{
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "Test-Component"}},
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "Test-Component-Other"}},
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "OtherComponent"}},
-			},
-			expectedCount: 2,
-			expectedNames: []string{"Test-Component", "Test-Component-Other"},
-		},
-		{
-			name:                "exact match only",
-			targetComponentName: "ExactMatch",
-			components: []applicationsnapshot.Component{
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "ExactMatch"}},
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "ExactMatchHelper"}}, // Should not match
-				{SnapshotComponent: appapi.SnapshotComponent{Name: "OtherComponent"}},
-			},
-			expectedCount: 1,
-			expectedNames: []string{"ExactMatch"},
+			expansion:      nil,
+			expectedCount:  0,
+			expectedImages: []string{},
 		},
 	}
 
@@ -431,31 +421,22 @@ func TestFilterReportForComponent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			report := applicationsnapshot.Report{
 				Components: tt.components,
+				Expansion:  tt.expansion,
 				Policy:     ecapi.EnterpriseContractPolicySpec{Name: "test-policy"},
 				EcVersion:  "1.0.0",
 			}
 
-			filteredReport := FilterReportForComponent(report, tt.targetComponentName)
+			filteredReport := FilterReportForTargetRef(report, tt.targetRef)
 
-			// Verify the filtered report structure using struct fields
-			assert.NotNil(t, filteredReport)
-			assert.Equal(t, report.Snapshot, filteredReport.Snapshot)
-			assert.Equal(t, report.Key, filteredReport.Key)
-			assert.Equal(t, report.Policy, filteredReport.Policy)
-			assert.Equal(t, report.EcVersion, filteredReport.EcVersion)
-			assert.Equal(t, report.EffectiveTime, filteredReport.EffectiveTime)
+			assert.Len(t, filteredReport.Components, tt.expectedCount)
 
-			// Verify filtered components
-			filteredComponents := filteredReport.Components
-			assert.Len(t, filteredComponents, tt.expectedCount)
-
-			componentNames := make([]string, len(filteredComponents))
-			for i, comp := range filteredComponents {
-				componentNames[i] = comp.Name
+			imageRefs := make([]string, len(filteredReport.Components))
+			for i, comp := range filteredReport.Components {
+				imageRefs[i] = comp.ContainerImage
 			}
 
-			for _, expectedName := range tt.expectedNames {
-				assert.Contains(t, componentNames, expectedName)
+			for _, expectedImage := range tt.expectedImages {
+				assert.Contains(t, imageRefs, expectedImage)
 			}
 		})
 	}
