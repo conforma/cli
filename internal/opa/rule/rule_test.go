@@ -672,6 +672,26 @@ func TestReplaceXrefReferencesWithURL(t *testing.T) {
 			input:    "xref:cli:ROOT:configuration.adoc#_data_sources", // Missing trailing "[...]"
 			expected: "xref:cli:ROOT:configuration.adoc#_data_sources", // No match → remains unchanged.
 		},
+		// The following tests are for the anonymous function (closure) within replaceXrefReferencesWithURL
+		// which Sealights reports as: func replaceXrefReferencesWithURL.func1 (match string) string
+		// Testing "if len(matches) < 5" condition in anonymous function
+		{
+			name:     "Insufficient capture groups",
+			input:    "xref:incomplete",
+			expected: "xref:incomplete", // Should trigger len(matches) < 5 and return original
+		},
+		// Testing "if matches[1] == "" || matches[2] == "" || matches[3] == """ condition
+		{
+			name:     "Empty group component",
+			input:    "xref::ROOT:file.adoc#anchor[label]",
+			expected: "xref::ROOT:file.adoc#anchor[label]", // Empty group should trigger empty component check
+		},
+		// Testing successful URL construction logic with complex components
+		{
+			name:     "Complex URL construction with dots",
+			input:    "xref:policy:ROOT:release.policy.adoc#validation_section[Policy Guide]",
+			expected: "https://conforma.dev/docs/policy/release.policy.html#validation_section",
+		},
 	}
 
 	for _, tc := range tests {
