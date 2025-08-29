@@ -27,6 +27,8 @@ import (
 type VSARetriever interface {
 	// RetrieveVSA retrieves VSA records for a given image digest
 	RetrieveVSA(ctx context.Context, imageDigest string) ([]VSARecord, error)
+	// FindByPayloadHash retrieves dual entries by payload hash
+	FindByPayloadHash(ctx context.Context, payloadHashHex string) (*DualEntryPair, error)
 }
 
 // VSARecord represents a VSA record retrieved from Rekor
@@ -38,6 +40,13 @@ type VSARecord struct {
 	Body           string                           `json:"body"`
 	Attestation    *models.LogEntryAnonAttestation  `json:"attestation,omitempty"`
 	Verification   *models.LogEntryAnonVerification `json:"verification,omitempty"`
+}
+
+// DualEntryPair represents a pair of DSSE and in-toto entries for the same payload
+type DualEntryPair struct {
+	PayloadHash string
+	IntotoEntry *models.LogEntryAnon
+	DSSEEntry   *models.LogEntryAnon
 }
 
 // RetrievalOptions configures VSA retrieval behavior

@@ -36,7 +36,7 @@ type StorageBackend interface {
 // (e.g., Rekor backend needs the public key for transparency log upload)
 type SignerAwareUploader interface {
 	StorageBackend
-	UploadWithSigner(ctx context.Context, envelopeContent []byte, signer *Signer) error
+	UploadWithSigner(ctx context.Context, envelopeContent []byte, signer *Signer) (string, error)
 }
 
 // StorageConfig represents parsed storage configuration
@@ -170,7 +170,13 @@ func UploadVSAEnvelope(ctx context.Context, envelopePath string, storageConfigs 
 		// Upload using the appropriate method
 		var uploadErr error
 		if signerAwareUploader, ok := backend.(SignerAwareUploader); ok && signer != nil {
-			uploadErr = signerAwareUploader.UploadWithSigner(ctx, envelopeContent, signer)
+			payloadHash, uploadErr := signerAwareUploader.UploadWithSigner(ctx, envelopeContent, signer)
+			if uploadErr == nil && payloadHash != "" {
+				log.WithFields(log.Fields{
+					"backend":      backend.Name(),
+					"payload_hash": payloadHash,
+				}).Debug("[VSA] Upload successful, payload hash available for retrieval")
+			}
 		} else {
 			uploadErr = backend.Upload(ctx, envelopeContent)
 		}
