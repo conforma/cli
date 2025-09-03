@@ -765,19 +765,26 @@ func (r *RekorVSARetriever) extractDSSEEnvelopeFromEntry(entry *models.LogEntryA
 
 // extractSignaturesAndPublicKey extracts signatures and public key from a DSSE entry
 func (r *RekorVSARetriever) extractSignaturesAndPublicKey(entry models.LogEntryAnon) ([]map[string]interface{}, error) {
-	envelopeBytes, err := r.extractDSSEEnvelopeFromEntry(&entry)
+	// For DSSE entries, we need to extract from the body structure, not from a DSSE envelope
+	body, err := r.decodeBodyJSON(entry)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract DSSE envelope: %w", err)
+		return nil, fmt.Errorf("failed to decode entry body: %w", err)
 	}
 
-	var envelope map[string]interface{}
-	if err := json.Unmarshal(envelopeBytes, &envelope); err != nil {
-		return nil, fmt.Errorf("failed to parse DSSE envelope: %w", err)
+	// Check if this is a DSSE entry
+	if kind, ok := body["kind"].(string); !ok || kind != "dsse" {
+		return nil, fmt.Errorf("entry is not a DSSE entry (kind: %s)", kind)
 	}
 
-	signatures, ok := envelope["signatures"].([]interface{})
+	// Extract the signatures from spec.signatures
+	spec, ok := body["spec"].(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("signatures not found in DSSE envelope")
+		return nil, fmt.Errorf("spec field not found in DSSE entry")
+	}
+
+	signatures, ok := spec["signatures"].([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("signatures field not found in DSSE entry spec")
 	}
 
 	var result []map[string]interface{}
@@ -876,30 +883,35 @@ func (r *RekorVSARetriever) extractPayloadHash(entry models.LogEntryAnon) (strin
 
 // extractVSAStatement extracts the VSA Statement from an in-toto entry
 func (r *RekorVSARetriever) extractVSAStatement(entry models.LogEntryAnon) ([]byte, error) {
-	envelopeBytes, err := r.extractDSSEEnvelopeFromEntry(&entry)
+	// For intoto entries, we need to extract from the body structure, not from a DSSE envelope
+	body, err := r.decodeBodyJSON(entry)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract DSSE envelope: %w", err)
+		return nil, fmt.Errorf("failed to decode entry body: %w", err)
 	}
 
-	var envelope map[string]interface{}
-	if err := json.Unmarshal(envelopeBytes, &envelope); err != nil {
-		return nil, fmt.Errorf("failed to parse DSSE envelope: %w", err)
+	// Check if this is an intoto entry
+	if kind, ok := body["kind"].(string); !ok || kind != "intoto" {
+		return nil, fmt.Errorf("entry is not an intoto entry (kind: %s)", kind)
 	}
 
-	// Extract the payload
-	payloadBase64, ok := envelope["payload"].(string)
+	// Extract the content from spec.content
+	spec, ok := body["spec"].(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("payload not found in DSSE envelope")
+		return nil, fmt.Errorf("spec field not found in intoto entry")
 	}
 
-	// Decode the base64 payload
-	payloadBytes, err := base64.StdEncoding.DecodeString(payloadBase64)
+	content, ok := spec["content"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("content field not found in intoto entry spec")
+	}
+
+	// The content should contain the VSA data
+	contentBytes, err := json.Marshal(content)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode base64 payload: %w", err)
+		return nil, fmt.Errorf("failed to marshal content: %w", err)
 	}
 
-	// The payload should contain the Statement JSON
-	return payloadBytes, nil
+	return contentBytes, nil
 }
 
 // GetPairedVSAWithSignatures retrieves a VSA with its corresponding signatures by payloadHash
@@ -1251,20 +1263,134 @@ func NewRekorVSADataRetriever(opts RetrievalOptions, imageDigest string) (*Rekor
 
 // RetrieveVSAData retrieves VSA data from Rekor and returns it as a string
 func (r *RekorVSADataRetriever) RetrieveVSAData(ctx context.Context) (string, error) {
-	// Retrieve VSA records from Rekor
-	records, err := r.rekorRetriever.RetrieveVSA(ctx, r.imageDigest)
+	// Get all entries for the image digest (without VSA filtering)
+	allEntries, err := r.rekorRetriever.GetAllEntriesForImageDigest(ctx, r.imageDigest)
 	if err != nil {
-		return "", fmt.Errorf("failed to retrieve VSA records from Rekor: %w", err)
+		return "", fmt.Errorf("failed to get all entries for image digest: %w", err)
 	}
 
-	if len(records) == 0 {
-		return "", fmt.Errorf("no VSA records found for image digest: %s", r.imageDigest)
+	if len(allEntries) == 0 {
+		return "", fmt.Errorf("no entries found for image digest: %s", r.imageDigest)
 	}
 
-	// For now, use the first record (we could extend this to handle multiple records)
-	record := records[0]
+	// Find the latest matching pair where intoto has attestation and DSSE matches
+	latestPair := r.rekorRetriever.FindLatestMatchingPair(ctx, allEntries)
+	if latestPair == nil || latestPair.IntotoEntry == nil || latestPair.DSSEEntry == nil {
+		return "", fmt.Errorf("no complete intoto/DSSE pair found for image digest: %s", r.imageDigest)
+	}
 
-	// Return the raw body content from the Rekor record
-	// This should contain the original VSA data that was stored in Rekor
-	return record.Body, nil
+	// Always reconstruct the complete DSSE envelope
+	envelope, err := r.reconstructDSSEEnvelope(latestPair)
+	if err != nil {
+		return "", fmt.Errorf("failed to reconstruct DSSE envelope: %w", err)
+	}
+
+	return envelope, nil
+}
+
+// extractStatementFromIntotoEntry extracts the in-toto Statement JSON from an intoto entry
+// This method handles the actual structure of intoto entries from Rekor
+func (r *RekorVSADataRetriever) extractStatementFromIntotoEntry(entry models.LogEntryAnon) ([]byte, error) {
+	// For intoto entries, the VSA data is in the Attestation field, not in Body.spec.content
+	if entry.Attestation != nil && entry.Attestation.Data != nil {
+		// The attestation data contains the actual in-toto Statement JSON
+		return entry.Attestation.Data, nil
+	}
+
+	// Fallback: try to extract from body structure (though this shouldn't be needed)
+	body, err := r.rekorRetriever.decodeBodyJSON(entry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode entry body: %w", err)
+	}
+
+	// Check if this is an intoto entry
+	if kind, ok := body["kind"].(string); !ok || kind != "intoto" {
+		return nil, fmt.Errorf("entry is not an intoto entry (kind: %s)", kind)
+	}
+
+	// Extract the content from spec.content
+	spec, ok := body["spec"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("spec field not found in intoto entry")
+	}
+
+	content, ok := spec["content"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("content field not found in intoto entry spec")
+	}
+
+	// The content should contain the in-toto Statement JSON
+	// Convert to JSON bytes
+	stmtBytes, err := json.Marshal(content)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal in-toto Statement content: %w", err)
+	}
+
+	return stmtBytes, nil
+}
+
+// reconstructDSSEEnvelope reconstructs the complete DSSE envelope from the latest intoto/DSSE pair.
+func (r *RekorVSADataRetriever) reconstructDSSEEnvelope(pair *DualEntryPair) (string, error) {
+	// Debug: log the entry structure
+	fmt.Printf("DEBUG: Intoto entry kind: %s\n", r.rekorRetriever.classifyEntryKind(*pair.IntotoEntry))
+	fmt.Printf("DEBUG: DSSE entry kind: %s\n", r.rekorRetriever.classifyEntryKind(*pair.DSSEEntry))
+
+	// 1) Extract the actual in-toto Statement JSON from the intoto entry
+	//    For intoto entries, we need to extract from spec.content structure, not from a DSSE envelope
+	stmtPayload, err := r.extractStatementFromIntotoEntry(*pair.IntotoEntry)
+	if err != nil {
+		return "", fmt.Errorf("failed to extract in-toto Statement payload: %w", err)
+	}
+
+	// 2) Optional but recommended: confirm the payload hash matches Rekor's recorded payloadHash
+	if pair.PayloadHash != "" {
+		h := sha256.Sum256(stmtPayload)
+		if fmt.Sprintf("%x", h[:]) != strings.ToLower(pair.PayloadHash) {
+			return "", fmt.Errorf("payload hash mismatch: computed sha256=%x, rekor payloadHash=%s", h[:], pair.PayloadHash)
+		}
+	}
+
+	// 3) Extract signatures from the DSSE entry (Rekor dsse.spec.signatures[])
+	sigObjs, err := r.rekorRetriever.extractSignaturesAndPublicKey(*pair.DSSEEntry)
+	if err != nil {
+		return "", fmt.Errorf("failed to extract signatures from DSSE entry: %w", err)
+	}
+
+	// 4) Use the standard in-toto payload type for VSA attestations
+	payloadType := "application/vnd.in-toto+json"
+
+	// 5) Build a canonical DSSE envelope with the original payload + signatures
+	envelope := DSSEEnvelope{
+		PayloadType: payloadType,
+		Payload:     base64.StdEncoding.EncodeToString(stmtPayload),
+		Signatures:  make([]Signature, 0, len(sigObjs)),
+	}
+	for _, s := range sigObjs {
+		var sigHex string
+		if v, ok := s["signature"].(string); ok {
+			sigHex = v
+		} else if v, ok := s["sig"].(string); ok {
+			sigHex = v
+		} else {
+			continue
+		}
+		keyid := ""
+		if v, ok := s["keyid"].(string); ok {
+			keyid = v
+		}
+		envelope.Signatures = append(envelope.Signatures, Signature{
+			KeyID: keyid,
+			Sig:   sigHex,
+		})
+	}
+	if len(envelope.Signatures) == 0 {
+		return "", fmt.Errorf("no usable signatures found in DSSE entry")
+	}
+
+	// 6) Return as JSON
+	out, err := json.Marshal(envelope)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal reconstructed DSSE envelope: %w", err)
+	}
+	return string(out), nil
 }
