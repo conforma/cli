@@ -139,7 +139,7 @@ func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 
 			// Determine input spec from various sources (image, images, etc.)
 			if data.imageRef != "" || data.images != "" {
-				if s, err := applicationsnapshot.DetermineInputSpec(ctx, applicationsnapshot.Input{
+				if s, _, err := applicationsnapshot.DetermineInputSpec(ctx, applicationsnapshot.Input{
 					Image:  data.imageRef,
 					Images: data.images,
 				}); err != nil {
