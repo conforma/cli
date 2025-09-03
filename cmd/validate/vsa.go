@@ -139,10 +139,10 @@ func validateVSACmd(validate vsaValidationFunc) *cobra.Command {
 
 			// Determine input spec from various sources (image, images, etc.)
 			if data.imageRef != "" || data.images != "" {
-				if s, _, err := applicationsnapshot.DetermineInputSpec(ctx, applicationsnapshot.Input{
+				if s, _, err := applicationsnapshot.DetermineInputSpecWithExpansion(ctx, applicationsnapshot.Input{
 					Image:  data.imageRef,
 					Images: data.images,
-				}); err != nil {
+				}, true); err != nil {
 					return fmt.Errorf("determine input spec: %w", err)
 				} else {
 					data.spec = s
@@ -234,6 +234,7 @@ func validateVSAFile(ctx context.Context, cmd *cobra.Command, data struct {
 
 	// Parse VSA content to extract image reference
 	predicate, err := vsa.ParseVSAContent(vsaContent)
+	fmt.Printf("VSA predicate: %+v\n", predicate)
 	if err != nil {
 		return fmt.Errorf("failed to parse VSA content: %w", err)
 	}
