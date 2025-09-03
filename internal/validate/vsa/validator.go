@@ -88,23 +88,25 @@ type MissingRule struct {
 
 // FailingRule represents a rule that is present in the VSA but failed validation
 type FailingRule struct {
-	RuleID      string `json:"rule_id"`
-	Package     string `json:"package"`
-	Message     string `json:"message"`
-	Reason      string `json:"reason"`
-	Title       string `json:"title,omitempty"`
-	Description string `json:"description,omitempty"`
-	Solution    string `json:"solution,omitempty"`
+	RuleID         string `json:"rule_id"`
+	Package        string `json:"package"`
+	Message        string `json:"message"`
+	Reason         string `json:"reason"`
+	Title          string `json:"title,omitempty"`
+	Description    string `json:"description,omitempty"`
+	Solution       string `json:"solution,omitempty"`
+	ComponentImage string `json:"component_image,omitempty"` // The specific container image this violation relates to
 }
 
 // RuleResult represents a rule result extracted from the VSA
 type RuleResult struct {
-	RuleID      string `json:"rule_id"`
-	Status      string `json:"status"` // "success", "failure", "warning", "skipped", "exception"
-	Message     string `json:"message"`
-	Title       string `json:"title,omitempty"`
-	Description string `json:"description,omitempty"`
-	Solution    string `json:"solution,omitempty"`
+	RuleID         string `json:"rule_id"`
+	Status         string `json:"status"` // "success", "failure", "warning", "skipped", "exception"
+	Message        string `json:"message"`
+	Title          string `json:"title,omitempty"`
+	Description    string `json:"description,omitempty"`
+	Solution       string `json:"solution,omitempty"`
+	ComponentImage string `json:"component_image,omitempty"` // The specific container image this result relates to
 }
 
 // VSARuleValidatorImpl implements VSARuleValidator with comprehensive validation logic
@@ -161,9 +163,10 @@ func (v *VSARuleValidatorImpl) extractRuleResults(vsaRecords []VSARecord) (map[s
 					ruleID := v.extractRuleID(success)
 					if ruleID != "" {
 						ruleResults[ruleID] = append(ruleResults[ruleID], RuleResult{
-							RuleID:  ruleID,
-							Status:  "success",
-							Message: success.Message,
+							RuleID:         ruleID,
+							Status:         "success",
+							Message:        success.Message,
+							ComponentImage: component.ContainerImage,
 						})
 					}
 				}
@@ -173,12 +176,13 @@ func (v *VSARuleValidatorImpl) extractRuleResults(vsaRecords []VSARecord) (map[s
 					ruleID := v.extractRuleID(violation)
 					if ruleID != "" {
 						ruleResults[ruleID] = append(ruleResults[ruleID], RuleResult{
-							RuleID:      ruleID,
-							Status:      "failure",
-							Message:     violation.Message,
-							Title:       v.extractMetadataString(violation, "title"),
-							Description: v.extractMetadataString(violation, "description"),
-							Solution:    v.extractMetadataString(violation, "solution"),
+							RuleID:         ruleID,
+							Status:         "failure",
+							Message:        violation.Message,
+							Title:          v.extractMetadataString(violation, "title"),
+							Description:    v.extractMetadataString(violation, "description"),
+							Solution:       v.extractMetadataString(violation, "solution"),
+							ComponentImage: component.ContainerImage,
 						})
 					}
 				}
@@ -188,9 +192,10 @@ func (v *VSARuleValidatorImpl) extractRuleResults(vsaRecords []VSARecord) (map[s
 					ruleID := v.extractRuleID(warning)
 					if ruleID != "" {
 						ruleResults[ruleID] = append(ruleResults[ruleID], RuleResult{
-							RuleID:  ruleID,
-							Status:  "warning",
-							Message: warning.Message,
+							RuleID:         ruleID,
+							Status:         "warning",
+							Message:        warning.Message,
+							ComponentImage: component.ContainerImage,
 						})
 					}
 				}
@@ -287,13 +292,14 @@ func (v *VSARuleValidatorImpl) compareRules(vsaRuleResults map[string][]RuleResu
 				if ruleResult.Status == "failure" {
 					// Rule failed validation - this is a failure
 					result.FailingRules = append(result.FailingRules, FailingRule{
-						RuleID:      ruleID,
-						Package:     v.extractPackageFromRuleID(ruleID),
-						Message:     ruleResult.Message,
-						Reason:      "Rule failed validation in VSA",
-						Title:       ruleResult.Title,
-						Description: ruleResult.Description,
-						Solution:    ruleResult.Solution,
+						RuleID:         ruleID,
+						Package:        v.extractPackageFromRuleID(ruleID),
+						Message:        ruleResult.Message,
+						Reason:         "Rule failed validation in VSA",
+						Title:          ruleResult.Title,
+						Description:    ruleResult.Description,
+						Solution:       ruleResult.Solution,
+						ComponentImage: ruleResult.ComponentImage,
 					})
 				} else if ruleResult.Status == "success" || ruleResult.Status == "warning" {
 					// Rule passed or has warning - both are acceptable

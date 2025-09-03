@@ -126,9 +126,10 @@ func extractRuleResultsFromPredicate(predicate *Predicate) map[string][]RuleResu
 			ruleID := extractRuleID(success)
 			if ruleID != "" {
 				ruleResults[ruleID] = append(ruleResults[ruleID], RuleResult{
-					RuleID:  ruleID,
-					Status:  "success",
-					Message: success.Message,
+					RuleID:         ruleID,
+					Status:         "success",
+					Message:        success.Message,
+					ComponentImage: component.ContainerImage,
 				})
 			}
 		}
@@ -138,12 +139,13 @@ func extractRuleResultsFromPredicate(predicate *Predicate) map[string][]RuleResu
 			ruleID := extractRuleID(violation)
 			if ruleID != "" {
 				ruleResults[ruleID] = append(ruleResults[ruleID], RuleResult{
-					RuleID:      ruleID,
-					Status:      "failure",
-					Message:     violation.Message,
-					Title:       extractMetadataString(violation, "title"),
-					Description: extractMetadataString(violation, "description"),
-					Solution:    extractMetadataString(violation, "solution"),
+					RuleID:         ruleID,
+					Status:         "failure",
+					Message:        violation.Message,
+					Title:          extractMetadataString(violation, "title"),
+					Description:    extractMetadataString(violation, "description"),
+					Solution:       extractMetadataString(violation, "solution"),
+					ComponentImage: component.ContainerImage,
 				})
 			}
 		}
@@ -153,9 +155,10 @@ func extractRuleResultsFromPredicate(predicate *Predicate) map[string][]RuleResu
 			ruleID := extractRuleID(warning)
 			if ruleID != "" {
 				ruleResults[ruleID] = append(ruleResults[ruleID], RuleResult{
-					RuleID:  ruleID,
-					Status:  "warning",
-					Message: warning.Message,
+					RuleID:         ruleID,
+					Status:         "warning",
+					Message:        warning.Message,
+					ComponentImage: component.ContainerImage,
 				})
 			}
 		}
@@ -220,13 +223,14 @@ func compareRules(vsaRuleResults map[string][]RuleResult, requiredRules map[stri
 				if ruleResult.Status == "failure" {
 					// Rule failed validation - this is a failure
 					result.FailingRules = append(result.FailingRules, FailingRule{
-						RuleID:      ruleID,
-						Package:     extractPackageFromCode(ruleID),
-						Message:     ruleResult.Message,
-						Reason:      ruleResult.Message,
-						Title:       ruleResult.Title,
-						Description: ruleResult.Description,
-						Solution:    ruleResult.Solution,
+						RuleID:         ruleID,
+						Package:        extractPackageFromCode(ruleID),
+						Message:        ruleResult.Message,
+						Reason:         ruleResult.Message,
+						Title:          ruleResult.Title,
+						Description:    ruleResult.Description,
+						Solution:       ruleResult.Solution,
+						ComponentImage: ruleResult.ComponentImage,
 					})
 				} else if ruleResult.Status == "success" || ruleResult.Status == "warning" {
 					// Rule passed or has warning - both are acceptable

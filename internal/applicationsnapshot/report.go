@@ -551,8 +551,17 @@ func NewVSAReport(components []VSAComponent) VSAReport {
 				if failingRulesField.Kind() == reflect.Slice {
 					for i := 0; i < failingRulesField.Len(); i++ {
 						rule := failingRulesField.Index(i)
+
+						// Extract the specific container image for this violation from the FailingRule
+						specificImageRef := extractSpecificImageRefFromFailingRule(rule)
+
+						// If no specific image is found, fall back to the component's container image
+						if specificImageRef == "" {
+							specificImageRef = comp.ContainerImage
+						}
+
 						violation := VSAViolation{
-							ImageRef: comp.ContainerImage,
+							ImageRef: specificImageRef,
 						}
 
 						// Extract rule fields using reflection
@@ -590,4 +599,19 @@ func NewVSAReport(components []VSAComponent) VSAReport {
 		Violations: violations,
 		Components: components, // Keep for backward compatibility
 	}
+}
+
+// extractSpecificImageRefFromFailingRule extracts the specific container image reference for a violation
+// from the FailingRule's ComponentImage field
+func extractSpecificImageRefFromFailingRule(rule reflect.Value) string {
+	// Try to get the ComponentImage field from the FailingRule
+	if componentImageField := rule.FieldByName("ComponentImage"); componentImageField.IsValid() {
+		if componentImage := componentImageField.String(); componentImage != "" {
+			return componentImage
+		}
+	}
+
+	// Fallback: if ComponentImage is not available, return empty string
+	// This will be handled by the calling code
+	return ""
 }
