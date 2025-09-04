@@ -1191,7 +1191,7 @@ func TestNewVSAReport(t *testing.T) {
 		},
 	}
 
-	report := NewVSAReport(components, []VSAViolation{})
+	report := NewVSAReport(components, []VSAViolation{}, []VSAMissingRule{})
 
 	assert.False(t, report.Success, "Report should be false when any component fails")
 	assert.Equal(t, 2, len(report.Components), "Report should have 2 components")
@@ -1207,7 +1207,7 @@ func TestWriteVSAReport(t *testing.T) {
 		},
 	}
 
-	report := NewVSAReport(components, []VSAViolation{})
+	report := NewVSAReport(components, []VSAViolation{}, []VSAMissingRule{})
 
 	// Test JSON output
 	var buf bytes.Buffer

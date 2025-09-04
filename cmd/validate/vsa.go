@@ -274,8 +274,20 @@ func validateVSAFile(ctx context.Context, cmd *cobra.Command, data struct {
 		violations = append(violations, violation)
 	}
 
+	// Extract missing rules from validation result
+	missing := make([]applicationsnapshot.VSAMissingRule, 0)
+	for _, rule := range validationResult.MissingRules {
+		missingRule := applicationsnapshot.VSAMissingRule{
+			RuleID:   rule.RuleID,
+			Package:  rule.Package,
+			Reason:   rule.Reason,
+			ImageRef: imageRef,
+		}
+		missing = append(missing, missingRule)
+	}
+
 	// Create VSA report
-	report := applicationsnapshot.NewVSAReport([]applicationsnapshot.VSAComponent{component}, violations)
+	report := applicationsnapshot.NewVSAReport([]applicationsnapshot.VSAComponent{component}, violations, missing)
 
 	// Handle output
 	if len(data.outputFile) > 0 {
@@ -430,6 +442,7 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 	// Convert results to VSA components, using actual components from VSA attestation when available
 	var vsaComponents []applicationsnapshot.VSAComponent
 	var allViolations []applicationsnapshot.VSAViolation
+	var allMissing []applicationsnapshot.VSAMissingRule
 
 	for _, r := range componentResults {
 		// Determine which components to use for this result
@@ -469,28 +482,45 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 			}
 
 			vsaComponents = append(vsaComponents, component)
-		}
 
-		// Extract violations from validation result
-		if r.validationResult != nil {
-			for _, rule := range r.validationResult.FailingRules {
-				// For violations, we need to determine which component image to associate with
-				// If we have actual VSA components, use the component image from the rule if available
-				// Otherwise, fall back to the snapshot component image
-				imageRef := r.component.ContainerImage
-				if rule.ComponentImage != "" {
-					imageRef = rule.ComponentImage
+			// Extract violations and missing rules from validation result for this specific component
+			if r.validationResult != nil {
+				// Use the current component's image reference
+				imageRef := comp.ContainerImage
+
+				// Extract violations for this component
+				for _, rule := range r.validationResult.FailingRules {
+					// For violations, we need to determine which component image to associate with
+					// If we have actual VSA components, use the component image from the rule if available
+					// Otherwise, fall back to the current component image
+					violationImageRef := imageRef
+					if rule.ComponentImage != "" {
+						violationImageRef = rule.ComponentImage
+					}
+
+					violation := applicationsnapshot.VSAViolation{
+						RuleID:      rule.RuleID,
+						ImageRef:    violationImageRef,
+						Reason:      rule.Reason,
+						Title:       rule.Title,
+						Description: rule.Description,
+						Solution:    rule.Solution,
+					}
+					allViolations = append(allViolations, violation)
 				}
 
-				violation := applicationsnapshot.VSAViolation{
-					RuleID:      rule.RuleID,
-					ImageRef:    imageRef,
-					Reason:      rule.Reason,
-					Title:       rule.Title,
-					Description: rule.Description,
-					Solution:    rule.Solution,
+				// Extract missing rules for this component
+				logrus.Debugf("Component %s has %d missing rules", imageRef, len(r.validationResult.MissingRules))
+				for _, rule := range r.validationResult.MissingRules {
+					missingRule := applicationsnapshot.VSAMissingRule{
+						RuleID:   rule.RuleID,
+						Package:  rule.Package,
+						Reason:   rule.Reason,
+						ImageRef: imageRef,
+					}
+					allMissing = append(allMissing, missingRule)
+					logrus.Debugf("Added missing rule %s for image %s", rule.RuleID, imageRef)
 				}
-				allViolations = append(allViolations, violation)
 			}
 		}
 	}
@@ -501,7 +531,8 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 	})
 
 	// Create VSA report
-	report := applicationsnapshot.NewVSAReport(vsaComponents, allViolations)
+	logrus.Debugf("Total missing rules collected: %d", len(allMissing))
+	report := applicationsnapshot.NewVSAReport(vsaComponents, allViolations, allMissing)
 
 	// Handle output
 	if len(data.outputFile) > 0 {

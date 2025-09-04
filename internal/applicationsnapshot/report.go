@@ -234,7 +234,7 @@ func (r *Report) toVSAReport() ([]byte, error) {
 		vsaComponents = append(vsaComponents, vsaComp)
 	}
 
-	vsaReport := NewVSAReport(vsaComponents, []VSAViolation{})
+	vsaReport := NewVSAReport(vsaComponents, []VSAViolation{}, []VSAMissingRule{})
 	return json.Marshal(vsaReport)
 }
 
@@ -395,6 +395,18 @@ func generateVSATextReport(report VSAReport) []byte {
 		}
 	}
 
+	// Display missing rules in the detailed format
+	if len(report.Missing) > 0 {
+		buf.WriteString("Missing Rules:\n")
+		for _, missing := range report.Missing {
+			buf.WriteString(fmt.Sprintf("✕ [Missing] %s\n", missing.RuleID))
+			buf.WriteString(fmt.Sprintf("  Package: %s\n", missing.Package))
+			buf.WriteString(fmt.Sprintf("  ImageRef: %s\n", missing.ImageRef))
+			buf.WriteString(fmt.Sprintf("  Reason: %s\n", missing.Reason))
+			buf.WriteString("\n")
+		}
+	}
+
 	// Display component summaries
 	if len(report.Components) > 0 {
 		buf.WriteString("Components:\n")
@@ -542,16 +554,25 @@ type VSAViolation struct {
 	Solution    string `json:"solution,omitempty"`
 }
 
+// VSAMissingRule represents a single missing rule with all its details
+type VSAMissingRule struct {
+	RuleID   string `json:"rule_id"`
+	Package  string `json:"package"`
+	Reason   string `json:"reason"`
+	ImageRef string `json:"image_ref"`
+}
+
 // VSAReport represents the overall VSA validation report
 type VSAReport struct {
-	Success    bool           `json:"success"`
-	Summary    string         `json:"summary"`
-	Violations []VSAViolation `json:"violations"`
-	Components []VSAComponent `json:"components,omitempty"`
+	Success    bool             `json:"success"`
+	Summary    string           `json:"summary"`
+	Violations []VSAViolation   `json:"violations"`
+	Missing    []VSAMissingRule `json:"missing,omitempty"`
+	Components []VSAComponent   `json:"components,omitempty"`
 }
 
 // NewVSAReport creates a new VSA report from validation results
-func NewVSAReport(components []VSAComponent, violations []VSAViolation) VSAReport {
+func NewVSAReport(components []VSAComponent, violations []VSAViolation, missing []VSAMissingRule) VSAReport {
 	success := true
 
 	// Process each component to check success status
@@ -572,10 +593,16 @@ func NewVSAReport(components []VSAComponent, violations []VSAViolation) VSARepor
 		violations = make([]VSAViolation, 0)
 	}
 
+	// Ensure missing is never nil - use empty slice if nil
+	if missing == nil {
+		missing = make([]VSAMissingRule, 0)
+	}
+
 	return VSAReport{
 		Success:    success,
 		Summary:    summary,
 		Violations: violations,
+		Missing:    missing,
 		Components: components,
 	}
 }
