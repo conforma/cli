@@ -253,14 +253,29 @@ func validateVSAFile(ctx context.Context, cmd *cobra.Command, data struct {
 
 	// Create VSA component
 	component := applicationsnapshot.VSAComponent{
-		Name:             "vsa-file",
-		ContainerImage:   imageRef,
-		Success:          validationResult.Passed,
-		ValidationResult: validationResult,
+		Name:              "vsa-file",
+		ContainerImage:    imageRef,
+		Success:           validationResult.Passed,
+		FailingRulesCount: len(validationResult.FailingRules),
+		MissingRulesCount: len(validationResult.MissingRules),
+	}
+
+	// Extract violations from validation result
+	violations := make([]applicationsnapshot.VSAViolation, 0)
+	for _, rule := range validationResult.FailingRules {
+		violation := applicationsnapshot.VSAViolation{
+			RuleID:      rule.RuleID,
+			ImageRef:    imageRef,
+			Reason:      rule.Reason,
+			Title:       rule.Title,
+			Description: rule.Description,
+			Solution:    rule.Solution,
+		}
+		violations = append(violations, violation)
 	}
 
 	// Create VSA report
-	report := applicationsnapshot.NewVSAReport([]applicationsnapshot.VSAComponent{component})
+	report := applicationsnapshot.NewVSAReport([]applicationsnapshot.VSAComponent{component}, violations)
 
 	// Handle output
 	if len(data.outputFile) > 0 {
@@ -303,6 +318,7 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 		err              error
 		component        app.SnapshotComponent
 		validationResult *vsa.ValidationResult
+		vsaComponents    []applicationsnapshot.Component // Actual components from VSA attestation
 	}
 
 	appComponents := data.spec.Components
@@ -329,7 +345,7 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 			ref, err := name.ParseReference(comp.ContainerImage)
 			if err != nil {
 				err = fmt.Errorf("invalid image reference %s: %w", comp.ContainerImage, err)
-				results <- result{err: err, component: comp, validationResult: nil}
+				results <- result{err: err, component: comp, validationResult: nil, vsaComponents: nil}
 				if task != nil {
 					task.End()
 				}
@@ -340,7 +356,7 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 			rekorRetriever, err := vsa.NewRekorVSADataRetriever(vsa.DefaultRetrievalOptions(), digest)
 			if err != nil {
 				err = fmt.Errorf("failed to create Rekor retriever for %s: %w", comp.ContainerImage, err)
-				results <- result{err: err, component: comp, validationResult: nil}
+				results <- result{err: err, component: comp, validationResult: nil, vsaComponents: nil}
 				if task != nil {
 					task.End()
 				}
@@ -351,18 +367,33 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 			validationResult, err := validate(ctx, comp.ContainerImage, data.policy, rekorRetriever, data.publicKey)
 			if err != nil {
 				err = fmt.Errorf("validation failed for %s: %w", comp.ContainerImage, err)
-				results <- result{err: err, component: comp, validationResult: nil}
+				results <- result{err: err, component: comp, validationResult: nil, vsaComponents: nil}
 				if task != nil {
 					task.End()
 				}
 				continue
 			}
 
+			// Extract actual components from VSA attestation data
+			var vsaComponents []applicationsnapshot.Component
+			if validationResult != nil {
+				// Try to retrieve VSA data to extract actual components
+				vsaContent, err := rekorRetriever.RetrieveVSAData(ctx)
+				if err == nil {
+					predicate, err := vsa.ParseVSAContent(vsaContent)
+					if err == nil && predicate.Results != nil {
+						// Use actual components from VSA attestation if available
+						vsaComponents = predicate.Results.Components
+						logrus.Debugf("Extracted %d actual components from VSA attestation for %s", len(vsaComponents), comp.ContainerImage)
+					}
+				}
+			}
+
 			if task != nil {
 				task.End()
 			}
 
-			results <- result{err: nil, component: comp, validationResult: validationResult}
+			results <- result{err: nil, component: comp, validationResult: validationResult, vsaComponents: vsaComponents}
 		}
 		logrus.Debugf("Done with VSA worker %d", id)
 	}
@@ -396,26 +427,72 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 	}
 	close(results)
 
-	// Convert results to VSA components
+	// Convert results to VSA components, using actual components from VSA attestation when available
 	var vsaComponents []applicationsnapshot.VSAComponent
+	var allViolations []applicationsnapshot.VSAViolation
+
 	for _, r := range componentResults {
-		component := applicationsnapshot.VSAComponent{
-			Name:           r.component.Name,
-			ContainerImage: r.component.ContainerImage,
-		}
+		// Determine which components to use for this result
+		var componentsToProcess []applicationsnapshot.Component
 
-		if r.err != nil {
-			component.Success = false
-			component.Error = r.err.Error()
-		} else if r.validationResult != nil {
-			component.Success = r.validationResult.Passed
-			component.ValidationResult = r.validationResult
+		if len(r.vsaComponents) > 0 {
+			// Use actual components from VSA attestation
+			componentsToProcess = r.vsaComponents
+			logrus.Debugf("Using %d actual components from VSA attestation for %s", len(componentsToProcess), r.component.ContainerImage)
 		} else {
-			component.Success = false
-			component.Error = "no validation result available"
+			// Fallback to snapshot component if no VSA components available
+			componentsToProcess = []applicationsnapshot.Component{
+				{
+					SnapshotComponent: r.component,
+				},
+			}
+			logrus.Debugf("Using snapshot component as fallback for %s", r.component.ContainerImage)
 		}
 
-		vsaComponents = append(vsaComponents, component)
+		// Process each component
+		for _, comp := range componentsToProcess {
+			component := applicationsnapshot.VSAComponent{
+				Name:           comp.Name,
+				ContainerImage: comp.ContainerImage,
+			}
+
+			if r.err != nil {
+				component.Success = false
+				component.Error = r.err.Error()
+			} else if r.validationResult != nil {
+				component.Success = r.validationResult.Passed
+				component.FailingRulesCount = len(r.validationResult.FailingRules)
+				component.MissingRulesCount = len(r.validationResult.MissingRules)
+			} else {
+				component.Success = false
+				component.Error = "no validation result available"
+			}
+
+			vsaComponents = append(vsaComponents, component)
+		}
+
+		// Extract violations from validation result
+		if r.validationResult != nil {
+			for _, rule := range r.validationResult.FailingRules {
+				// For violations, we need to determine which component image to associate with
+				// If we have actual VSA components, use the component image from the rule if available
+				// Otherwise, fall back to the snapshot component image
+				imageRef := r.component.ContainerImage
+				if rule.ComponentImage != "" {
+					imageRef = rule.ComponentImage
+				}
+
+				violation := applicationsnapshot.VSAViolation{
+					RuleID:      rule.RuleID,
+					ImageRef:    imageRef,
+					Reason:      rule.Reason,
+					Title:       rule.Title,
+					Description: rule.Description,
+					Solution:    rule.Solution,
+				}
+				allViolations = append(allViolations, violation)
+			}
+		}
 	}
 
 	// Ensure some consistency in output.
@@ -424,7 +501,7 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 	})
 
 	// Create VSA report
-	report := applicationsnapshot.NewVSAReport(vsaComponents)
+	report := applicationsnapshot.NewVSAReport(vsaComponents, allViolations)
 
 	// Handle output
 	if len(data.outputFile) > 0 {

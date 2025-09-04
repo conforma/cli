@@ -1331,9 +1331,6 @@ func (r *RekorVSADataRetriever) extractStatementFromIntotoEntry(entry models.Log
 
 // reconstructDSSEEnvelope reconstructs the complete DSSE envelope from the latest intoto/DSSE pair.
 func (r *RekorVSADataRetriever) reconstructDSSEEnvelope(pair *DualEntryPair) (string, error) {
-	// Debug: log the entry structure
-	fmt.Printf("DEBUG: Intoto entry kind: %s\n", r.rekorRetriever.classifyEntryKind(*pair.IntotoEntry))
-	fmt.Printf("DEBUG: DSSE entry kind: %s\n", r.rekorRetriever.classifyEntryKind(*pair.DSSEEntry))
 
 	// 1) Extract the actual in-toto Statement JSON from the intoto entry
 	//    For intoto entries, we need to extract from spec.content structure, not from a DSSE envelope

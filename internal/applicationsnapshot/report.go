@@ -23,7 +23,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"time"
 
@@ -235,7 +234,7 @@ func (r *Report) toVSAReport() ([]byte, error) {
 		vsaComponents = append(vsaComponents, vsaComp)
 	}
 
-	vsaReport := NewVSAReport(vsaComponents)
+	vsaReport := NewVSAReport(vsaComponents, []VSAViolation{})
 	return json.Marshal(vsaReport)
 }
 
@@ -374,7 +373,7 @@ func generateVSATextReport(report VSAReport) []byte {
 
 	// Display violations in the detailed format
 	if len(report.Violations) > 0 {
-		buf.WriteString("Results:\n")
+		buf.WriteString("Violations:\n")
 		for _, violation := range report.Violations {
 			buf.WriteString(fmt.Sprintf("✕ [Violation] %s\n", violation.RuleID))
 			buf.WriteString(fmt.Sprintf("  ImageRef: %s\n", violation.ImageRef))
@@ -392,6 +391,27 @@ func generateVSATextReport(report VSAReport) []byte {
 				buf.WriteString(fmt.Sprintf("  Solution: %s\n", violation.Solution))
 			}
 
+			buf.WriteString("\n")
+		}
+	}
+
+	// Display component summaries
+	if len(report.Components) > 0 {
+		buf.WriteString("Components:\n")
+		for _, comp := range report.Components {
+			buf.WriteString(fmt.Sprintf("- Name: %s\n", comp.Name))
+			buf.WriteString(fmt.Sprintf("  ImageRef: %s\n", comp.ContainerImage))
+			buf.WriteString(fmt.Sprintf("  Success: %t\n", comp.Success))
+
+			if comp.FailingRulesCount > 0 {
+				buf.WriteString(fmt.Sprintf("  Failing Rules: %d\n", comp.FailingRulesCount))
+			}
+			if comp.MissingRulesCount > 0 {
+				buf.WriteString(fmt.Sprintf("  Missing Rules: %d\n", comp.MissingRulesCount))
+			}
+			if comp.Error != "" {
+				buf.WriteString(fmt.Sprintf("  Error: %s\n", comp.Error))
+			}
 			buf.WriteString("\n")
 		}
 	}
@@ -503,11 +523,13 @@ func AppstudioReportForError(prefix string, err error) TestReport {
 
 // VSAComponent represents a VSA validation result for a single component
 type VSAComponent struct {
-	Name             string      `json:"name"`
-	ContainerImage   string      `json:"container_image"`
-	Success          bool        `json:"success"`
-	ValidationResult interface{} `json:"validation_result,omitempty"` // Using interface{} to avoid import cycle
-	Error            string      `json:"error,omitempty"`
+	Name           string `json:"name"`
+	ContainerImage string `json:"container_image"`
+	Success        bool   `json:"success"`
+	Error          string `json:"error,omitempty"`
+	// Count fields for better reporting
+	FailingRulesCount int `json:"failing_rules_count,omitempty"`
+	MissingRulesCount int `json:"missing_rules_count,omitempty"`
 }
 
 // VSAViolation represents a single violation with all its details
@@ -525,66 +547,18 @@ type VSAReport struct {
 	Success    bool           `json:"success"`
 	Summary    string         `json:"summary"`
 	Violations []VSAViolation `json:"violations"`
-	Components []VSAComponent `json:"components,omitempty"` // Keep for backward compatibility
+	Components []VSAComponent `json:"components,omitempty"`
 }
 
 // NewVSAReport creates a new VSA report from validation results
-func NewVSAReport(components []VSAComponent) VSAReport {
+func NewVSAReport(components []VSAComponent, violations []VSAViolation) VSAReport {
 	success := true
-	var violations []VSAViolation
 
-	for _, comp := range components {
+	// Process each component to check success status
+	for i := range components {
+		comp := &components[i]
 		if !comp.Success {
 			success = false
-		}
-
-		// Extract violations from the component using reflection to avoid import cycles
-		if comp.ValidationResult != nil {
-			// Use reflection to access the ValidationResult fields
-			validationResultValue := reflect.ValueOf(comp.ValidationResult)
-			if validationResultValue.Kind() == reflect.Ptr && !validationResultValue.IsNil() {
-				validationResultValue = validationResultValue.Elem()
-			}
-
-			// Try to get FailingRules field
-			if failingRulesField := validationResultValue.FieldByName("FailingRules"); failingRulesField.IsValid() {
-				if failingRulesField.Kind() == reflect.Slice {
-					for i := 0; i < failingRulesField.Len(); i++ {
-						rule := failingRulesField.Index(i)
-
-						// Extract the specific container image for this violation from the FailingRule
-						specificImageRef := extractSpecificImageRefFromFailingRule(rule)
-
-						// If no specific image is found, fall back to the component's container image
-						if specificImageRef == "" {
-							specificImageRef = comp.ContainerImage
-						}
-
-						violation := VSAViolation{
-							ImageRef: specificImageRef,
-						}
-
-						// Extract rule fields using reflection
-						if ruleIDField := rule.FieldByName("RuleID"); ruleIDField.IsValid() {
-							violation.RuleID = ruleIDField.String()
-						}
-						if reasonField := rule.FieldByName("Reason"); reasonField.IsValid() {
-							violation.Reason = reasonField.String()
-						}
-						if titleField := rule.FieldByName("Title"); titleField.IsValid() {
-							violation.Title = titleField.String()
-						}
-						if descField := rule.FieldByName("Description"); descField.IsValid() {
-							violation.Description = descField.String()
-						}
-						if solutionField := rule.FieldByName("Solution"); solutionField.IsValid() {
-							violation.Solution = solutionField.String()
-						}
-
-						violations = append(violations, violation)
-					}
-				}
-			}
 		}
 	}
 
@@ -593,25 +567,15 @@ func NewVSAReport(components []VSAComponent) VSAReport {
 		summary = "VSA validation failed for some components"
 	}
 
+	// Ensure violations is never nil - use empty slice if nil
+	if violations == nil {
+		violations = make([]VSAViolation, 0)
+	}
+
 	return VSAReport{
 		Success:    success,
 		Summary:    summary,
 		Violations: violations,
-		Components: components, // Keep for backward compatibility
+		Components: components,
 	}
-}
-
-// extractSpecificImageRefFromFailingRule extracts the specific container image reference for a violation
-// from the FailingRule's ComponentImage field
-func extractSpecificImageRefFromFailingRule(rule reflect.Value) string {
-	// Try to get the ComponentImage field from the FailingRule
-	if componentImageField := rule.FieldByName("ComponentImage"); componentImageField.IsValid() {
-		if componentImage := componentImageField.String(); componentImage != "" {
-			return componentImage
-		}
-	}
-
-	// Fallback: if ComponentImage is not available, return empty string
-	// This will be handled by the calling code
-	return ""
 }
