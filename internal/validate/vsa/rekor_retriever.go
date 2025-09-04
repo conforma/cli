@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -91,21 +92,17 @@ func (r *RekorVSARetriever) RetrieveVSA(ctx context.Context, imageDigest string)
 		defer cancel()
 	}
 
-	log.Debugf("Retrieving VSA records for image digest: %s", imageDigest)
-
 	// Search for entries containing the image digest
 	entries, err := r.searchForImageDigest(ctx, imageDigest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search Rekor for image digest: %w", err)
 	}
 
-	log.Debugf("RetrieveVSA: search returned %d entries", len(entries))
-
 	var vsaRecords []VSARecord
 
 	// Process each entry to find VSA records
 	for _, entry := range entries {
-		log.Debugf("Processing entry: LogIndex=%v, LogID=%v", entry.LogIndex, entry.LogID)
+		log.Debugf("Processing entry: LogIndex=%v, LogID=%v", *entry.LogIndex, *entry.LogID)
 		if isVSARecord(entry, imageDigest) {
 			vsaRecord, err := r.parseVSARecord(entry)
 			if err != nil {
@@ -132,7 +129,6 @@ func (r *RekorVSARetriever) searchForImageDigest(ctx context.Context, imageDiges
 		Hash: imageDigest,
 	}
 
-	log.Debugf("Calling client.SearchIndex")
 	entries, err := r.client.SearchIndex(ctx, query)
 	if err != nil {
 		log.Debugf("SearchIndex returned error: %v", err)
@@ -179,24 +175,31 @@ func isVSARecord(entry models.LogEntryAnon, imageDigest string) bool {
 		return false
 	}
 
-	// Decode the attestation data to check for VSA predicate type
-	attestationData, err := base64.StdEncoding.DecodeString(string(entry.Attestation.Data))
-	if err != nil {
-		log.Debugf("Failed to decode attestation data: %v", err)
+	dataStr := string(entry.Attestation.Data)
+
+	var attestationStr string
+
+	// Try to decode the attestation data - it might be base64 encoded or raw JSON
+	if decoded, err := base64.StdEncoding.DecodeString(dataStr); err == nil {
+		// Successfully decoded base64
+		attestationStr = string(decoded)
+	} else {
+		// Maybe it's already decoded JSON, try using it directly
+		attestationStr = dataStr
+	}
+
+	// Parse JSON and check predicateType field directly
+	var statement struct {
+		PredicateType string `json:"predicateType"`
+	}
+
+	if err := json.Unmarshal([]byte(attestationStr), &statement); err != nil {
+		log.Debugf("Failed to parse attestation as JSON: %v", err)
 		return false
 	}
 
-	// Check if the attestation contains the VSA predicate type
-	attestationStr := string(attestationData)
 	vsaPredicateType := "https://conforma.dev/verification_summary/v1"
-
-	if strings.Contains(attestationStr, vsaPredicateType) {
-		log.Debugf("Found VSA predicate type in attestation")
-		return true
-	}
-
-	log.Debugf("Attestation does not contain VSA predicate type")
-	return false
+	return statement.PredicateType == vsaPredicateType
 }
 
 // parseVSARecord converts a Rekor log entry to a VSARecord

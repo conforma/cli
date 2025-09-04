@@ -29,7 +29,7 @@ Feature: VSA generation and storage
       ]
     }
     """
-    When ec command is run with "validate image --image ${REGISTRY}/acceptance/vsa-test-image --policy acceptance/vsa-ec-policy --public-key ${vsa-test_PUBLIC_KEY} --rekor-url ${REKOR} --vsa --vsa-signing-key ${vsa-test_PRIVATE_KEY} --vsa-upload local@${TMPDIR}/vsa-output --output json"
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/vsa-test-image --policy acceptance/vsa-ec-policy --public-key ${vsa-test_PUBLIC_KEY} --rekor-url ${REKOR} --vsa --vsa-signing-key ${vsa-test_PRIVATE_KEY} --vsa-upload local@${TMPDIR}/vsa-output --vsa-expiration 0 --output json"
     Then the exit status should be 0
     Then the output should match the snapshot
     And VSA envelope files should exist in "${TMPDIR}/vsa-output"
@@ -56,7 +56,7 @@ Feature: VSA generation and storage
     }
     """
     Given VSA upload to Rekor should be expected
-    When ec command is run with "validate image --image ${REGISTRY}/acceptance/vsa-rekor-image --policy acceptance/vsa-rekor-ec-policy --public-key ${vsa-rekor_PUBLIC_KEY} --rekor-url ${REKOR} --vsa --vsa-signing-key ${vsa-rekor_PRIVATE_KEY} --vsa-upload rekor@${REKOR} --output json"
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/vsa-rekor-image --policy acceptance/vsa-rekor-ec-policy --public-key ${vsa-rekor_PUBLIC_KEY} --rekor-url ${REKOR} --vsa --vsa-signing-key ${vsa-rekor_PRIVATE_KEY} --vsa-upload rekor@${REKOR} --vsa-expiration 0 --output json"
     Then the exit status should be 0
     Then the output should match the snapshot
     And VSA should be uploaded to Rekor successfully
@@ -83,7 +83,7 @@ Feature: VSA generation and storage
     }
     """
     Given VSA upload to Rekor should be expected
-    When ec command is run with "validate image --image ${REGISTRY}/acceptance/vsa-multi-image --policy acceptance/vsa-multi-ec-policy --public-key ${vsa-multi_PUBLIC_KEY} --rekor-url ${REKOR} --vsa --vsa-signing-key ${vsa-multi_PRIVATE_KEY} --vsa-upload local@${TMPDIR}/vsa-multi-output --vsa-upload rekor@${REKOR} --output json"
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/vsa-multi-image --policy acceptance/vsa-multi-ec-policy --public-key ${vsa-multi_PUBLIC_KEY} --rekor-url ${REKOR} --vsa --vsa-signing-key ${vsa-multi_PRIVATE_KEY} --vsa-upload local@${TMPDIR}/vsa-multi-output --vsa-upload rekor@${REKOR} --vsa-expiration 0 --output json"
     Then the exit status should be 0
     Then the output should match the snapshot
     And VSA envelope files should exist in "${TMPDIR}/vsa-multi-output"
@@ -110,6 +110,64 @@ Feature: VSA generation and storage
       ]
     }
     """
-    When ec command is run with "validate image --image ${REGISTRY}/acceptance/vsa-invalid-image --policy acceptance/vsa-invalid-ec-policy --public-key ${vsa-invalid_PUBLIC_KEY} --rekor-url ${REKOR} --vsa --vsa-signing-key ${vsa-invalid_PRIVATE_KEY} --vsa-upload invalid-backend@somewhere --output json"
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/vsa-invalid-image --policy acceptance/vsa-invalid-ec-policy --public-key ${vsa-invalid_PUBLIC_KEY} --rekor-url ${REKOR} --vsa --vsa-signing-key ${vsa-invalid_PRIVATE_KEY} --vsa-upload invalid-backend@somewhere --vsa-expiration 0 --output json"
+    Then the exit status should be 0
+    Then the output should match the snapshot
+
+  Scenario: VSA expiration flag functionality
+    Given a key pair named "vsa-expiration"
+    Given an image named "acceptance/vsa-expiration-image"
+    Given a valid image signature of "acceptance/vsa-expiration-image" image signed by the "vsa-expiration" key
+    Given a valid Rekor entry for image signature of "acceptance/vsa-expiration-image"
+    Given a valid attestation of "acceptance/vsa-expiration-image" signed by the "vsa-expiration" key
+    Given a valid Rekor entry for attestation of "acceptance/vsa-expiration-image"
+    Given VSA index search should return no results
+    Given a git repository named "vsa-expiration-policy" with
+      | main.rego | examples/happy_day.rego |
+    Given policy configuration named "vsa-expiration-ec-policy" with specification
+    """
+    {
+      "sources": [
+        {
+          "policy": [
+            "git::https://${GITHOST}/git/vsa-expiration-policy.git"
+          ]
+        }
+      ]
+    }
+    """
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/vsa-expiration-image@sha256:${REGISTRY_acceptance/vsa-expiration-image:latest_DIGEST} --policy acceptance/vsa-expiration-ec-policy --public-key ${vsa-expiration_PUBLIC_KEY} --rekor-url ${REKOR} --vsa-expiration 1h --vsa-upload rekor@${REKOR} --output json"
+    Then the exit status should be 0
+    Then the output should match the snapshot
+
+  Scenario: VSA expiration with existing valid VSA
+    Given a key pair named "vsa-existing"
+    Given an image named "acceptance/vsa-existing-image"
+    Given a valid image signature of "acceptance/vsa-existing-image" image signed by the "vsa-existing" key
+    Given a valid Rekor entry for image signature of "acceptance/vsa-existing-image"
+    Given a valid attestation of "acceptance/vsa-existing-image" signed by the "vsa-existing" key
+    Given a valid Rekor entry for attestation of "acceptance/vsa-existing-image"
+    Given VSA index search should return valid VSA
+    Given a git repository named "vsa-existing-policy" with
+      | main.rego | examples/happy_day.rego |
+    Given policy configuration named "vsa-existing-ec-policy" with specification
+    """
+    {
+      "sources": [
+        {
+          "policy": [
+            "git::https://${GITHOST}/git/vsa-existing-policy.git"
+          ]
+        }
+      ]
+    }
+    """
+    # First, generate a VSA and upload it to Rekor
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/vsa-existing-image@sha256:${REGISTRY_acceptance/vsa-existing-image:latest_DIGEST} --policy acceptance/vsa-existing-ec-policy --public-key ${vsa-existing_PUBLIC_KEY} --rekor-url ${REKOR} --vsa --vsa-signing-key ${vsa-existing_PRIVATE_KEY} --vsa-upload rekor@${REKOR} --vsa-expiration 0 --output json"
+    Then the exit status should be 0
+    And VSA should be uploaded to Rekor successfully
+
+    # Then test expiration checking with that existing VSA
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/vsa-existing-image@sha256:${REGISTRY_acceptance/vsa-existing-image:latest_DIGEST} --policy acceptance/vsa-existing-ec-policy --public-key ${vsa-existing_PUBLIC_KEY} --rekor-url ${REKOR} --vsa-expiration 24h --output json"
     Then the exit status should be 0
     Then the output should match the snapshot

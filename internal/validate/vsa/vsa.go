@@ -25,6 +25,7 @@ import (
 	"time"
 
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
+	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/sigstore/cosign/v2/pkg/oci"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
@@ -219,4 +220,128 @@ func RekorUploader(ctx context.Context, att oci.Signature, location string) (str
 func NoopUploader(ctx context.Context, att oci.Signature, location string) (string, error) {
 	log.Infof("Upload type is 'none'; skipping upload for %s", location)
 	return "", nil
+}
+
+// VSALookupResult represents the result of looking up an existing VSA
+type VSALookupResult struct {
+	Found     bool
+	Expired   bool
+	VSA       *Predicate
+	Timestamp time.Time
+}
+
+// VSAChecker handles checking for existing VSAs in Rekor
+type VSAChecker struct {
+	RekorURL string
+	Timeout  time.Duration
+}
+
+// NewVSAChecker creates a new VSA checker
+func NewVSAChecker(rekorURL string, timeout time.Duration) *VSAChecker {
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+	return &VSAChecker{
+		RekorURL: rekorURL,
+		Timeout:  timeout,
+	}
+}
+
+// CheckExistingVSA looks up existing VSAs for an image in Rekor and determines if they're valid/expired
+func (c *VSAChecker) CheckExistingVSA(ctx context.Context, imageRef string, expirationThreshold time.Duration) (*VSALookupResult, error) {
+	result := &VSALookupResult{
+		Found:   false,
+		Expired: false,
+	}
+
+	log.Debugf("Checking for existing VSA for image %s with expiration threshold %v", imageRef, expirationThreshold)
+
+	// Extract digest from image reference
+	digest, err := c.extractDigestFromImageRef(imageRef)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract digest from image reference %s: %w", imageRef, err)
+	}
+
+	// Create Rekor VSA retriever
+	retrieverOpts := RetrievalOptions{
+		URL:     c.RekorURL,
+		Timeout: c.Timeout,
+	}
+
+	retriever, err := NewRekorVSARetriever(retrieverOpts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Rekor VSA retriever: %w", err)
+	}
+
+	// Retrieve VSA records for this image digest
+	vsaRecords, err := retriever.RetrieveVSA(ctx, digest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve VSA records from Rekor: %w", err)
+	}
+
+	if len(vsaRecords) == 0 {
+		log.Debugf("No VSA records found for image %s", imageRef)
+		return result, nil
+	}
+
+	// Find the most recent VSA and check if it's expired
+	var mostRecentRecord *VSARecord
+	var mostRecentTime time.Time
+
+	for _, record := range vsaRecords {
+		recordTime := time.Unix(record.IntegratedTime, 0)
+
+		if mostRecentRecord == nil || recordTime.After(mostRecentTime) {
+			mostRecentRecord = &record
+			mostRecentTime = recordTime
+		}
+	}
+
+	if mostRecentRecord != nil {
+		result.Found = true
+		result.Timestamp = mostRecentTime
+		result.Expired = IsVSAExpired(mostRecentTime, expirationThreshold)
+
+		log.WithFields(log.Fields{
+			"image":                imageRef,
+			"vsa_timestamp":        mostRecentTime,
+			"expiration_threshold": expirationThreshold,
+			"expired":              result.Expired,
+			"log_index":            mostRecentRecord.LogIndex,
+			"log_id":               mostRecentRecord.LogID,
+		}).Debug("Found the most recent VSA record")
+	}
+
+	return result, nil
+}
+
+// extractDigestFromImageRef extracts the digest from an image reference
+// It accepts digest-based references (registry/image@sha256:...) and rejects tag-based references
+func (c *VSAChecker) extractDigestFromImageRef(imageRef string) (string, error) {
+	// Try to parse as digest reference first
+	digestRef, err := name.NewDigest(imageRef)
+	if err == nil {
+		// Already has a digest, extract it
+		return digestRef.DigestStr(), nil
+	}
+
+	// If parsing as digest failed, try as tag reference to validate format
+	_, err = name.NewTag(imageRef)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse image reference %s: %w", imageRef, err)
+	}
+
+	// For tag references, we cannot determine the digest without resolving it
+	// This would require network calls which are not appropriate for VSA checking
+	return "", fmt.Errorf("image reference %s is a tag reference without digest; VSA checking requires digest-based references", imageRef)
+}
+
+// IsVSAExpired checks if a VSA is expired based on the timestamp and threshold
+func IsVSAExpired(vsaTimestamp time.Time, expirationThreshold time.Duration) bool {
+	// Zero threshold means "never expires"
+	if expirationThreshold == 0 {
+		return false
+	}
+	cutoffTime := time.Now().Add(-expirationThreshold)
+	return vsaTimestamp.Before(cutoffTime)
 }

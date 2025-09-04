@@ -255,3 +255,105 @@ time="${TIMESTAMP}" level=warning msg="invalid storage config 'invalid-backend@s
 [VSA generation with multiple images:stderr - 1]
 
 ---
+
+[VSA expiration flag functionality:stdout - 1]
+{
+  "success": true,
+  "components": [
+    {
+      "name": "Unnamed",
+      "containerImage": "${REGISTRY}/acceptance/vsa-expiration-image@sha256:${REGISTRY_acceptance/vsa-expiration-image:latest_DIGEST}",
+      "source": {},
+      "success": true,
+      "signatures": [
+        {
+          "keyid": "",
+          "sig": "${IMAGE_SIGNATURE_acceptance/vsa-expiration-image}"
+        }
+      ],
+      "attestations": [
+        {
+          "type": "https://in-toto.io/Statement/v0.1",
+          "predicateType": "https://slsa.dev/provenance/v0.2",
+          "predicateBuildType": "https://tekton.dev/attestations/chains/pipelinerun@v2",
+          "signatures": [
+            {
+              "keyid": "",
+              "sig": "${ATTESTATION_SIGNATURE_acceptance/vsa-expiration-image}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "key": "${vsa-expiration_PUBLIC_KEY_JSON}",
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::${GITHOST}/git/vsa-expiration-policy.git?ref=${LATEST_COMMIT}"
+        ]
+      }
+    ],
+    "rekorUrl": "${REKOR}",
+    "publicKey": "${vsa-expiration_PUBLIC_KEY}"
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[VSA expiration flag functionality:stderr - 1]
+
+---
+
+[VSA expiration with existing valid VSA:stdout - 1]
+{
+  "success": true,
+  "components": [
+    {
+      "name": "Unnamed",
+      "containerImage": "${REGISTRY}/acceptance/vsa-existing-image@sha256:${REGISTRY_acceptance/vsa-existing-image:latest_DIGEST}",
+      "source": {},
+      "success": true,
+      "signatures": [
+        {
+          "keyid": "",
+          "sig": "${IMAGE_SIGNATURE_acceptance/vsa-existing-image}"
+        }
+      ],
+      "attestations": [
+        {
+          "type": "https://in-toto.io/Statement/v0.1",
+          "predicateType": "https://slsa.dev/provenance/v0.2",
+          "predicateBuildType": "https://tekton.dev/attestations/chains/pipelinerun@v2",
+          "signatures": [
+            {
+              "keyid": "",
+              "sig": "${ATTESTATION_SIGNATURE_acceptance/vsa-existing-image}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "key": "${vsa-existing_PUBLIC_KEY_JSON}",
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::${GITHOST}/git/vsa-existing-policy.git?ref=${LATEST_COMMIT}"
+        ]
+      }
+    ],
+    "rekorUrl": "${REKOR}",
+    "publicKey": "${vsa-existing_PUBLIC_KEY}"
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[VSA expiration with existing valid VSA:stderr - 1]
+
+---

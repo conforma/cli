@@ -183,3 +183,29 @@ func UploadVSAEnvelope(ctx context.Context, envelopePath string, storageConfigs 
 
 	return nil
 }
+
+// ExtractRekorURLFromVSAUploadFlags parses the --vsa-upload flags to find a Rekor backend URL
+// Returns empty string if no Rekor backend is configured
+func ExtractRekorURLFromVSAUploadFlags(vsaUpload []string) string {
+	for _, uploadFlag := range vsaUpload {
+		config, err := ParseStorageFlag(uploadFlag)
+		if err != nil {
+			log.Debugf("Failed to parse VSA upload flag '%s': %v", uploadFlag, err)
+			continue
+		}
+
+		// Look for rekor backend
+		if strings.ToLower(config.Backend) == "rekor" {
+			rekorURL := config.BaseURL
+			if rekorURL == "" {
+				// Use default if no URL specified
+				rekorURL = "https://rekor.sigstore.dev"
+			}
+			log.Debugf("Found Rekor backend for VSA checking: %s", rekorURL)
+			return rekorURL
+		}
+	}
+
+	log.Debugf("No Rekor backend found in --vsa-upload flags, VSA checking disabled")
+	return ""
+}

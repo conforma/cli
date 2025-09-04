@@ -24,6 +24,7 @@ import (
 	"runtime/trace"
 	"sort"
 	"strings"
+	"time"
 
 	hd "github.com/MakeNowJust/heredoc"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -36,6 +37,7 @@ import (
 	"github.com/conforma/cli/internal/applicationsnapshot"
 	"github.com/conforma/cli/internal/evaluator"
 	"github.com/conforma/cli/internal/format"
+	"github.com/conforma/cli/internal/image"
 	"github.com/conforma/cli/internal/output"
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/policy/source"
@@ -80,9 +82,11 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 		vsaEnabled    bool
 		vsaSigningKey string
 		vsaUpload     []string
+		vsaExpiration time.Duration
 	}{
-		strict:  true,
-		workers: 5,
+		strict:        true,
+		workers:       5,
+		vsaExpiration: 168 * time.Hour, // 7 days default
 	}
 
 	validOutputFormats := applicationsnapshot.OutputFormats
@@ -364,7 +368,18 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 					}
 
 					log.Debugf("Worker %d got a component %q", id, comp.ContainerImage)
-					out, err := validate(ctx, comp, data.spec, data.policy, evaluators, data.info)
+
+					// Use VSA-aware validation if VSA checking is enabled
+					var out *output.Output
+					var err error
+					rekorUrl := vsa.ExtractRekorURLFromVSAUploadFlags(data.vsaUpload)
+					if data.vsaExpiration > 0 && rekorUrl != "" {
+						// Check for VSA using Rekor URL from --vsa-upload flag
+						out, err = image.ValidateImageWithVSACheck(ctx, comp, data.spec, data.policy, evaluators, data.info, data.vsaExpiration, rekorUrl)
+					} else {
+						// Use original validation when VSA checking is disabled
+						out, err = validate(ctx, comp, data.spec, data.policy, evaluators, data.info)
+					}
 					res := result{
 						err: err,
 						component: applicationsnapshot.Component{
@@ -375,27 +390,34 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 
 					// Skip on err to not panic. Error is return on routine completion.
 					if err == nil {
-						res.component.Violations = out.Violations()
-						res.component.Warnings = out.Warnings()
+						if out != nil {
+							// Normal validation completed
+							res.component.Violations = out.Violations()
+							res.component.Warnings = out.Warnings()
 
-						successes := out.Successes()
-						res.component.SuccessCount = len(successes)
-						if showSuccesses {
-							res.component.Successes = successes
-						}
-
-						res.component.Signatures = out.Signatures
-						// Create a new result object for attestations. The point is to only keep the data that's needed.
-						// For example, the Statement is only needed when the full attestation is printed.
-						for _, att := range out.Attestations {
-							attResult := applicationsnapshot.NewAttestationResult(att)
-							if containsOutput(data.output, "attestation") {
-								attResult.Statement = att.Statement()
+							successes := out.Successes()
+							res.component.SuccessCount = len(successes)
+							if showSuccesses {
+								res.component.Successes = successes
 							}
-							res.component.Attestations = append(res.component.Attestations, attResult)
+
+							res.component.Signatures = out.Signatures
+							// Create a new result object for attestations. The point is to only keep the data that's needed.
+							// For example, the Statement is only needed when the full attestation is printed.
+							for _, att := range out.Attestations {
+								attResult := applicationsnapshot.NewAttestationResult(att)
+								if containsOutput(data.output, "attestation") {
+									attResult.Statement = att.Statement()
+								}
+								res.component.Attestations = append(res.component.Attestations, attResult)
+							}
+							res.component.ContainerImage = out.ImageURL
+							res.policyInput = out.PolicyInput
+						} else {
+							// Validation was skipped due to valid VSA - no violations, no processing needed
+							log.Debugf("Validation skipped for %s due to valid VSA", comp.ContainerImage)
+							res.component.ContainerImage = comp.ContainerImage
 						}
-						res.component.ContainerImage = out.ImageURL
-						res.policyInput = out.PolicyInput
 					}
 					res.component.Success = err == nil && len(res.component.Violations) == 0
 
@@ -633,6 +655,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 	cmd.Flags().BoolVar(&data.vsaEnabled, "vsa", false, "Generate a Verification Summary Attestation (VSA) for each validated image.")
 	cmd.Flags().StringVar(&data.vsaSigningKey, "vsa-signing-key", "", "Path to the private key for signing the VSA.")
 	cmd.Flags().StringSliceVar(&data.vsaUpload, "vsa-upload", nil, "Storage backends for VSA upload. Format: backend@url?param=value. Examples: rekor@https://rekor.sigstore.dev, local@./vsa-dir")
+	cmd.Flags().DurationVar(&data.vsaExpiration, "vsa-expiration", data.vsaExpiration, "Expiration threshold for existing VSAs. If a valid VSA exists and is newer than this threshold, validation will be skipped. (default 168h)")
 
 	if len(data.input) > 0 || len(data.filePath) > 0 || len(data.images) > 0 {
 		if err := cmd.MarkFlagRequired("image"); err != nil {

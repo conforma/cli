@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cucumber/godog"
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
@@ -363,6 +364,8 @@ func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step(`^a valid Rekor entry for image signature of "([^"]*)"$`, RekorEntryForImageSignature)
 	sc.Step(`^VSA upload to Rekor should be expected$`, expectVSAUploadToRekor)
 	sc.Step(`^VSA should be uploaded to Rekor successfully$`, vsaShouldBeUploadedToRekor)
+	sc.Step(`^VSA index search should return no results$`, stubVSAIndexSearch)
+	sc.Step(`^VSA index search should return valid VSA$`, stubVSAIndexSearchWithResult)
 }
 
 // expectVSAUploadToRekor creates WireMock stubs to expect VSA upload requests to Rekor
@@ -422,4 +425,56 @@ func vsaShouldBeUploadedToRekor(ctx context.Context) error {
 	// WireMock automatically verifies that our expectVSAUploadToRekor stub was matched
 	// by actual VSA upload requests. No explicit verification needed here.
 	return nil
+}
+
+// stubVSAIndexSearch creates WireMock stubs for VSA index search requests
+// This handles the /api/v1/index/retrieve endpoint used by VSA expiration tests
+func stubVSAIndexSearch(ctx context.Context) error {
+	// Create a stub that returns an empty array for VSA index search requests
+	// This simulates the case where no existing VSA records are found
+	emptyResponse := []interface{}{}
+
+	responseBody, err := json.Marshal(emptyResponse)
+	if err != nil {
+		return fmt.Errorf("failed to marshal empty VSA search response: %w", err)
+	}
+
+	return wiremock.StubFor(ctx, wiremock.Post(wiremock.URLPathEqualTo("/api/v1/index/retrieve")).
+		WillReturnResponse(wiremock.NewResponse().
+			WithStatus(200).
+			WithHeaders(map[string]string{
+				"Content-Type": "application/json",
+			}).
+			WithBody(string(responseBody))))
+}
+
+// stubVSAIndexSearchWithResult creates WireMock stubs for VSA index search requests that return a valid VSA
+// This handles the /api/v1/index/retrieve endpoint for tests that expect to find existing VSAs
+func stubVSAIndexSearchWithResult(ctx context.Context) error {
+	// Create a stub that returns a valid VSA entry for VSA index search requests
+	// This simulates the case where an existing VSA record is found
+	vsaEntry := map[string]interface{}{
+		"attestation": map[string]interface{}{
+			"data": "eyJzdWJqZWN0IjpudWxsLCJwcmVkaWNhdGUiOnsidmVyaWZpZWRMZXZlbHMiOltdLCJkZXBlbmRlbmN5TGV2ZWxzIjp7fSwidGltZVZlcmlmaWVkIjoiMjAyNC0wMS0wMVQwMDowMDowMFoifX0=",
+		},
+		"integratedTime": time.Now().Unix(), // Recent timestamp (within 24h threshold)
+		"logID":          "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+		"logIndex":       9876543,
+		"verification": map[string]interface{}{
+			"signedEntryTimestamp": "MEUCIQDexampleTimestamp123456789abcdefghijklmnopqrstuvwxyz==",
+		},
+	}
+
+	responseBody, err := json.Marshal([]interface{}{vsaEntry})
+	if err != nil {
+		return fmt.Errorf("failed to marshal VSA search response: %w", err)
+	}
+
+	return wiremock.StubFor(ctx, wiremock.Post(wiremock.URLPathEqualTo("/api/v1/index/retrieve")).
+		WillReturnResponse(wiremock.NewResponse().
+			WithStatus(200).
+			WithHeaders(map[string]string{
+				"Content-Type": "application/json",
+			}).
+			WithBody(string(responseBody))))
 }

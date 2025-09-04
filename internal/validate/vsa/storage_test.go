@@ -203,3 +203,54 @@ func TestUploadVSAEnvelope_InvalidStorageConfig(t *testing.T) {
 	err = UploadVSAEnvelope(ctx, envelopePath, []string{"invalid-format"}, nil)
 	assert.NoError(t, err) // Should not error, just warn and continue
 }
+
+func TestExtractRekorURLFromVSAUploadFlags(t *testing.T) {
+	tests := []struct {
+		name      string
+		vsaUpload []string
+		expected  string
+	}{
+		{
+			name:      "rekor backend with custom URL",
+			vsaUpload: []string{"rekor@https://custom-rekor.example.com"},
+			expected:  "https://custom-rekor.example.com",
+		},
+		{
+			name:      "rekor backend without URL",
+			vsaUpload: []string{"rekor"},
+			expected:  "https://rekor.sigstore.dev",
+		},
+		{
+			name:      "no rekor backend - only local",
+			vsaUpload: []string{"local@/tmp/vsa"},
+			expected:  "",
+		},
+		{
+			name:      "multiple backends with rekor",
+			vsaUpload: []string{"local@/tmp/vsa", "rekor@https://test-rekor.dev"},
+			expected:  "https://test-rekor.dev",
+		},
+		{
+			name:      "empty vsa upload flags",
+			vsaUpload: []string{},
+			expected:  "",
+		},
+		{
+			name:      "invalid flags are ignored",
+			vsaUpload: []string{"invalid-format", "rekor@https://valid.rekor.com"},
+			expected:  "https://valid.rekor.com",
+		},
+		{
+			name:      "case insensitive rekor backend",
+			vsaUpload: []string{"REKOR@https://uppercase.rekor.com"},
+			expected:  "https://uppercase.rekor.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ExtractRekorURLFromVSAUploadFlags(tt.vsaUpload)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

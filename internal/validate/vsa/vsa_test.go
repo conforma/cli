@@ -441,3 +441,117 @@ func TestFilterReportForTargetRef(t *testing.T) {
 		})
 	}
 }
+
+func TestIsVSAExpired(t *testing.T) {
+	now := time.Now()
+	tests := []struct {
+		name                string
+		vsaTimestamp        time.Time
+		expirationThreshold time.Duration
+		expected            bool
+	}{
+		{
+			name:                "VSA within threshold - not expired",
+			vsaTimestamp:        now.Add(-1 * time.Hour), // 1 hour ago
+			expirationThreshold: 24 * time.Hour,          // 24 hour threshold
+			expected:            false,
+		},
+		{
+			name:                "VSA beyond threshold - expired",
+			vsaTimestamp:        now.Add(-25 * time.Hour), // 25 hours ago
+			expirationThreshold: 24 * time.Hour,           // 24 hour threshold
+			expected:            true,
+		},
+		{
+			name:                "VSA exactly at threshold boundary - expired",
+			vsaTimestamp:        now.Add(-24 * time.Hour), // exactly 24 hours ago
+			expirationThreshold: 24 * time.Hour,           // 24 hour threshold
+			expected:            true,                     // Should be expired at exactly the boundary
+		},
+		{
+			name:                "Zero expiration threshold - not expired",
+			vsaTimestamp:        now.Add(-1000 * time.Hour), // very old
+			expirationThreshold: 0,                          // no expiration
+			expected:            false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsVSAExpired(tt.vsaTimestamp, tt.expirationThreshold)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestNewVSAChecker(t *testing.T) {
+	tests := []struct {
+		name            string
+		rekorURL        string
+		timeout         time.Duration
+		expectedTimeout time.Duration
+	}{
+		{
+			name:            "with timeout",
+			rekorURL:        "https://rekor.sigstore.dev",
+			timeout:         60 * time.Second,
+			expectedTimeout: 60 * time.Second,
+		},
+		{
+			name:            "zero timeout uses default",
+			rekorURL:        "https://rekor.sigstore.dev",
+			timeout:         0,
+			expectedTimeout: 30 * time.Second,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			checker := NewVSAChecker(tt.rekorURL, tt.timeout)
+			assert.Equal(t, tt.rekorURL, checker.RekorURL)
+			assert.Equal(t, tt.expectedTimeout, checker.Timeout)
+		})
+	}
+}
+
+func TestVSAChecker_CheckExistingVSA_ErrorCases(t *testing.T) {
+	checker := NewVSAChecker("https://rekor.sigstore.dev", 30*time.Second)
+	ctx := context.Background()
+
+	tests := []struct {
+		name        string
+		imageRef    string
+		expiration  time.Duration
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "tag reference should fail",
+			imageRef:    "registry.example.com/test:latest",
+			expiration:  24 * time.Hour,
+			expectError: true,
+			errorMsg:    "failed to extract digest from image reference",
+		},
+		{
+			name:        "empty image reference",
+			imageRef:    "",
+			expiration:  24 * time.Hour,
+			expectError: true,
+			errorMsg:    "failed to extract digest from image reference",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := checker.CheckExistingVSA(ctx, tt.imageRef, tt.expiration)
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+			}
+		})
+	}
+}
