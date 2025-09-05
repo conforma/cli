@@ -18,36 +18,12 @@ package vsa
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/afero"
 )
 
-// FileVSARetriever implements VSARetriever for file-based VSA records
-type FileVSARetriever struct {
-	fs afero.Fs
-}
-
-// NewFileVSARetriever creates a new file-based VSA retriever
-func NewFileVSARetriever(fs afero.Fs) *FileVSARetriever {
-	return &FileVSARetriever{fs: fs}
-}
-
-// RetrieveVSA reads VSA records from a file
-func (f *FileVSARetriever) RetrieveVSA(ctx context.Context, vsaPath string) ([]VSARecord, error) {
-	data, err := afero.ReadFile(f.fs, vsaPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read VSA file: %w", err)
-	}
-
-	var records []VSARecord
-	if err := json.Unmarshal(data, &records); err != nil {
-		return nil, fmt.Errorf("failed to parse VSA file: %w", err)
-	}
-
-	return records, nil
-}
+// FileVSARetriever removed - no longer used by current implementation
 
 // FileVSADataRetriever implements VSADataRetriever for file-based VSA files
 type FileVSADataRetriever struct {
@@ -65,6 +41,11 @@ func NewFileVSADataRetriever(fs afero.Fs, vsaPath string) *FileVSADataRetriever 
 
 // RetrieveVSAData reads and returns VSA data as a string
 func (f *FileVSADataRetriever) RetrieveVSAData(ctx context.Context) (string, error) {
+	// Validate file path
+	if f.vsaPath == "" {
+		return "", fmt.Errorf("failed to read VSA file: file path is empty")
+	}
+
 	// Read VSA file
 	data, err := afero.ReadFile(f.fs, f.vsaPath)
 	if err != nil {
