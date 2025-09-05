@@ -78,183 +78,9 @@ func NewRekorVSARetrieverWithClient(client RekorClient, opts RetrievalOptions) *
 	}
 }
 
-// RetrieveVSA implements VSARetriever.RetrieveVSA
-func (r *RekorVSARetriever) RetrieveVSA(ctx context.Context, imageDigest string) ([]VSARecord, error) {
-	if imageDigest == "" {
-		return nil, fmt.Errorf("image digest cannot be empty")
-	}
+// RetrieveVSA method removed - no longer used by current implementation
 
-	// Validate image digest format
-	if !isValidImageDigest(imageDigest) {
-		return nil, fmt.Errorf("invalid image digest format: %s", imageDigest)
-	}
-
-	// Create context with timeout if specified
-	if r.options.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, r.options.Timeout)
-		defer cancel()
-	}
-
-	log.Debugf("Retrieving VSA records for image digest: %s", imageDigest)
-
-	// Search for entries containing the image digest
-	entries, err := r.searchForImageDigest(ctx, imageDigest)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search Rekor for image digest: %w", err)
-	}
-
-	log.Debugf("RetrieveVSA: search returned %d entries", len(entries))
-
-	var vsaRecords []VSARecord
-
-	// Process each entry to find VSA records
-	for _, entry := range entries {
-		log.Debugf("Processing entry: LogIndex=%v, LogID=%v", entry.LogIndex, entry.LogID)
-		if isVSARecord(entry) {
-			vsaRecord, err := r.parseVSARecord(entry)
-			if err != nil {
-				log.Warnf("Failed to parse VSA record: %v", err)
-				continue
-			}
-			vsaRecords = append(vsaRecords, vsaRecord)
-			log.Debugf("Added VSA record: LogIndex=%d, LogID=%s", vsaRecord.LogIndex, vsaRecord.LogID)
-		} else {
-			log.Debugf("Entry is not a VSA record")
-		}
-	}
-
-	log.Debugf("Found %d VSA records for image digest: %s", len(vsaRecords), imageDigest)
-	return vsaRecords, nil
-}
-
-// FindByPayloadHash implements VSARetriever.FindByPayloadHash
-func (r *RekorVSARetriever) FindByPayloadHash(ctx context.Context, payloadHashHex string) (*DualEntryPair, error) {
-	if payloadHashHex == "" {
-		return nil, fmt.Errorf("payload hash cannot be empty")
-	}
-
-	// Validate payload hash format (should be hex)
-	if !r.IsValidHexHash(payloadHashHex) {
-		return nil, fmt.Errorf("invalid payload hash format: %s", payloadHashHex)
-	}
-
-	// Create context with timeout if specified
-	if r.options.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, r.options.Timeout)
-		defer cancel()
-	}
-
-	log.Debugf("Finding dual entries for payload hash: %s", payloadHashHex)
-
-	// Search for entries containing the payload hash
-	entries, err := r.searchForPayloadHash(ctx, payloadHashHex)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search Rekor for payload hash: %w", err)
-	}
-
-	log.Debugf("FindByPayloadHash: search returned %d entries", len(entries))
-
-	// Maps to store the latest entry per payload hash for each type
-	intotoMap := make(map[string]models.LogEntryAnon)
-	dsseMap := make(map[string]models.LogEntryAnon)
-
-	// Single pass: classify entries and extract payload hashes, keeping only the latest per hash
-	for _, entry := range entries {
-		entryKind := r.classifyEntryKind(entry)
-		switch entryKind {
-		case "intoto":
-			// Extract the payload hash from the intoto entry
-			payloadHash, err := r.extractPayloadHash(entry)
-			if err != nil {
-				log.Debugf("Failed to extract payload hash from intoto entry: %v", err)
-				continue
-			}
-
-			// Keep only the latest intoto entry per payload hash
-			if existing, exists := intotoMap[payloadHash]; !exists || r.isEntryNewer(entry, existing) {
-				intotoMap[payloadHash] = entry
-			}
-
-		case "dsse":
-			// Extract the payload hash from the DSSE entry
-			payloadHash, err := r.extractPayloadHash(entry)
-			if err != nil {
-				log.Debugf("Failed to extract payload hash from DSSE entry: %v", err)
-				continue
-			}
-
-			// Keep only the latest DSSE entry per payload hash
-			if existing, exists := dsseMap[payloadHash]; !exists || r.isEntryNewer(entry, existing) {
-				dsseMap[payloadHash] = entry
-			}
-
-		default:
-			log.Debugf("Ignoring entry of unknown kind: %s", entryKind)
-		}
-	}
-
-	log.Debugf("Found %d unique intoto payload hashes and %d unique DSSE payload hashes", len(intotoMap), len(dsseMap))
-
-	// Find all valid pairs by checking intersection of payload hashes
-	var validPairs []DualEntryPair
-	for payloadHash, intotoEntry := range intotoMap {
-		if dsseEntry, exists := dsseMap[payloadHash]; exists {
-			// Verify both entries actually contain the same payloadHash (double-check)
-			if r.entriesSharePayloadHash(intotoEntry, dsseEntry) {
-				validPairs = append(validPairs, DualEntryPair{
-					PayloadHash: payloadHash,
-					IntotoEntry: &intotoEntry,
-					DSSEEntry:   &dsseEntry,
-				})
-				log.Debugf("Found valid pair: intoto LogIndex=%d, DSSE LogIndex=%d",
-					*intotoEntry.LogIndex, *dsseEntry.LogIndex)
-			}
-		}
-	}
-
-	log.Debugf("Found %d valid pairs that share the same payloadHash", len(validPairs))
-
-	// If no valid pairs found, handle the error cases
-	if len(validPairs) == 0 {
-		log.Debugf("No valid pairs found for payload hash: %s", payloadHashHex)
-
-		// Check if we have entries but they don't match (this indicates a problem)
-		if len(intotoMap) > 0 && len(dsseMap) > 0 {
-			log.Warnf("Found %d in-toto and %d DSSE entries but none share the same payloadHash. This may indicate corrupted or mismatched entries.",
-				len(intotoMap), len(dsseMap))
-			return nil, fmt.Errorf("found entries but none share the same payloadHash: %s", payloadHashHex)
-		}
-
-		// If we only have one type of entry, that's incomplete and indicates a problem
-		if len(intotoMap) > 0 {
-			log.Warnf("Found only in-toto entry for payload hash: %s. This indicates an incomplete dual upload - DSSE entry is missing.", payloadHashHex)
-			return nil, fmt.Errorf("incomplete dual upload: found in-toto entry but no DSSE entry for payload hash: %s. Both entries are required for signature verification.", payloadHashHex)
-		}
-		if len(dsseMap) > 0 {
-			log.Warnf("Found only DSSE entry for payload hash: %s. This indicates an incomplete dual upload - in-toto entry is missing.", payloadHashHex)
-			return nil, fmt.Errorf("incomplete dual upload: found DSSE entry but no in-toto entry for payload hash: %s. Both entries are required for signature verification.", payloadHashHex)
-		}
-
-		// If we still have no entries at all, return an error for backward compatibility
-		return nil, fmt.Errorf("no entries found for payload hash: %s", payloadHashHex)
-	}
-
-	// Now select the latest pair from the valid pairs based on IntegratedTime
-	// This ensures we get the most recent data from entries that actually correspond to each other
-	latestPair := validPairs[0]
-	for _, pair := range validPairs[1:] {
-		if r.isPairNewer(pair, latestPair) {
-			latestPair = pair
-		}
-	}
-
-	log.Debugf("Selected latest valid pair: intoto LogIndex=%d, DSSE LogIndex=%d",
-		*latestPair.IntotoEntry.LogIndex, *latestPair.DSSEEntry.LogIndex)
-
-	return &latestPair, nil
-}
+// FindByPayloadHash method removed - no longer used by current implementation
 
 // isEntryNewer determines if entry1 is newer than entry2 based on IntegratedTime
 // Returns true if entry1 is newer, false otherwise
@@ -281,26 +107,7 @@ func (r *RekorVSARetriever) isEntryNewer(entry1, entry2 models.LogEntryAnon) boo
 
 // isPairNewer determines if pair1 is newer than pair2 based on IntegratedTime
 // Returns true if pair1 is newer, false otherwise
-func (r *RekorVSARetriever) isPairNewer(pair1, pair2 DualEntryPair) bool {
-	time1 := r.getPairTimestamp(pair1)
-	time2 := r.getPairTimestamp(pair2)
-
-	// If both have timestamps, compare them
-	if time1 != nil && time2 != nil {
-		return *time1 > *time2
-	}
-
-	// If only one has a timestamp, prefer the one with timestamp
-	if time1 != nil && time2 == nil {
-		return true
-	}
-	if time1 == nil && time2 != nil {
-		return false
-	}
-
-	// If neither has a timestamp, prefer the first one (maintains original order)
-	return false
-}
+// isPairNewer method removed - no longer used
 
 // getPairTimestamp returns the timestamp for a pair based on the earliest IntegratedTime
 // This ensures we're consistent about which timestamp represents the pair
@@ -334,27 +141,7 @@ func (r *RekorVSARetriever) getPairTimestamp(pair DualEntryPair) *int64 {
 	return nil
 }
 
-// findLatestEntryByIntegratedTime finds the entry with the latest IntegratedTime
-// If multiple entries have the same time or no IntegratedTime, returns the first one
-func (r *RekorVSARetriever) findLatestEntryByIntegratedTime(entries []models.LogEntryAnon) *models.LogEntryAnon {
-	if len(entries) == 0 {
-		return nil
-	}
-
-	latest := entries[0]
-	for _, entry := range entries[1:] {
-		if entry.IntegratedTime != nil && latest.IntegratedTime != nil {
-			if *entry.IntegratedTime > *latest.IntegratedTime {
-				latest = entry
-			}
-		} else if entry.IntegratedTime != nil && latest.IntegratedTime == nil {
-			// Prefer entries with IntegratedTime over those without
-			latest = entry
-		}
-	}
-
-	return &latest
-}
+// findLatestEntryByIntegratedTime method removed - no longer used
 
 // searchForImageDigest searches Rekor for entries containing the given image digest
 func (r *RekorVSARetriever) searchForImageDigest(ctx context.Context, imageDigest string) ([]models.LogEntryAnon, error) {
@@ -402,7 +189,7 @@ func (r *RekorVSARetriever) FindLatestMatchingPair(ctx context.Context, entries 
 			}
 
 			// Extract the payload hash from the intoto entry body
-			payloadHash, err := r.extractIntotoPayloadHash(entry)
+			payloadHash, err := r.extractPayloadHash(entry)
 			if err != nil {
 				log.Debugf("Failed to extract intoto payload hash: %v", err)
 				continue
@@ -415,7 +202,7 @@ func (r *RekorVSARetriever) FindLatestMatchingPair(ctx context.Context, entries 
 
 		case "dsse":
 			// Extract the payload hash from the DSSE entry body
-			payloadHash, err := r.extractDSSEPayloadHash(entry)
+			payloadHash, err := r.extractPayloadHash(entry)
 			if err != nil {
 				continue
 			}
@@ -469,67 +256,6 @@ func (r *RekorVSARetriever) decodeBodyJSON(entry models.LogEntryAnon) (map[strin
 		return nil, fmt.Errorf("rekor body json unmarshal failed: %w", err)
 	}
 	return m, nil
-}
-
-// extractIntotoPayloadHash extracts the payload hash from an intoto entry's body
-func (r *RekorVSARetriever) extractIntotoPayloadHash(entry models.LogEntryAnon) (string, error) {
-	body, err := r.decodeBodyJSON(entry)
-	if err != nil {
-		return "", err
-	}
-
-	// Look for spec.content.payloadHash.value structure (intoto entries)
-	if spec, ok := body["spec"].(map[string]any); ok {
-		if content, ok := spec["content"].(map[string]any); ok {
-			if payloadHash, ok := content["payloadHash"].(map[string]any); ok {
-				if value, ok := payloadHash["value"].(string); ok {
-					return value, nil
-				}
-			}
-		}
-	}
-
-	return "", fmt.Errorf("could not extract payload hash from intoto entry")
-}
-
-// extractDSSEPayloadHash extracts the payload hash from a DSSE entry
-func (r *RekorVSARetriever) extractDSSEPayloadHash(entry models.LogEntryAnon) (string, error) {
-	body, err := r.decodeBodyJSON(entry)
-	if err != nil {
-		return "", err
-	}
-
-	// Look for spec.payloadHash.value structure
-	if spec, ok := body["spec"].(map[string]any); ok {
-		if payloadHash, ok := spec["payloadHash"].(map[string]any); ok {
-			if value, ok := payloadHash["value"].(string); ok {
-				return value, nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("could not extract payload hash from DSSE entry")
-}
-
-// searchForPayloadHash searches Rekor for entries containing the given payload hash
-func (r *RekorVSARetriever) searchForPayloadHash(ctx context.Context, payloadHashHex string) ([]models.LogEntryAnon, error) {
-	log.Debugf("searchForPayloadHash called with payloadHashHex: %s", payloadHashHex)
-
-	// Create search query using the search index API
-	query := &models.SearchIndex{
-		Hash: payloadHashHex,
-	}
-
-	log.Debugf("Calling client.SearchIndex")
-	entries, err := r.client.SearchIndex(ctx, query)
-	if err != nil {
-		log.Debugf("SearchIndex returned error: %v", err)
-		return nil, fmt.Errorf("failed to search Rekor index: %w", err)
-	}
-
-	log.Debugf("Search returned %d entries", len(entries))
-
-	return entries, nil
 }
 
 // isValidImageDigest validates the format of an image digest
@@ -797,24 +523,6 @@ func (r *RekorVSARetriever) extractSignaturesAndPublicKey(entry models.LogEntryA
 	return result, nil
 }
 
-// entriesSharePayloadHash checks if two Rekor entries share the same payloadHash
-func (r *RekorVSARetriever) entriesSharePayloadHash(intotoEntry, dsseEntry models.LogEntryAnon) bool {
-	// Extract payload hashes from both entries
-	intotoPayloadHash, err := r.extractPayloadHash(intotoEntry)
-	if err != nil {
-		log.Debugf("Failed to extract payload hash from intoto entry: %v", err)
-		return false
-	}
-	dssePayloadHash, err := r.extractPayloadHash(dsseEntry)
-	if err != nil {
-		log.Debugf("Failed to extract payload hash from dsse entry: %v", err)
-		return false
-	}
-
-	// Compare payload hashes
-	return intotoPayloadHash == dssePayloadHash
-}
-
 // extractPayloadHash extracts the payload hash from a Rekor entry's body or attestation data
 func (r *RekorVSARetriever) extractPayloadHash(entry models.LogEntryAnon) (string, error) {
 	// Try to extract from body field first (modern schema)
@@ -881,117 +589,7 @@ func (r *RekorVSARetriever) extractPayloadHash(entry models.LogEntryAnon) (strin
 	return "", fmt.Errorf("could not extract payload hash from entry")
 }
 
-// extractVSAStatement extracts the VSA Statement from an in-toto entry
-func (r *RekorVSARetriever) extractVSAStatement(entry models.LogEntryAnon) ([]byte, error) {
-	// For intoto entries, we need to extract from the body structure, not from a DSSE envelope
-	body, err := r.decodeBodyJSON(entry)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode entry body: %w", err)
-	}
-
-	// Check if this is an intoto entry
-	if kind, ok := body["kind"].(string); !ok || kind != "intoto" {
-		return nil, fmt.Errorf("entry is not an intoto entry (kind: %s)", kind)
-	}
-
-	// Extract the content from spec.content
-	spec, ok := body["spec"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("spec field not found in intoto entry")
-	}
-
-	content, ok := spec["content"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("content field not found in intoto entry spec")
-	}
-
-	// The content should contain the VSA data
-	contentBytes, err := json.Marshal(content)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal content: %w", err)
-	}
-
-	return contentBytes, nil
-}
-
-// GetPairedVSAWithSignatures retrieves a VSA with its corresponding signatures by payloadHash
-// This ensures the signatures actually correspond to the VSA Statement being evaluated
-func (r *RekorVSARetriever) GetPairedVSAWithSignatures(ctx context.Context, payloadHashHex string) (*PairedVSAWithSignatures, error) {
-	if payloadHashHex == "" {
-		return nil, fmt.Errorf("payload hash cannot be empty")
-	}
-
-	// Validate payload hash format (should be hex)
-	if !r.IsValidHexHash(payloadHashHex) {
-		return nil, fmt.Errorf("invalid payload hash format: %s", payloadHashHex)
-	}
-
-	// Create context with timeout if specified
-	if r.options.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, r.options.Timeout)
-		defer cancel()
-	}
-
-	log.Debugf("Getting paired VSA with signatures for payload hash: %s", payloadHashHex)
-
-	// Find the dual entry pair
-	dualPair, err := r.FindByPayloadHash(ctx, payloadHashHex)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find dual entries: %w", err)
-	}
-
-	// Ensure we have both entries for complete verification
-	if dualPair.IntotoEntry == nil || dualPair.DSSEEntry == nil {
-		if dualPair.IntotoEntry == nil && dualPair.DSSEEntry == nil {
-			return nil, fmt.Errorf("no entries found for payload hash: %s", payloadHashHex)
-		} else if dualPair.IntotoEntry == nil {
-			return nil, fmt.Errorf("incomplete dual upload: found DSSE entry but no in-toto entry for payload hash: %s. Both entries are required for signature verification.", payloadHashHex)
-		} else {
-			return nil, fmt.Errorf("incomplete dual upload: found in-toto entry but no DSSE entry for payload hash: %s. Both entries are required for signature verification.", payloadHashHex)
-		}
-	}
-
-	// Extract signatures and public key from DSSE entry
-	signatures, err := r.extractSignaturesAndPublicKey(*dualPair.DSSEEntry)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract signatures from DSSE entry: %w", err)
-	}
-
-	// Extract VSA Statement from in-toto entry
-	vsaStatement, err := r.extractVSAStatement(*dualPair.IntotoEntry)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract VSA Statement from in-toto entry: %w", err)
-	}
-
-	// Verify that the VSA Statement contains the expected predicate type
-	var statement map[string]interface{}
-	if err := json.Unmarshal(vsaStatement, &statement); err != nil {
-		return nil, fmt.Errorf("failed to parse VSA Statement: %w", err)
-	}
-
-	predicateType, ok := statement["predicateType"].(string)
-	if !ok {
-		return nil, fmt.Errorf("predicateType not found in VSA Statement")
-	}
-
-	expectedPredicateType := "https://conforma.dev/verification_summary/v1"
-	if predicateType != expectedPredicateType {
-		return nil, fmt.Errorf("unexpected predicate type: got %s, want %s", predicateType, expectedPredicateType)
-	}
-
-	result := &PairedVSAWithSignatures{
-		PayloadHash:   payloadHashHex,
-		VSAStatement:  vsaStatement,
-		Signatures:    signatures,
-		IntotoEntry:   dualPair.IntotoEntry,
-		DSSEEntry:     dualPair.DSSEEntry,
-		PredicateType: predicateType,
-	}
-
-	log.Debugf("Successfully paired VSA with %d signatures for payload hash: %s", len(signatures), payloadHashHex)
-	return result, nil
-}
+// GetPairedVSAWithSignatures method removed - no longer used by current implementation
 
 // rekorClient wraps the actual Rekor client to implement our interface
 type rekorClient struct {
