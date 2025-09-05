@@ -23,6 +23,7 @@ import (
 	"github.com/conforma/cli/internal/input"
 	"github.com/conforma/cli/internal/policy"
 	_ "github.com/conforma/cli/internal/rego"
+	"github.com/conforma/cli/internal/validate/vsa"
 )
 
 var ValidateCmd *cobra.Command
@@ -35,6 +36,7 @@ func init() {
 	ValidateCmd.AddCommand(validateImageCmd(image.ValidateImage))
 	ValidateCmd.AddCommand(validateInputCmd(input.ValidateInput))
 	ValidateCmd.AddCommand(ValidatePolicyCmd(policy.ValidatePolicy))
+	ValidateCmd.AddCommand(validateVSACmd(vsa.ValidateVSA))
 }
 
 func NewValidateCmd() *cobra.Command {
