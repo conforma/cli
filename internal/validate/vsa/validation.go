@@ -34,17 +34,42 @@ import (
 	"github.com/conforma/cli/internal/policy/source"
 )
 
-// DSSEEnvelope represents a DSSE (Dead Simple Signing Envelope) structure
-type DSSEEnvelope struct {
-	PayloadType string      `json:"payloadType"`
-	Payload     string      `json:"payload"`
-	Signatures  []Signature `json:"signatures"`
+// DSSEEnvelope and Signature types are defined in types.go
+
+// NewPolicyResolver creates a new PolicyResolver adapter
+func NewPolicyResolver(policyResolver interface{}, availableRules evaluator.PolicyRules) PolicyResolver {
+	return &policyResolverAdapter{
+		policyResolver: policyResolver,
+		availableRules: availableRules,
+	}
 }
 
-// Signature represents a signature in a DSSE envelope
-type Signature struct {
-	KeyID string `json:"keyid"`
-	Sig   string `json:"sig"`
+// policyResolverAdapter adapts a policy resolver to PolicyResolver interface
+type policyResolverAdapter struct {
+	policyResolver interface{}
+	availableRules evaluator.PolicyRules
+}
+
+// GetRequiredRules returns a map of rule IDs that are required by the policy
+func (p *policyResolverAdapter) GetRequiredRules(ctx context.Context, imageDigest string) (map[string]bool, error) {
+	// Use the real policy resolver to determine which rules are actually required
+	if p.policyResolver == nil {
+		return nil, fmt.Errorf("policy resolver is nil")
+	}
+
+	// Cast the policy resolver to the correct type
+	realResolver, ok := p.policyResolver.(interface {
+		ResolvePolicy(rules evaluator.PolicyRules, target string) evaluator.PolicyResolutionResult
+	})
+	if !ok {
+		return nil, fmt.Errorf("policy resolver does not implement ResolvePolicy method")
+	}
+
+	// Resolve the policy to get the actual required rules
+	result := realResolver.ResolvePolicy(p.availableRules, imageDigest)
+
+	// Return the included rules (these are the ones that should be evaluated)
+	return result.IncludedRules, nil
 }
 
 // InTotoStatement represents an in-toto statement structure
