@@ -375,8 +375,8 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 				continue
 			}
 
-			// Call the validation function
-			validationResult, err := validate(ctx, comp.ContainerImage, data.policy, rekorRetriever, data.publicKey)
+			// Call the validation function with content retrieval
+			validationResult, vsaContent, err := vsa.ValidateVSAWithContent(ctx, comp.ContainerImage, data.policy, rekorRetriever, data.publicKey)
 			if err != nil {
 				err = fmt.Errorf("validation failed for %s: %w", comp.ContainerImage, err)
 				results <- result{err: err, component: comp, validationResult: nil, vsaComponents: nil}
@@ -386,18 +386,14 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 				continue
 			}
 
-			// Extract actual components from VSA attestation data
+			// Extract actual components from VSA attestation data (no redundant retrieval)
 			var vsaComponents []applicationsnapshot.Component
-			if validationResult != nil {
-				// Try to retrieve VSA data to extract actual components
-				vsaContent, err := rekorRetriever.RetrieveVSAData(ctx)
-				if err == nil {
-					predicate, err := vsa.ParseVSAContent(vsaContent)
-					if err == nil && predicate.Results != nil {
-						// Use actual components from VSA attestation if available
-						vsaComponents = predicate.Results.Components
-						logrus.Debugf("Extracted %d actual components from VSA attestation for %s", len(vsaComponents), comp.ContainerImage)
-					}
+			if validationResult != nil && vsaContent != "" {
+				predicate, err := vsa.ParseVSAContent(vsaContent)
+				if err == nil && predicate.Results != nil {
+					// Use actual components from VSA attestation if available
+					vsaComponents = predicate.Results.Components
+					logrus.Debugf("Extracted %d actual components from VSA attestation for %s", len(vsaComponents), comp.ContainerImage)
 				}
 			}
 
