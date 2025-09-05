@@ -44,9 +44,6 @@ import (
 func TestEvaluatorLifecycle(t *testing.T) {
 	noEvaluators := 100
 
-	// Clear the download cache to ensure a clean state for this test
-	// source.ClearDownloadCache()
-
 	ctx := utils.WithFS(context.Background(), afero.NewMemMapFs())
 	client := fake.FakeClient{}
 	commonMockClient(&client)
