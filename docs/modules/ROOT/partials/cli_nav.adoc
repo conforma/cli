@@ -31,5 +31,6 @@
 ** xref:ec_validate_image.adoc[ec validate image]
 ** xref:ec_validate_input.adoc[ec validate input]
 ** xref:ec_validate_policy.adoc[ec validate policy]
+** xref:ec_validate_vsa.adoc[ec validate vsa]
 ** xref:ec_version.adoc[ec version]
 
