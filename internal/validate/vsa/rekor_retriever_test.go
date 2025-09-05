@@ -345,3 +345,359 @@ func TestRekorVSARetriever_FindLatestMatchingPair_EdgeCases(t *testing.T) {
 	result = retriever.FindLatestMatchingPair(context.Background(), intotoNilAttestationEntries)
 	assert.Nil(t, result)
 }
+
+func TestRekorVSARetriever_SearchForImageDigest(t *testing.T) {
+	tests := []struct {
+		name        string
+		imageDigest string
+		entries     []models.LogEntryAnon
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "successful search with entries",
+			imageDigest: "sha256:abc123",
+			entries: []models.LogEntryAnon{
+				{
+					LogIndex: int64Ptr(1),
+					LogID:    strPtr("entry-1"),
+					Body:     base64.StdEncoding.EncodeToString([]byte(`{"kind": "intoto"}`)),
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:        "search with no entries",
+			imageDigest: "sha256:def456",
+			entries:     []models.LogEntryAnon{},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := &MockRekorClient{entries: tt.entries}
+			retriever := NewRekorVSARetrieverWithClient(mockClient, DefaultRetrievalOptions())
+
+			result, err := retriever.searchForImageDigest(context.Background(), tt.imageDigest)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.Equal(t, len(tt.entries), len(result))
+			}
+		})
+	}
+}
+
+func TestRekorVSARetriever_GetAllEntriesForImageDigest(t *testing.T) {
+	mockClient := &MockRekorClient{
+		entries: []models.LogEntryAnon{
+			{
+				LogIndex: int64Ptr(1),
+				LogID:    strPtr("entry-1"),
+				Body:     base64.StdEncoding.EncodeToString([]byte(`{"kind": "intoto"}`)),
+			},
+		},
+	}
+	retriever := NewRekorVSARetrieverWithClient(mockClient, DefaultRetrievalOptions())
+
+	result, err := retriever.GetAllEntriesForImageDigest(context.Background(), "sha256:abc123")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Len(t, result, 1)
+	assert.Equal(t, int64(1), *result[0].LogIndex)
+}
+
+func TestRekorVSARetriever_IsEntryNewer(t *testing.T) {
+	retriever := &RekorVSARetriever{}
+
+	tests := []struct {
+		name     string
+		entry1   models.LogEntryAnon
+		entry2   models.LogEntryAnon
+		expected bool
+	}{
+		{
+			name: "entry1 newer than entry2",
+			entry1: models.LogEntryAnon{
+				IntegratedTime: int64Ptr(2000),
+			},
+			entry2: models.LogEntryAnon{
+				IntegratedTime: int64Ptr(1000),
+			},
+			expected: true,
+		},
+		{
+			name: "entry1 older than entry2",
+			entry1: models.LogEntryAnon{
+				IntegratedTime: int64Ptr(1000),
+			},
+			entry2: models.LogEntryAnon{
+				IntegratedTime: int64Ptr(2000),
+			},
+			expected: false,
+		},
+		{
+			name: "entry1 has timestamp, entry2 doesn't",
+			entry1: models.LogEntryAnon{
+				IntegratedTime: int64Ptr(1000),
+			},
+			entry2: models.LogEntryAnon{
+				IntegratedTime: nil,
+			},
+			expected: true,
+		},
+		{
+			name: "entry1 no timestamp, entry2 has timestamp",
+			entry1: models.LogEntryAnon{
+				IntegratedTime: nil,
+			},
+			entry2: models.LogEntryAnon{
+				IntegratedTime: int64Ptr(1000),
+			},
+			expected: false,
+		},
+		{
+			name: "neither has timestamp",
+			entry1: models.LogEntryAnon{
+				IntegratedTime: nil,
+			},
+			entry2: models.LogEntryAnon{
+				IntegratedTime: nil,
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := retriever.isEntryNewer(tt.entry1, tt.entry2)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestRekorVSARetriever_GetPairTimestamp(t *testing.T) {
+	retriever := &RekorVSARetriever{}
+
+	tests := []struct {
+		name     string
+		pair     DualEntryPair
+		expected *int64
+	}{
+		{
+			name: "both entries have timestamps - return earlier",
+			pair: DualEntryPair{
+				IntotoEntry: &models.LogEntryAnon{
+					IntegratedTime: int64Ptr(2000),
+				},
+				DSSEEntry: &models.LogEntryAnon{
+					IntegratedTime: int64Ptr(1500),
+				},
+			},
+			expected: int64Ptr(1500),
+		},
+		{
+			name: "both entries have timestamps - intoto earlier",
+			pair: DualEntryPair{
+				IntotoEntry: &models.LogEntryAnon{
+					IntegratedTime: int64Ptr(1000),
+				},
+				DSSEEntry: &models.LogEntryAnon{
+					IntegratedTime: int64Ptr(1500),
+				},
+			},
+			expected: int64Ptr(1000),
+		},
+		{
+			name: "only intoto has timestamp",
+			pair: DualEntryPair{
+				IntotoEntry: &models.LogEntryAnon{
+					IntegratedTime: int64Ptr(1000),
+				},
+				DSSEEntry: &models.LogEntryAnon{
+					IntegratedTime: nil,
+				},
+			},
+			expected: int64Ptr(1000),
+		},
+		{
+			name: "only DSSE has timestamp",
+			pair: DualEntryPair{
+				IntotoEntry: &models.LogEntryAnon{
+					IntegratedTime: nil,
+				},
+				DSSEEntry: &models.LogEntryAnon{
+					IntegratedTime: int64Ptr(1000),
+				},
+			},
+			expected: int64Ptr(1000),
+		},
+		{
+			name: "neither has timestamp",
+			pair: DualEntryPair{
+				IntotoEntry: &models.LogEntryAnon{
+					IntegratedTime: nil,
+				},
+				DSSEEntry: &models.LogEntryAnon{
+					IntegratedTime: nil,
+				},
+			},
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := retriever.getPairTimestamp(tt.pair)
+			if tt.expected == nil {
+				assert.Nil(t, result)
+			} else {
+				assert.NotNil(t, result)
+				assert.Equal(t, *tt.expected, *result)
+			}
+		})
+	}
+}
+
+func TestRekorVSARetriever_DecodeBodyJSON(t *testing.T) {
+	retriever := &RekorVSARetriever{}
+
+	tests := []struct {
+		name        string
+		entry       models.LogEntryAnon
+		expectError bool
+		expected    map[string]any
+	}{
+		{
+			name: "valid JSON body",
+			entry: models.LogEntryAnon{
+				Body: base64.StdEncoding.EncodeToString([]byte(`{"kind": "intoto", "spec": {"content": "test"}}`)),
+			},
+			expectError: false,
+			expected: map[string]any{
+				"kind": "intoto",
+				"spec": map[string]any{
+					"content": "test",
+				},
+			},
+		},
+		{
+			name: "empty body",
+			entry: models.LogEntryAnon{
+				Body: "",
+			},
+			expectError: true,
+		},
+		{
+			name: "non-string body",
+			entry: models.LogEntryAnon{
+				Body: 123, // Not a string
+			},
+			expectError: true,
+		},
+		{
+			name: "invalid base64",
+			entry: models.LogEntryAnon{
+				Body: "invalid-base64!",
+			},
+			expectError: true,
+		},
+		{
+			name: "invalid JSON",
+			entry: models.LogEntryAnon{
+				Body: base64.StdEncoding.EncodeToString([]byte(`{"invalid": json}`)),
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := retriever.decodeBodyJSON(tt.entry)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestRekorVSARetriever_ParseVSARecord(t *testing.T) {
+	retriever := &RekorVSARetriever{}
+
+	tests := []struct {
+		name     string
+		entry    models.LogEntryAnon
+		expected VSARecord
+	}{
+		{
+			name: "complete entry",
+			entry: models.LogEntryAnon{
+				LogIndex:       int64Ptr(123),
+				LogID:          strPtr("test-uuid"),
+				IntegratedTime: int64Ptr(1000),
+				Body:           "test-body",
+				Attestation: &models.LogEntryAnonAttestation{
+					Data: strfmt.Base64("test-attestation"),
+				},
+				Verification: &models.LogEntryAnonVerification{
+					InclusionProof: &models.InclusionProof{
+						RootHash: strPtr("test-root"),
+					},
+				},
+			},
+			expected: VSARecord{
+				LogIndex:       123,
+				LogID:          "test-uuid",
+				IntegratedTime: 1000,
+				Body:           "test-body",
+				Attestation: &models.LogEntryAnonAttestation{
+					Data: strfmt.Base64("test-attestation"),
+				},
+				Verification: &models.LogEntryAnonVerification{
+					InclusionProof: &models.InclusionProof{
+						RootHash: strPtr("test-root"),
+					},
+				},
+			},
+		},
+		{
+			name: "entry with nil fields",
+			entry: models.LogEntryAnon{
+				LogIndex:       nil,
+				LogID:          nil,
+				IntegratedTime: nil,
+				Body:           nil,
+				Attestation:    nil,
+				Verification:   nil,
+			},
+			expected: VSARecord{
+				LogIndex:       0,
+				LogID:          "",
+				IntegratedTime: 0,
+				Body:           "",
+				Attestation:    nil,
+				Verification:   nil,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := retriever.parseVSARecord(tt.entry)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
