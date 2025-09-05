@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/sigstore/cosign/v2/cmd/cosign/cli/rekor"
 	"github.com/sigstore/rekor/pkg/generated/client"
@@ -725,10 +726,10 @@ func (rc *rekorClient) worker(ctx context.Context, uuidChan <-chan string, resul
 			// Continue processing
 		}
 
-		// Fetch the log entry
-		entry, err := rc.GetLogEntryByUUID(ctx, uuid)
+		// Fetch the log entry with retry logic
+		entry, err := rc.GetLogEntryByUUIDWithRetry(ctx, uuid, 3)
 		if err != nil {
-			log.Debugf("Worker %d: Failed to fetch log entry for UUID %s: %v", workerID, uuid, err)
+			log.Debugf("Worker %d: Failed to fetch log entry for UUID %s after retries: %v", workerID, uuid, err)
 			select {
 			case resultChan <- fetchResult{entry: nil, err: err}:
 			case <-ctx.Done():
@@ -748,8 +749,8 @@ func (rc *rekorClient) worker(ctx context.Context, uuidChan <-chan string, resul
 
 // getWorkerCount returns the number of workers to use for parallel operations
 func (rc *rekorClient) getWorkerCount() int {
-	// Default to 8 workers
-	defaultWorkers := 8
+	// Default to 4 workers (optimized for Rekor rate limits)
+	defaultWorkers := 4
 
 	// Check environment variable
 	if workerStr := os.Getenv("EC_REKOR_WORKERS"); workerStr != "" {
@@ -838,6 +839,65 @@ func (rc *rekorClient) GetLogEntryByUUID(ctx context.Context, uuid string) (*mod
 	}
 
 	return nil, fmt.Errorf("log entry not found for UUID: %s", uuid)
+}
+
+// GetLogEntryByUUIDWithRetry fetches a log entry with exponential backoff retry logic
+func (rc *rekorClient) GetLogEntryByUUIDWithRetry(ctx context.Context, uuid string, maxRetries int) (*models.LogEntryAnon, error) {
+	var lastErr error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 100ms, 200ms, 400ms
+			backoff := time.Duration(100*attempt) * time.Millisecond
+			log.Debugf("Retrying GetLogEntryByUUID for UUID %s (attempt %d/%d) after %v", uuid, attempt+1, maxRetries+1, backoff)
+
+			select {
+			case <-time.After(backoff):
+				// Continue with retry
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+
+		entry, err := rc.GetLogEntryByUUID(ctx, uuid)
+		if err == nil {
+			if attempt > 0 {
+				log.Debugf("GetLogEntryByUUID succeeded for UUID %s on attempt %d", uuid, attempt+1)
+			}
+			return entry, nil
+		}
+
+		lastErr = err
+
+		// Don't retry on certain types of errors (e.g., not found, authentication)
+		if isNonRetryableError(err) {
+			log.Debugf("Non-retryable error for UUID %s: %v", uuid, err)
+			break
+		}
+	}
+
+	return nil, fmt.Errorf("failed to fetch log entry for UUID %s after %d attempts: %w", uuid, maxRetries+1, lastErr)
+}
+
+// isNonRetryableError determines if an error should not be retried
+func isNonRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+	// Don't retry on authentication, authorization, or not found errors
+	nonRetryablePatterns := []string{
+		"401", "403", "404", "not found", "unauthorized", "forbidden",
+	}
+
+	for _, pattern := range nonRetryablePatterns {
+		if strings.Contains(strings.ToLower(errStr), pattern) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // RekorVSADataRetriever implements VSADataRetriever for Rekor-based VSA retrieval
