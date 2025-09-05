@@ -39,6 +39,7 @@ type RetrievalOptions struct {
 // DefaultRetrievalOptions returns default options for VSA retrieval
 func DefaultRetrievalOptions() RetrievalOptions {
 	return RetrievalOptions{
+		URL:     "https://rekor-server-trusted-artifact-signer.apps.rosa.rekor-stage.ic5w.p3.openshiftapps.com",
 		Timeout: 30 * time.Second,
 	}
 }
