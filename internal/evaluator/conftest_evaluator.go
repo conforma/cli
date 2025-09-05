@@ -20,12 +20,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime/trace"
 	"strings"
+	"sync"
 	"time"
 
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
@@ -38,7 +38,6 @@ import (
 	"github.com/spf13/afero"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	"github.com/conforma/cli/internal/opa"
 	"github.com/conforma/cli/internal/opa/rule"
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/policy/source"
@@ -52,6 +51,12 @@ const (
 	runnerKey        contextKey = "ec.evaluator.runner"
 	capabilitiesKey  contextKey = "ec.evaluator.capabilities"
 	effectiveTimeKey contextKey = "ec.evaluator.effective_time"
+)
+
+var (
+	// capabilitiesCache stores the marshaled capabilities to avoid repeated marshaling
+	capabilitiesCache     string
+	capabilitiesCacheOnce sync.Once
 )
 
 // trim removes all failure, warning, success or skipped results that depend on
@@ -373,12 +378,9 @@ func (c conftestEvaluator) CapabilitiesPath() string {
 	return path.Join(c.workDir, "capabilities.json")
 }
 
-type policyRules map[string]rule.Info
+type PolicyRules map[string]rule.Info
 
-// Add a new type to track non-annotated rules separately
-type nonAnnotatedRules map[string]bool
-
-func (r *policyRules) collect(a *ast.AnnotationsRef) error {
+func (r *PolicyRules) collect(a *ast.AnnotationsRef) error {
 	if a.Annotations == nil {
 		return nil
 	}
@@ -409,110 +411,15 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		defer region.End()
 	}
 
-	// hold all rule annotations from all policy sources
-	// NOTE: emphasis on _all rules from all sources_; meaning that if two rules
-	// exist with the same code in two separate sources the collected rule
-	// information is not deterministic
-	rules := policyRules{}
-	// Track non-annotated rules separately for filtering purposes only
-	nonAnnotatedRules := nonAnnotatedRules{}
-	// Download all sources
-	for _, s := range c.policySources {
-		dir, err := s.GetPolicy(ctx, c.workDir, false)
-		if err != nil {
-			log.Debugf("Unable to download source from %s!", s.PolicyUrl())
-			// TODO do we want to download other policies instead of erroring out?
-			return nil, err
-		}
-		annotations := []*ast.AnnotationsRef{}
-		fs := utils.FS(ctx)
-		// We only want to inspect the directory of policy subdirs, not config or data subdirs.
-		if s.Subdir() == "policy" {
-			annotations, err = opa.InspectDir(fs, dir)
-			if err != nil {
-				errMsg := err
-				if err.Error() == "no rego files found in policy subdirectory" {
-					// Let's try to give some more robust messaging to the user.
-					policyURL, err := url.Parse(s.PolicyUrl())
-					if err != nil {
-						return nil, errMsg
-					}
-					// Do we have a prefix at the end of the URL path?
-					// If not, this means we aren't trying to access a specific file.
-					// TODO: Determine if we want to check for a .git suffix as well?
-					pos := strings.LastIndex(policyURL.Path, ".")
-					if pos == -1 {
-						// Are we accessing a GitHub or GitLab URL? If so, are we beginning with 'https' or 'http'?
-						if (policyURL.Host == "github.com" || policyURL.Host == "gitlab.com") && (policyURL.Scheme == "https" || policyURL.Scheme == "http") {
-							log.Debug("Git Hub or GitLab, http transport, and no file extension, this could be a problem.")
-							errMsg = fmt.Errorf("%s.\nYou've specified a %s URL with an %s:// scheme.\nDid you mean: %s instead?", errMsg, policyURL.Hostname(), policyURL.Scheme, fmt.Sprint(policyURL.Host+policyURL.RequestURI()))
-						}
-					}
-				}
-				return nil, errMsg
-			}
-		}
-
-		// Collect ALL rules for filtering purposes - both with and without annotations
-		// This ensures that rules without metadata (like fail_with_data.rego) are properly included
-		for _, a := range annotations {
-			if a.Annotations != nil {
-				// Rules with annotations - collect full metadata
-				if err := rules.collect(a); err != nil {
-					return nil, err
-				}
-			} else {
-				// Rules without annotations - track for filtering only, not for success computation
-				ruleRef := a.GetRule()
-				if ruleRef != nil {
-					// Extract package name from the rule path
-					packageName := ""
-					if len(a.Path) > 1 {
-						// Path format is typically ["data", "package", "rule"]
-						// We want the package part (index 1)
-						if len(a.Path) >= 2 {
-							packageName = strings.ReplaceAll(a.Path[1].String(), `"`, "")
-						}
-					}
-
-					// Try to extract code from rule body first, fallback to rule name
-					code := extractCodeFromRuleBody(ruleRef)
-
-					// If no code found in body, use rule name
-					if code == "" {
-						shortName := ruleRef.Head.Name.String()
-						code = fmt.Sprintf("%s.%s", packageName, shortName)
-					}
-
-					// Debug: Print non-annotated rule processing
-					log.Debugf("Non-annotated rule: packageName=%s, code=%s", packageName, code)
-
-					// Track for filtering but don't add to rules map for success computation
-					nonAnnotatedRules[code] = true
-				}
-			}
-		}
+	// Use RuleDiscoveryService to discover all rules (both annotated and non-annotated)
+	ruleDiscovery := NewRuleDiscoveryService()
+	rules, nonAnnotatedRules, err := ruleDiscovery.DiscoverRulesWithWorkDir(ctx, c.policySources, c.workDir)
+	if err != nil {
+		return nil, err
 	}
 
-	// Prepare all rules for policy resolution (both annotated and non-annotated)
-	// Combine annotated and non-annotated rules for filtering
-	allRules := make(policyRules)
-	for code, rule := range rules {
-		allRules[code] = rule
-	}
-	// Add non-annotated rules as minimal rule.Info for filtering
-	for code := range nonAnnotatedRules {
-		parts := strings.Split(code, ".")
-		if len(parts) >= 2 {
-			packageName := parts[len(parts)-2]
-			shortName := parts[len(parts)-1]
-			allRules[code] = rule.Info{
-				Code:      code,
-				Package:   packageName,
-				ShortName: shortName,
-			}
-		}
-	}
+	// Combine annotated and non-annotated rules for filtering using the service
+	allRules := ruleDiscovery.CombineRulesForFiltering(rules, nonAnnotatedRules)
 
 	var filteredNamespaces []string
 	if c.policyResolver != nil {
@@ -744,7 +651,7 @@ func toRules(results []output.Result) []Result {
 // that hasn't been touched by adding metadata must have succeeded
 func (c conftestEvaluator) computeSuccesses(
 	result Outcome,
-	rules policyRules,
+	rules PolicyRules,
 	target string,
 	missingIncludes map[string]bool,
 	unifiedFilter PostEvaluationFilter,
@@ -831,7 +738,7 @@ func (c conftestEvaluator) computeSuccesses(
 	return successes
 }
 
-func addRuleMetadata(ctx context.Context, result *Result, rules policyRules) {
+func addRuleMetadata(ctx context.Context, result *Result, rules PolicyRules) {
 	code, ok := (*result).Metadata[metadataCode].(string)
 	if ok {
 		addMetadataToResults(ctx, result, rules[code])
@@ -1130,6 +1037,41 @@ func strictCapabilities(ctx context.Context) (string, error) {
 		return c, nil
 	}
 
+	// Use cached capabilities if available
+	var cacheErr error
+	capabilitiesCacheOnce.Do(func() {
+		capabilitiesCache, cacheErr = generateCapabilities()
+	})
+
+	if cacheErr != nil {
+		return "", fmt.Errorf("failed to generate capabilities: %w", cacheErr)
+	}
+
+	return capabilitiesCache, nil
+}
+
+// generateCapabilities creates the OPA capabilities with proper error handling and retry logic
+func generateCapabilities() (string, error) {
+	// Try multiple times with increasing timeouts
+	timeouts := []time.Duration{2 * time.Second, 5 * time.Second, 10 * time.Second}
+
+	for i, timeout := range timeouts {
+		if capabilities, err := tryGenerateCapabilities(timeout); err == nil {
+			return capabilities, nil
+		} else {
+			log.Warnf("Capabilities generation attempt %d failed (timeout: %v): %v", i+1, timeout, err)
+			if i == len(timeouts)-1 {
+				// Last attempt failed, try with a minimal capabilities fallback
+				return generateMinimalCapabilities()
+			}
+		}
+	}
+
+	return "", fmt.Errorf("all attempts to generate capabilities failed")
+}
+
+// tryGenerateCapabilities attempts to generate capabilities with a specific timeout
+func tryGenerateCapabilities(timeout time.Duration) (string, error) {
 	capabilities := ast.CapabilitiesForThisVersion()
 	// An empty list means no hosts can be reached. However, a nil value means all
 	// hosts can be reached. Unfortunately, the required JSON marshalling process
@@ -1156,10 +1098,238 @@ func strictCapabilities(ctx context.Context) (string, error) {
 	capabilities.Builtins = builtins
 	log.Debugf("Access to some rego built-in functions disabled: %s", disallowed.List())
 
-	blob, err := json.Marshal(capabilities)
-	if err != nil {
-		return "", err
+	// Add timeout to prevent hanging
+	var blob []byte
+	var err error
+	done := make(chan struct{})
+
+	go func() {
+		blob, err = json.Marshal(capabilities)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		if err != nil {
+			return "", fmt.Errorf("JSON marshaling failed: %w", err)
+		}
+		return string(blob), nil
+	case <-time.After(timeout):
+		return "", fmt.Errorf("timeout after %v", timeout)
 	}
+}
+
+// generateMinimalCapabilities creates a minimal capabilities structure as a fallback
+func generateMinimalCapabilities() (string, error) {
+	log.Warn("Using minimal capabilities fallback due to marshaling failures")
+
+	// Create a minimal capabilities structure that includes commonly needed functions
+	// while still maintaining security restrictions
+	minimalCapabilities := map[string]interface{}{
+		"builtins": []map[string]interface{}{
+			// Basic functions that are commonly needed
+			{
+				"name": "print",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "any"},
+					},
+					"result": map[string]interface{}{
+						"type": "any",
+					},
+				},
+			},
+			{
+				"name": "startswith",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "string"},
+						{"type": "string"},
+					},
+					"result": map[string]interface{}{
+						"type": "boolean",
+					},
+				},
+			},
+			{
+				"name": "endswith",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "string"},
+						{"type": "string"},
+					},
+					"result": map[string]interface{}{
+						"type": "boolean",
+					},
+				},
+			},
+			{
+				"name": "contains",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "any"},
+						{"type": "any"},
+					},
+					"result": map[string]interface{}{
+						"type": "boolean",
+					},
+				},
+			},
+			{
+				"name": "count",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "any"},
+					},
+					"result": map[string]interface{}{
+						"type": "number",
+					},
+				},
+			},
+			{
+				"name": "object.get",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "object"},
+						{"type": "any"},
+						{"type": "any"},
+					},
+					"result": map[string]interface{}{
+						"type": "any",
+					},
+				},
+			},
+			{
+				"name": "object.keys",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "object"},
+					},
+					"result": map[string]interface{}{
+						"type": "array",
+					},
+				},
+			},
+			{
+				"name": "array.concat",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "array"},
+						{"type": "array"},
+					},
+					"result": map[string]interface{}{
+						"type": "array",
+					},
+				},
+			},
+			{
+				"name": "array.slice",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "array"},
+						{"type": "number"},
+						{"type": "number"},
+					},
+					"result": map[string]interface{}{
+						"type": "array",
+					},
+				},
+			},
+			{
+				"name": "json.marshal",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "any"},
+					},
+					"result": map[string]interface{}{
+						"type": "string",
+					},
+				},
+			},
+			{
+				"name": "json.unmarshal",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "string"},
+					},
+					"result": map[string]interface{}{
+						"type": "any",
+					},
+				},
+			},
+			{
+				"name": "base64.encode",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "string"},
+					},
+					"result": map[string]interface{}{
+						"type": "string",
+					},
+				},
+			},
+			{
+				"name": "base64.decode",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "string"},
+					},
+					"result": map[string]interface{}{
+						"type": "string",
+					},
+				},
+			},
+			{
+				"name": "crypto.md5",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "string"},
+					},
+					"result": map[string]interface{}{
+						"type": "string",
+					},
+				},
+			},
+			{
+				"name": "crypto.sha256",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "string"},
+					},
+					"result": map[string]interface{}{
+						"type": "string",
+					},
+				},
+			},
+			{
+				"name": "time.now_ns",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{},
+					"result": map[string]interface{}{
+						"type": "number",
+					},
+				},
+			},
+			{
+				"name": "time.parse_rfc3339_ns",
+				"decl": map[string]interface{}{
+					"args": []map[string]interface{}{
+						{"type": "string"},
+					},
+					"result": map[string]interface{}{
+						"type": "number",
+					},
+				},
+			},
+		},
+		"allow_net": []string{""},
+	}
+
+	blob, err := json.Marshal(minimalCapabilities)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal minimal capabilities: %w", err)
+	}
+
 	return string(blob), nil
 }
 

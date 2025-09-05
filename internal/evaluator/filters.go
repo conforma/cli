@@ -70,7 +70,7 @@ type PostEvaluationFilter interface {
 	// along with updated missing includes tracking.
 	FilterResults(
 		results []Result,
-		rules policyRules,
+		rules PolicyRules,
 		target string,
 		missingIncludes map[string]bool,
 		effectiveTime time.Time,
@@ -316,7 +316,7 @@ func NewNamespaceFilter(filters ...RuleFilter) *NamespaceFilter {
 //
 // This ensures that only the appropriate rules are evaluated based on the
 // current configuration and context.
-func (nf *NamespaceFilter) Filter(rules policyRules) []string {
+func (nf *NamespaceFilter) Filter(rules PolicyRules) []string {
 	// Group rules by package for efficient filtering
 	grouped := make(map[string][]rule.Info)
 	for fqName, r := range rules {
@@ -353,7 +353,7 @@ func (nf *NamespaceFilter) Filter(rules policyRules) []string {
 
 // filterNamespaces is a convenience function that creates a NamespaceFilter
 // and applies it to the given rules.
-func filterNamespaces(r policyRules, filters ...RuleFilter) []string {
+func filterNamespaces(r PolicyRules, filters ...RuleFilter) []string {
 	return NewNamespaceFilter(filters...).Filter(r)
 }
 
@@ -402,7 +402,7 @@ func extractStringArrayFromRuleData(src ecc.Source, key string) []string {
 type PolicyResolver interface {
 	// ResolvePolicy determines which rules and packages are included/excluded
 	// based on the policy configuration and available rules.
-	ResolvePolicy(rules policyRules, target string) PolicyResolutionResult
+	ResolvePolicy(rules PolicyRules, target string) PolicyResolutionResult
 
 	// Includes returns the include criteria used by this policy resolver
 	Includes() *Criteria
@@ -521,18 +521,18 @@ func NewIncludeExcludePolicyResolver(source ecc.Source, p ConfigProvider) Policy
 // - Provide detailed explanations for policy decisions
 // - Validate that all include criteria were matched
 // - Generate comprehensive policy reports
-func (r *ECPolicyResolver) ResolvePolicy(rules policyRules, target string) PolicyResolutionResult {
+func (r *ECPolicyResolver) ResolvePolicy(rules PolicyRules, target string) PolicyResolutionResult {
 	return r.baseResolvePolicy(rules, target, r.processPackage)
 }
 
 // ResolvePolicy determines which rules and packages are included/excluded
 // based on the policy configuration and available rules, ignoring pipeline intention filtering.
-func (r *IncludeExcludePolicyResolver) ResolvePolicy(rules policyRules, target string) PolicyResolutionResult {
+func (r *IncludeExcludePolicyResolver) ResolvePolicy(rules PolicyRules, target string) PolicyResolutionResult {
 	return r.baseResolvePolicy(rules, target, r.processPackage)
 }
 
 // baseResolvePolicy contains the shared logic for policy resolution
-func (r *basePolicyResolver) baseResolvePolicy(rules policyRules, target string, processPackageFunc func(string, []rule.Info, string, *PolicyResolutionResult)) PolicyResolutionResult {
+func (r *basePolicyResolver) baseResolvePolicy(rules PolicyRules, target string, processPackageFunc func(string, []rule.Info, string, *PolicyResolutionResult)) PolicyResolutionResult {
 	result := NewPolicyResolutionResult()
 
 	// Initialize missing includes with all include criteria
@@ -778,7 +778,7 @@ func (r *ECPolicyResolver) Excludes() *Criteria {
 //
 // This function provides a simple way to get comprehensive policy resolution results
 // including all included/excluded rules and packages, with explanations.
-func GetECPolicyResolution(source ecc.Source, p ConfigProvider, rules policyRules, target string) PolicyResolutionResult {
+func GetECPolicyResolution(source ecc.Source, p ConfigProvider, rules PolicyRules, target string) PolicyResolutionResult {
 	resolver := NewECPolicyResolver(source, p)
 	return resolver.ResolvePolicy(rules, target)
 }
@@ -789,7 +789,7 @@ func GetECPolicyResolution(source ecc.Source, p ConfigProvider, rules policyRule
 // This function provides a simple way to get policy resolution results
 // including all included/excluded rules and packages, with explanations, but without
 // pipeline intention filtering.
-func GetIncludeExcludePolicyResolution(source ecc.Source, p ConfigProvider, rules policyRules, target string) PolicyResolutionResult {
+func GetIncludeExcludePolicyResolution(source ecc.Source, p ConfigProvider, rules PolicyRules, target string) PolicyResolutionResult {
 	resolver := NewIncludeExcludePolicyResolver(source, p)
 	return resolver.ResolvePolicy(rules, target)
 }
@@ -955,7 +955,7 @@ func NewLegacyPostEvaluationFilter(source ecc.Source, p ConfigProvider) PostEval
 // along with updated missing includes tracking.
 func (f *LegacyPostEvaluationFilter) FilterResults(
 	results []Result,
-	rules policyRules,
+	rules PolicyRules,
 	target string,
 	missingIncludes map[string]bool,
 	effectiveTime time.Time,
@@ -1035,18 +1035,16 @@ func (f *LegacyPostEvaluationFilter) CategorizeResults(
 // 4. Missing includes tracking
 func (f *UnifiedPostEvaluationFilter) FilterResults(
 	results []Result,
-	rules policyRules,
+	rules PolicyRules,
 	target string,
 	missingIncludes map[string]bool,
 	effectiveTime time.Time,
 ) ([]Result, map[string]bool) {
-	// Check if we're using an ECPolicyResolver (which handles pipeline intentions)
-	// vs IncludeExcludePolicyResolver (which doesn't)
+	var filteredResults []Result
 	if ecResolver, ok := f.policyResolver.(*ECPolicyResolver); ok {
 		// Use policy resolution for ECPolicyResolver to handle pipeline intentions
 		policyResolution := ecResolver.ResolvePolicy(rules, target)
 
-		var filteredResults []Result
 		for _, result := range results {
 			code := ExtractStringFromMetadata(result, metadataCode)
 			// For results without codes, always include them (matches legacy behavior)
@@ -1071,8 +1069,6 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 		return filteredResults, missingIncludes
 	}
 
-	// Fall back to legacy filtering for other policy resolvers
-	var filteredResults []Result
 	for _, result := range results {
 		code := ExtractStringFromMetadata(result, metadataCode)
 		// For results without codes, always include them (matches legacy behavior)
