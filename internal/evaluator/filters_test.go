@@ -94,7 +94,7 @@ func TestDefaultFilterFactory(t *testing.T) {
 //////////////////////////////////////////////////////////////////////////////
 
 func TestIncludeListFilter(t *testing.T) {
-	rules := policyRules{
+	rules := PolicyRules{
 		"pkg.rule":    {Collections: []string{"redhat"}},
 		"cve.rule":    {Collections: []string{"security"}},
 		"other.rule":  {},
@@ -145,7 +145,7 @@ func TestIncludeListFilter(t *testing.T) {
 //////////////////////////////////////////////////////////////////////////////
 
 func TestPipelineIntentionFilter(t *testing.T) {
-	rules := policyRules{
+	rules := PolicyRules{
 		"a.r": {PipelineIntention: []string{"release"}},
 		"b.r": {PipelineIntention: []string{"dev"}},
 		"c.r": {},
@@ -184,7 +184,7 @@ func TestPipelineIntentionFilter(t *testing.T) {
 //////////////////////////////////////////////////////////////////////////////
 
 func TestCompleteFilteringBehavior(t *testing.T) {
-	rules := policyRules{
+	rules := PolicyRules{
 		"release.rule1": {PipelineIntention: []string{"release"}},
 		"release.rule2": {PipelineIntention: []string{"release", "production"}},
 		"dev.rule1":     {PipelineIntention: []string{"dev"}},
@@ -236,7 +236,7 @@ func TestCompleteFilteringBehavior(t *testing.T) {
 func TestFilteringWithRulesWithoutMetadata(t *testing.T) {
 	// This test demonstrates how filtering works with rules that don't have
 	// pipeline_intention metadata, like the example fail_with_data.rego rule.
-	rules := policyRules{
+	rules := PolicyRules{
 		"main.fail_with_data": {}, // Rule without any metadata (like fail_with_data.rego)
 		"release.security":    {PipelineIntention: []string{"release"}},
 		"dev.validation":      {PipelineIntention: []string{"dev"}},
@@ -297,7 +297,7 @@ func TestECPolicyResolver(t *testing.T) {
 	resolver := NewECPolicyResolver(source, configProvider)
 
 	// Create mock rules
-	rules := policyRules{
+	rules := PolicyRules{
 		"cve.high_severity": rule.Info{
 			Package:     "cve",
 			Code:        "cve.high_severity",
@@ -362,7 +362,7 @@ func TestECPolicyResolver_DefaultBehavior(t *testing.T) {
 
 	resolver := NewECPolicyResolver(source, configProvider)
 
-	rules := policyRules{
+	rules := PolicyRules{
 		"cve.high_severity": rule.Info{
 			Package: "cve",
 			Code:    "cve.high_severity",
@@ -395,7 +395,7 @@ func TestECPolicyResolver_PipelineIntention(t *testing.T) {
 
 	resolver := NewECPolicyResolver(source, configProvider)
 
-	rules := policyRules{
+	rules := PolicyRules{
 		"tasks.build_task": rule.Info{
 			Package:           "tasks",
 			Code:              "tasks.build_task",
@@ -455,7 +455,7 @@ func TestECPolicyResolver_Example(t *testing.T) {
 	}
 
 	// Create mock rules that would be found in the policy
-	rules := policyRules{
+	rules := PolicyRules{
 		"cve.high_severity": rule.Info{
 			Package:     "cve",
 			Code:        "cve.high_severity",
@@ -559,7 +559,7 @@ func TestUnifiedPostEvaluationFilter(t *testing.T) {
 			},
 		}
 
-		rules := policyRules{
+		rules := PolicyRules{
 			"cve.high_severity": rule.Info{
 				Package: "cve",
 				Code:    "cve.high_severity",
@@ -632,7 +632,7 @@ func TestUnifiedPostEvaluationFilter(t *testing.T) {
 			},
 		}
 
-		rules := policyRules{
+		rules := PolicyRules{
 			"release.security_check": rule.Info{
 				Package:           "release",
 				Code:              "release.security_check",
@@ -652,10 +652,8 @@ func TestUnifiedPostEvaluationFilter(t *testing.T) {
 		filteredResults, updatedMissingIncludes := filter.FilterResults(
 			results, rules, "test-target", missingIncludes, time.Now())
 
-		// Should only include release.security_check (matches pipeline intention)
 		assert.Len(t, filteredResults, 1)
 
-		// Check that the correct result is included
 		if len(filteredResults) > 0 {
 			code := filteredResults[0].Metadata[metadataCode].(string)
 			assert.Equal(t, "release.security_check", code)
@@ -688,7 +686,7 @@ func TestUnifiedPostEvaluationFilter(t *testing.T) {
 			},
 		}
 
-		rules := policyRules{
+		rules := PolicyRules{
 			"cve.high_severity": rule.Info{
 				Package: "cve",
 				Code:    "cve.high_severity",
@@ -785,7 +783,7 @@ func TestUnifiedPostEvaluationFilterVsLegacy(t *testing.T) {
 			},
 		}
 
-		rules := policyRules{
+		rules := PolicyRules{
 			"cve.high_severity": rule.Info{
 				Package: "cve",
 				Code:    "high_severity",
@@ -904,7 +902,7 @@ func TestIncludeExcludePolicyResolver(t *testing.T) {
 	}
 
 	// Create rules with pipeline intention metadata
-	rules := policyRules{
+	rules := PolicyRules{
 		"build.rule1": rule.Info{
 			Code:              "build.rule1",
 			Package:           "build",
