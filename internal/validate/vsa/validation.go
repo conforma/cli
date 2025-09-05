@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	ssldsse "github.com/secure-systems-lab/go-securesystemslib/dsse"
@@ -279,12 +280,24 @@ func compareRules(vsaRuleResults map[string][]RuleResult, requiredRules map[stri
 	return result
 }
 
+// ValidationResultWithContent contains both validation result and VSA content
+type ValidationResultWithContent struct {
+	*ValidationResult
+	VSAContent string
+}
+
 // ValidateVSA is the main validation function called by the command
 func ValidateVSA(ctx context.Context, imageRef string, policy policy.Policy, retriever VSADataRetriever, publicKey string) (*ValidationResult, error) {
+	result, _, err := ValidateVSAWithContent(ctx, imageRef, policy, retriever, publicKey)
+	return result, err
+}
+
+// ValidateVSAWithContent returns both validation result and VSA content to avoid redundant retrieval
+func ValidateVSAWithContent(ctx context.Context, imageRef string, policy policy.Policy, retriever VSADataRetriever, publicKey string) (*ValidationResult, string, error) {
 	// Extract digest from image reference
 	ref, err := name.ParseReference(imageRef)
 	if err != nil {
-		return nil, fmt.Errorf("invalid image reference: %w", err)
+		return nil, "", fmt.Errorf("invalid image reference: %w", err)
 	}
 
 	digest := ref.Identifier()
@@ -292,14 +305,14 @@ func ValidateVSA(ctx context.Context, imageRef string, policy policy.Policy, ret
 	// Retrieve VSA data using the provided retriever
 	vsaContent, err := retriever.RetrieveVSAData(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve VSA data: %w", err)
+		return nil, "", fmt.Errorf("failed to retrieve VSA data: %w", err)
 	}
 
 	// Verify signature if public key is provided
 	signatureVerified := false
 	if publicKey != "" {
 		if vsaContent == "" {
-			return nil, fmt.Errorf("signature verification not supported for this VSA retriever")
+			return nil, "", fmt.Errorf("signature verification not supported for this VSA retriever")
 		}
 		if err := verifyVSASignature(vsaContent, publicKey); err != nil {
 			// For now, log the error but don't fail the validation
@@ -314,7 +327,7 @@ func ValidateVSA(ctx context.Context, imageRef string, policy policy.Policy, ret
 	// Parse the VSA content to extract violations and successes
 	predicate, err := ParseVSAContent(vsaContent)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse VSA content: %w", err)
+		return nil, "", fmt.Errorf("failed to parse VSA content: %w", err)
 	}
 
 	// Create policy resolver and discover available rules
@@ -335,7 +348,7 @@ func ValidateVSA(ctx context.Context, imageRef string, policy policy.Policy, ret
 		ruleDiscovery := evaluator.NewRuleDiscoveryService()
 		rules, nonAnnotatedRules, err := ruleDiscovery.DiscoverRulesWithNonAnnotated(ctx, policySources)
 		if err != nil {
-			return nil, fmt.Errorf("failed to discover rules from policy sources: %w", err)
+			return nil, "", fmt.Errorf("failed to discover rules from policy sources: %w", err)
 		}
 
 		// Combine rules for filtering
@@ -356,7 +369,7 @@ func ValidateVSA(ctx context.Context, imageRef string, policy policy.Policy, ret
 	if vsaPolicyResolver != nil {
 		requiredRules, err = vsaPolicyResolver.GetRequiredRules(ctx, digest)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get required rules from policy: %w", err)
+			return nil, "", fmt.Errorf("failed to get required rules from policy: %w", err)
 		}
 	} else {
 		// If no policy resolver is available, consider all rules in VSA as required
@@ -370,15 +383,37 @@ func ValidateVSA(ctx context.Context, imageRef string, policy policy.Policy, ret
 	result := compareRules(vsaRuleResults, requiredRules, digest)
 	result.SignatureVerified = signatureVerified
 
-	return result, nil
+	return result, vsaContent, nil
 }
 
-// extractPackageFromCode extracts the package name from a rule code
+// packageCache caches package name extractions to avoid repeated string operations
+var packageCache = make(map[string]string)
+var packageCacheMutex sync.RWMutex
+
+// extractPackageFromCode extracts the package name from a rule code with caching
 func extractPackageFromCode(code string) string {
-	if idx := strings.Index(code, "."); idx != -1 {
-		return code[:idx]
+	// Check cache first
+	packageCacheMutex.RLock()
+	if cached, exists := packageCache[code]; exists {
+		packageCacheMutex.RUnlock()
+		return cached
 	}
-	return code
+	packageCacheMutex.RUnlock()
+
+	// Extract package name
+	var packageName string
+	if idx := strings.Index(code, "."); idx != -1 {
+		packageName = code[:idx]
+	} else {
+		packageName = code
+	}
+
+	// Cache the result
+	packageCacheMutex.Lock()
+	packageCache[code] = packageName
+	packageCacheMutex.Unlock()
+
+	return packageName
 }
 
 // verifyVSASignature verifies the signature of a VSA file using cosign's DSSE verification
