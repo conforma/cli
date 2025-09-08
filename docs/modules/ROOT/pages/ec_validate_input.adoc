@@ -43,6 +43,9 @@ of the git repo. For git repos not hosted on 'github.com' or 'gitlab.com', prefi
 effective dates in the future. The value can be "now" (default) - for
 current time, or a RFC3339 formatted value, e.g. 2022-11-18T00:00:00Z. (Default: now)
 -f, --file:: path to input YAML/JSON file (required) (Default: [])
+--filter-type:: Filter type to use for policy evaluation. Options: "include-exclude" (default) or "ec-policy".
+- "include-exclude": Uses traditional include/exclude filtering without pipeline intentions
+- "ec-policy": Uses Enterprise Contract policy filtering with pipeline intention support (Default: include-exclude)
 -h, --help:: help for input (Default: false)
 --info:: Include additional information on the failures. For instance for policy
 violations, include the title and the description of the failed policy

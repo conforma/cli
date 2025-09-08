@@ -314,8 +314,20 @@ func NewConftestEvaluatorWithPostEvaluationFilter(ctx context.Context, policySou
 	return evaluator, nil
 }
 
-// set the policy namespace
-func NewConftestEvaluatorWithNamespace(ctx context.Context, policySources []source.PolicySource, p ConfigProvider, source ecc.Source, namespace []string) (Evaluator, error) {
+// NewConftestEvaluatorWithFilterType returns initialized conftestEvaluator with a specific filter type
+func NewConftestEvaluatorWithFilterType(ctx context.Context, policySources []source.PolicySource, p ConfigProvider, source ecc.Source, filterType string) (Evaluator, error) {
+	return NewConftestEvaluatorWithNamespaceAndFilterType(ctx, policySources, p, source, []string{}, filterType)
+}
+
+// NewConftestEvaluatorWithNamespaceAndFilterType returns initialized conftestEvaluator with namespace and filter type
+func NewConftestEvaluatorWithNamespaceAndFilterType(
+	ctx context.Context,
+	policySources []source.PolicySource,
+	p ConfigProvider,
+	source ecc.Source,
+	namespace []string,
+	filterType string,
+) (Evaluator, error) {
 	if trace.IsEnabled() {
 		r := trace.StartRegion(ctx, "ec:conftest-create-evaluator")
 		defer r.End()
@@ -331,8 +343,15 @@ func NewConftestEvaluatorWithNamespace(ctx context.Context, policySources []sour
 		source:        source,
 	}
 
-	// Initialize the unified policy resolver for both pre and post-evaluation filtering
-	c.policyResolver = NewIncludeExcludePolicyResolver(source, p)
+	// Initialize the policy resolver based on filter type
+	switch filterType {
+	case "ec-policy":
+		c.policyResolver = NewECPolicyResolver(source, p)
+	case "include-exclude":
+		fallthrough
+	default:
+		c.policyResolver = NewIncludeExcludePolicyResolver(source, p)
+	}
 
 	// Extract include/exclude criteria from the policy resolver to maintain backward compatibility
 	// for the legacy isResultIncluded method
@@ -359,7 +378,13 @@ func NewConftestEvaluatorWithNamespace(ctx context.Context, policySources []sour
 	}
 
 	log.Debug("Conftest test runner created")
-	return c, nil
+	return &c, nil
+}
+
+// set the policy namespace
+func NewConftestEvaluatorWithNamespace(ctx context.Context, policySources []source.PolicySource, p ConfigProvider, source ecc.Source, namespace []string) (Evaluator, error) {
+	// Use default filter type (include-exclude) for backward compatibility
+	return NewConftestEvaluatorWithNamespaceAndFilterType(ctx, policySources, p, source, namespace, "include-exclude")
 }
 
 // Destroy removes the working directory

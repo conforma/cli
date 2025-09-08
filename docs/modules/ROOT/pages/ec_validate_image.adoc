@@ -123,6 +123,9 @@ a RFC3339 formatted value, e.g. 2022-11-18T00:00:00Z.
 --extra-rule-data:: Extra data to be provided to the Rego policy evaluator. Use format 'key=value'. May be used multiple times.
  (Default: [])
 -f, --file-path:: DEPRECATED - use --images: path to ApplicationSnapshot Spec JSON file
+--filter-type:: Filter type to use for policy evaluation. Options: "include-exclude" (default) or "ec-policy".
+- "include-exclude": Uses traditional include/exclude filtering without pipeline intentions
+- "ec-policy": Uses Enterprise Contract policy filtering with pipeline intention support (Default: include-exclude)
 -h, --help:: help for image (Default: false)
 --ignore-rekor:: Skip Rekor transparency log checks during validation. (Default: false)
 -i, --image:: OCI image reference
