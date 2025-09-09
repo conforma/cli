@@ -378,7 +378,7 @@ func NewConftestEvaluatorWithNamespaceAndFilterType(
 	}
 
 	log.Debug("Conftest test runner created")
-	return &c, nil
+	return c, nil
 }
 
 // set the policy namespace

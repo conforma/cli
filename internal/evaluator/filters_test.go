@@ -341,10 +341,11 @@ func TestECPolicyResolver(t *testing.T) {
 	// Verify included packages
 	assert.True(t, result.IncludedPackages["cve"], "cve package should be included")
 	assert.True(t, result.IncludedPackages["tasks"], "tasks package should be included")
+	assert.True(t, result.IncludedPackages["slsa3"], "slsa3 package should be included (contains excluded rules that will be filtered post-evaluation)")
+	assert.True(t, result.IncludedPackages["test"], "test package should be included (contains excluded rules that will be filtered post-evaluation)")
 
-	// Verify excluded packages
-	assert.True(t, result.ExcludedPackages["slsa3"], "slsa3 package should be excluded")
-	assert.True(t, result.ExcludedPackages["test"], "test package should be excluded")
+	// Verify excluded packages (should be empty since packages with excluded rules are now included)
+	assert.Empty(t, result.ExcludedPackages, "no packages should be excluded")
 
 	// Verify explanations
 	assert.Contains(t, result.Explanations["cve.high_severity"], "included")
@@ -558,8 +559,11 @@ func TestECPolicyResolver_Example(t *testing.T) {
 	// Check package inclusion
 	assert.True(t, result.IncludedPackages["cve"], "cve package should be included")
 	assert.True(t, result.IncludedPackages["tasks"], "tasks package should be included")
-	assert.True(t, result.ExcludedPackages["slsa3"], "slsa3 package should be excluded")
-	assert.True(t, result.ExcludedPackages["test"], "test package should be excluded")
+	assert.True(t, result.IncludedPackages["slsa3"], "slsa3 package should be included (contains excluded rules that will be filtered post-evaluation)")
+	assert.True(t, result.IncludedPackages["test"], "test package should be included (contains excluded rules that will be filtered post-evaluation)")
+
+	// Verify excluded packages (should be empty since packages with excluded rules are now included)
+	assert.Empty(t, result.ExcludedPackages, "no packages should be excluded")
 }
 
 func TestUnifiedPostEvaluationFilter(t *testing.T) {
@@ -1211,7 +1215,7 @@ func TestConftestEvaluator_FilterType_ECPolicy(t *testing.T) {
 	assert.NotNil(t, evaluator, "evaluator should not be nil")
 
 	t.Logf("Evaluator type: %T", evaluator)
-	conftestEval, ok := evaluator.(*conftestEvaluator)
+	conftestEval, ok := evaluator.(conftestEvaluator)
 	t.Logf("Type assertion result: ok=%v, conftestEval=%v", ok, conftestEval)
 	assert.True(t, ok, "evaluator should be conftestEvaluator")
 
@@ -1237,7 +1241,7 @@ func TestConftestEvaluator_FilterType_IncludeExclude(t *testing.T) {
 	evaluator, err := NewConftestEvaluatorWithFilterType(ctx, policySources, configProvider, sourceConfig, "include-exclude")
 	assert.NoError(t, err)
 
-	conftestEval, ok := evaluator.(*conftestEvaluator)
+	conftestEval, ok := evaluator.(conftestEvaluator)
 	assert.True(t, ok, "evaluator should be conftestEvaluator")
 
 	// Should use IncludeExcludePolicyResolver which ignores pipeline intentions
@@ -1262,7 +1266,7 @@ func TestConftestEvaluator_FilterType_Default(t *testing.T) {
 	evaluator, err := NewConftestEvaluatorWithFilterType(ctx, policySources, configProvider, sourceConfig, "unknown-type")
 	assert.NoError(t, err)
 
-	conftestEval, ok := evaluator.(*conftestEvaluator)
+	conftestEval, ok := evaluator.(conftestEvaluator)
 	assert.True(t, ok, "evaluator should be conftestEvaluator")
 
 	// Should default to IncludeExcludePolicyResolver

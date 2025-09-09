@@ -639,13 +639,17 @@ func (r *basePolicyResolver) baseDeterminePackageInclusion(pkg string, pkgRules 
 		}
 	}
 
-	// Package inclusion logic: if ANY rule is included → Package is included
+	// Package inclusion logic:
+	// - If ANY rule is included → Package is included
+	// - If NO rules are included but SOME rules are excluded → Package is STILL included
+	//   (excluded rules will be filtered out post-evaluation)
+	// - If NO rules are included and NO rules are excluded → Package is not categorized
 	if hasIncludedRules {
 		result.IncludedPackages[pkg] = true
 		result.Explanations[pkg] = "package contains included rules"
 	} else if hasExcludedRules {
-		result.ExcludedPackages[pkg] = true
-		result.Explanations[pkg] = "package contains an excluded rule"
+		result.IncludedPackages[pkg] = true
+		result.Explanations[pkg] = "package contains excluded rules (will be filtered post-evaluation)"
 	}
 }
 
