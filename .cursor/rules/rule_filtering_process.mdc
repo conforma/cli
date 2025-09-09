@@ -48,29 +48,9 @@ The PolicyResolver performs three phases of filtering:
 // that have matching pipeline_intention metadata
 // When pipeline_intention is NOT set in ruleData: only include packages with rules
 // that have NO pipeline_intention metadata (general-purpose rules)
-func (r *ECPolicyResolver) matchesPipelineIntention(pkgRules []rule.Info) bool {
-    if len(r.pipelineIntentions) == 0 {
-        // When no pipeline_intention is configured, only include packages with no pipeline_intention metadata
-        for _, r := range pkgRules {
-            if len(r.PipelineIntention) > 0 {
-                return false // Exclude packages with pipeline_intention metadata
-            }
-        }
-        return true // Include packages with no pipeline_intention metadata
-    }
-
-    // When pipeline_intention is set, only include packages that contain rules with matching pipeline_intention metadata
-    for _, r := range pkgRules {
-        for _, ruleIntention := range r.PipelineIntention {
-            for _, targetIntention := range r.pipelineIntentions {
-                if ruleIntention == targetIntention {
-                    return true // Include packages with matching pipeline_intention metadata
-                }
-            }
-        }
-    }
-    return false // Exclude packages with no matching pipeline_intention metadata
-}
+//
+// This filtering is now handled by the ruleMatchesPipelineIntention method
+// which evaluates each rule individually rather than at the package level.
 ```
 
 #### Phase 2: Rule-by-Rule Evaluation
@@ -82,11 +62,26 @@ for _, ruleInfo := range pkgRules {
 }
 ```
 
+The `baseEvaluateRuleInclusion` method:
+1. Creates matchers for the rule (package, rule, term combinations)
+2. Scores the rule against include criteria
+3. Scores the rule against exclude criteria
+4. Determines inclusion based on higher score
+5. Records explanations for debugging
+
 #### Phase 3: Package-Level Determination
 ```go
-// If ANY rule in the package is included → Package is included
-// If NO rules are included but SOME rules are excluded → Package is excluded
-// If NO rules are included and NO rules are excluded → Package is not explicitly categorized
+// CORRECTED LOGIC: Package inclusion should be based on whether the package
+// contains any rules that could potentially be included, regardless of exclusions.
+// Excluded rules will be filtered out at the post-evaluation stage.
+//
+// Intended behavior:
+// - If ANY rule in the package is included → Package is included
+// - If NO rules are included but SOME rules are excluded → Package is STILL included
+//   (because excluded rules will be filtered post-evaluation)
+// - If NO rules are included and NO rules are excluded → Package is not explicitly categorized
+//
+// Current implementation (INCORRECT):
 func (r *basePolicyResolver) baseDeterminePackageInclusion(pkg string, pkgRules []rule.Info, result *PolicyResolutionResult) {
     hasIncludedRules := false
     hasExcludedRules := false
@@ -101,13 +96,34 @@ func (r *basePolicyResolver) baseDeterminePackageInclusion(pkg string, pkgRules 
         }
     }
 
+    // CURRENT (INCORRECT) LOGIC:
     if hasIncludedRules {
         result.IncludedPackages[pkg] = true
     } else if hasExcludedRules {
-        result.ExcludedPackages[pkg] = true
+        result.ExcludedPackages[pkg] = true  // This is wrong!
     }
+    
+    // CORRECT LOGIC should be:
+    // if hasIncludedRules || hasExcludedRules {
+    //     result.IncludedPackages[pkg] = true  // Include package, filter rules later
+    // }
 }
 ```
+
+**Note**: The current implementation incorrectly excludes packages that contain only excluded rules. This should be fixed to include such packages, allowing post-evaluation filtering to handle rule-level exclusions.
+
+#### Why This Logic Matters
+
+The package-level determination affects which packages are loaded for conftest evaluation:
+
+1. **Pre-Evaluation**: Only packages in `IncludedPackages` are passed to conftest for evaluation
+2. **Post-Evaluation**: The `UnifiedPostEvaluationFilter` filters individual results based on rule-level decisions
+
+**Current Problem**: If a package contains only excluded rules, it's marked as `ExcludedPackages` and never evaluated by conftest. This means:
+- The excluded rules never run, so they can't be filtered out post-evaluation
+- The package is completely skipped, which may not be the intended behavior
+
+**Correct Behavior**: Packages with any rules (included or excluded) should be included for evaluation, allowing post-evaluation filtering to handle the rule-level decisions properly.
 
 ### 2. Initial Rule Execution
 
@@ -151,78 +167,42 @@ warnings, failures, exceptions, skipped := unifiedFilter.CategorizeResults(
     filteredResults, result, effectiveTime)
 ```
 
-### 4. Result Processing by Type
+### 4. UnifiedPostEvaluationFilter Implementation
 
-For each namespace result, the following processing occurs:
+The `UnifiedPostEvaluationFilter` provides two main methods:
 
-#### Warning Processing
-
+#### FilterResults Method
 ```go
-for i := range result.Warnings {
-    warning := result.Warnings[i]
-    addRuleMetadata(ctx, &warning, rules)
-    
-    // Note: In the current implementation, this filtering is handled by UnifiedPostEvaluationFilter
-    // The legacy isResultIncluded method is still available for backward compatibility
-    
-    if getSeverity(warning) == severityFailure {
-        // Promote to failure if severity indicates it should be a failure
-        failures = append(failures, warning)
-    } else {
-        warnings = append(warnings, warning)
-    }
-}
+func (f *UnifiedPostEvaluationFilter) FilterResults(
+    results []Result,
+    rules policyRules,
+    target string,
+    missingIncludes map[string]bool,
+    effectiveTime time.Time,
+) ([]Result, map[string]bool)
 ```
 
-**Filtering Logic:**
-1. **Metadata Addition**: Rule metadata is added from policy annotations
-2. **Inclusion Check**: Warning is checked against include/exclude criteria
-3. **Severity Promotion**: Warnings with `severity: failure` are promoted to failures
+This method:
+1. **Checks PolicyResolver Type**: Uses ECPolicyResolver for pipeline intention filtering or IncludeExcludePolicyResolver for basic filtering
+2. **Policy-Based Filtering**: For ECPolicyResolver, uses `ResolvePolicy` to determine which results should be included
+3. **Legacy Filtering**: For IncludeExcludePolicyResolver or results without codes, uses legacy `LegacyIsResultIncluded` logic
+4. **Missing Includes Tracking**: Updates the missing includes map as results are processed
 
-#### Failure Processing
-
+#### CategorizeResults Method
 ```go
-for i := range result.Failures {
-    failure := result.Failures[i]
-    addRuleMetadata(ctx, &failure, rules)
-    
-    // Note: In the current implementation, this filtering is handled by UnifiedPostEvaluationFilter
-    // The legacy isResultIncluded method is still available for backward compatibility
-    
-    if getSeverity(failure) == severityWarning || !isResultEffective(failure, effectiveTime) {
-        // Demote to warning if severity indicates or if not yet effective
-        warnings = append(warnings, failure)
-    } else {
-        failures = append(failures, failure)
-    }
-}
+func (f *UnifiedPostEvaluationFilter) CategorizeResults(
+    filteredResults []Result,
+    originalResult Outcome,
+    effectiveTime time.Time,
+) (warnings []Result, failures []Result, exceptions []Result, skipped []Result)
 ```
 
-**Filtering Logic:**
-1. **Metadata Addition**: Rule metadata is added from policy annotations
-2. **Inclusion Check**: Failure is checked against include/exclude criteria
-3. **Severity Demotion**: Failures with `severity: warning` are demoted to warnings
-4. **Effective Time Check**: Failures with future `effective_on` dates are demoted to warnings
-
-#### Exception and Skipped Processing
-
-```go
-for i := range result.Exceptions {
-    exception := result.Exceptions[i]
-    addRuleMetadata(ctx, &exception, rules)
-    exceptions = append(exceptions, exception)
-}
-
-for i := range result.Skipped {
-    skip := result.Skipped[i]
-    addRuleMetadata(ctx, &skip, rules)
-    skipped = append(skipped, skip)
-}
-```
-
-**Processing:**
-- Exceptions and skipped results only have metadata added
-- No inclusion/exclusion filtering is applied to these result types
+This method:
+1. **Determines Original Type**: Identifies whether each filtered result was originally a warning, failure, exception, or skipped
+2. **Applies Severity Logic**: 
+   - Warnings with `severity: failure` metadata are promoted to failures
+   - Failures with `severity: warning` metadata or future `effective_on` dates are demoted to warnings
+3. **Preserves Categories**: Exceptions and skipped results maintain their original categorization
 
 ### 5. Term Extraction and Analysis
 
@@ -514,4 +494,18 @@ The current implementation uses a unified filtering system:
 3. **Consistent Logic**: Both use the same PolicyResolver for consistent decision-making
 4. **Backward Compatibility**: Legacy interfaces are still supported
 
-This filtering system provides fine-grained control over which policy violations are reported and how they're categorized, allowing for gradual policy rollouts and context-specific rule management with precise term-based filtering capabilities. 
+### PolicyResolver Types
+
+The system supports two types of PolicyResolver:
+
+1. **ECPolicyResolver**: 
+   - Handles pipeline intention filtering
+   - Uses `ruleMatchesPipelineIntention` for rule-level filtering
+   - Supports both include/exclude and pipeline intention criteria
+
+2. **IncludeExcludePolicyResolver**:
+   - Ignores pipeline intention filtering
+   - Only uses include/exclude criteria
+   - Provides backward compatibility for systems that don't use pipeline intentions
+
+This filtering system provides fine-grained control over which policy violations are reported and how they're categorized, allowing for gradual policy rollouts and context-specific rule management with precise term-based filtering capabilities.
