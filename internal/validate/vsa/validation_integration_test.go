@@ -24,6 +24,7 @@ import (
 
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
 	appapi "github.com/konflux-ci/application-api/api/v1alpha1"
+	ssldsse "github.com/secure-systems-lab/go-securesystemslib/dsse"
 	"github.com/sigstore/cosign/v2/pkg/cosign"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,12 +37,12 @@ import (
 
 // MockVSADataRetriever is a mock implementation of VSADataRetriever for testing
 type MockVSADataRetriever struct {
-	vsaContent string
-	err        error
+	envelope *ssldsse.Envelope
+	err      error
 }
 
-func (m *MockVSADataRetriever) RetrieveVSAData(ctx context.Context) (string, error) {
-	return m.vsaContent, m.err
+func (m *MockVSADataRetriever) RetrieveVSA(ctx context.Context, imageDigest string) (*ssldsse.Envelope, error) {
+	return m.envelope, m.err
 }
 
 // MockPolicy is a mock implementation of policy.Policy for testing
@@ -100,7 +101,7 @@ func TestValidateVSA(t *testing.T) {
 			imageRef: "quay.io/test/app:sha256-abc123",
 			policy:   nil,
 			retriever: &MockVSADataRetriever{
-				vsaContent: createTestVSAContent(t, map[string]string{
+				envelope: createTestDSSEEnvelope(t, map[string]string{
 					"test.rule1": "success",
 					"test.rule2": "success",
 				}),
@@ -120,7 +121,7 @@ func TestValidateVSA(t *testing.T) {
 			imageRef: "quay.io/test/app:sha256-abc123",
 			policy:   nil,
 			retriever: &MockVSADataRetriever{
-				vsaContent: createTestVSAContent(t, map[string]string{
+				envelope: createTestDSSEEnvelope(t, map[string]string{
 					"test.rule1": "success",
 				}),
 			},
@@ -136,7 +137,7 @@ func TestValidateVSA(t *testing.T) {
 			imageRef: "invalid-image-ref",
 			policy:   nil,
 			retriever: &MockVSADataRetriever{
-				vsaContent: createTestVSAContent(t, map[string]string{}),
+				envelope: createTestDSSEEnvelope(t, map[string]string{}),
 			},
 			publicKey:   "",
 			expectError: false, // The validation actually succeeds with this image ref
@@ -160,7 +161,16 @@ func TestValidateVSA(t *testing.T) {
 			imageRef: "quay.io/test/app:sha256-abc123",
 			policy:   nil,
 			retriever: &MockVSADataRetriever{
-				vsaContent: "invalid json",
+				envelope: &ssldsse.Envelope{
+					PayloadType: "application/vnd.in-toto+json",
+					Payload:     "invalid json",
+					Signatures: []ssldsse.Signature{
+						{
+							KeyID: "test-key-id",
+							Sig:   "test-signature",
+						},
+					},
+				},
 			},
 			publicKey:   "",
 			expectError: true,
@@ -204,7 +214,7 @@ func TestValidateVSAWithContent(t *testing.T) {
 			imageRef: "quay.io/test/app:sha256-abc123",
 			policy:   nil,
 			retriever: &MockVSADataRetriever{
-				vsaContent: createTestVSAContent(t, map[string]string{
+				envelope: createTestDSSEEnvelope(t, map[string]string{
 					"test.rule1": "success",
 				}),
 			},
@@ -224,7 +234,7 @@ func TestValidateVSAWithContent(t *testing.T) {
 			imageRef: "quay.io/test/app:sha256-abc123",
 			policy:   &MockPolicy{},
 			retriever: &MockVSADataRetriever{
-				vsaContent: createTestVSAContent(t, map[string]string{
+				envelope: createTestDSSEEnvelope(t, map[string]string{
 					"test.rule1": "success",
 				}),
 			},
@@ -375,4 +385,22 @@ func createTestVSAContent(t *testing.T, ruleResults map[string]string) string {
 	require.NoError(t, err)
 
 	return string(predicateJSON)
+}
+
+// createTestDSSEEnvelope creates a DSSE envelope containing the VSA content for testing
+func createTestDSSEEnvelope(t *testing.T, ruleResults map[string]string) *ssldsse.Envelope {
+	vsaContent := createTestVSAContent(t, ruleResults)
+
+	envelope := &ssldsse.Envelope{
+		PayloadType: "application/vnd.in-toto+json",
+		Payload:     vsaContent,
+		Signatures: []ssldsse.Signature{
+			{
+				KeyID: "test-key-id",
+				Sig:   "test-signature",
+			},
+		},
+	}
+
+	return envelope
 }

@@ -20,7 +20,6 @@ package applicationsnapshot
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"

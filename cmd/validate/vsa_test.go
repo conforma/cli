@@ -27,6 +27,7 @@ import (
 	"strings"
 	"testing"
 
+	ssldsse "github.com/secure-systems-lab/go-securesystemslib/dsse"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -43,9 +44,9 @@ type MockVSADataRetriever struct {
 	mock.Mock
 }
 
-func (m *MockVSADataRetriever) RetrieveVSAData(ctx context.Context) (string, error) {
-	args := m.Called(ctx)
-	return args.String(0), args.Error(1)
+func (m *MockVSADataRetriever) RetrieveVSA(ctx context.Context, imageDigest string) (*ssldsse.Envelope, error) {
+	args := m.Called(ctx, imageDigest)
+	return args.Get(0).(*ssldsse.Envelope), args.Error(1)
 }
 
 // MockPolicyResolver is a mock implementation of PolicyResolver
