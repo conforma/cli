@@ -50,27 +50,28 @@ func TestFileVSADataRetriever(t *testing.T) {
 
 		// Create retriever and test
 		retriever := NewFileVSADataRetriever(fs, "/test-vsa.json")
-		data, err := retriever.RetrieveVSAData(context.Background())
+		envelope, err := retriever.RetrieveVSA(context.Background(), "sha256:test")
 
 		assert.NoError(t, err)
-		assert.Equal(t, testVSA, data)
+		assert.NotNil(t, envelope)
+		assert.Equal(t, testVSA, envelope.Payload)
 	})
 
 	t.Run("returns error for non-existent file", func(t *testing.T) {
 		retriever := NewFileVSADataRetriever(fs, "/nonexistent.json")
-		data, err := retriever.RetrieveVSAData(context.Background())
+		envelope, err := retriever.RetrieveVSA(context.Background(), "sha256:test")
 
 		assert.Error(t, err)
-		assert.Empty(t, data)
+		assert.Nil(t, envelope)
 		assert.Contains(t, err.Error(), "failed to read VSA file")
 	})
 
 	t.Run("returns error for empty file path", func(t *testing.T) {
 		retriever := NewFileVSADataRetriever(fs, "")
-		data, err := retriever.RetrieveVSAData(context.Background())
+		envelope, err := retriever.RetrieveVSA(context.Background(), "sha256:test")
 
 		assert.Error(t, err)
-		assert.Empty(t, data)
+		assert.Nil(t, envelope)
 		assert.Contains(t, err.Error(), "failed to read VSA file")
 	})
 }

@@ -227,13 +227,13 @@ func validateVSAFile(ctx context.Context, cmd *cobra.Command, data struct {
 	retriever := vsa.NewFileVSADataRetriever(fs, data.vsaPath)
 
 	// For VSA file validation, we need to extract the image reference from the VSA content
-	vsaContent, err := retriever.RetrieveVSAData(ctx)
+	envelope, err := retriever.RetrieveVSA(ctx, "")
 	if err != nil {
 		return fmt.Errorf("failed to retrieve VSA data: %w", err)
 	}
 
 	// Parse VSA content to extract image reference
-	predicate, err := vsa.ParseVSAContent(vsaContent)
+	predicate, err := vsa.ParseVSAContent(envelope)
 	fmt.Printf("VSA predicate: %+v\n", predicate)
 	if err != nil {
 		return fmt.Errorf("failed to parse VSA content: %w", err)
@@ -389,7 +389,8 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 			// Extract actual components from VSA attestation data (no redundant retrieval)
 			var vsaComponents []applicationsnapshot.Component
 			if validationResult != nil && vsaContent != "" {
-				predicate, err := vsa.ParseVSAContent(vsaContent)
+				// Parse the VSA content directly from the payload string
+				predicate, err := vsa.ParseVSAContentFromPayload(vsaContent)
 				if err == nil && predicate.Results != nil {
 					// Use actual components from VSA attestation if available
 					vsaComponents = predicate.Results.Components

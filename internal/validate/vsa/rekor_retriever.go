@@ -26,7 +26,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	ssldsse "github.com/secure-systems-lab/go-securesystemslib/dsse"
 	"github.com/sigstore/cosign/v2/cmd/cosign/cli/rekor"
@@ -527,10 +526,10 @@ func (rc *rekorClient) worker(ctx context.Context, uuidChan <-chan string, resul
 			// Continue processing
 		}
 
-		// Fetch the log entry with retry logic
-		entry, err := rc.GetLogEntryByUUIDWithRetry(ctx, uuid, 3)
+		// Fetch the log entry
+		entry, err := rc.GetLogEntryByUUID(ctx, uuid)
 		if err != nil {
-			log.Debugf("Worker %d: Failed to fetch log entry for UUID %s after retries: %v", workerID, uuid, err)
+			log.Debugf("Worker %d: Failed to fetch log entry for UUID %s: %v", workerID, uuid, err)
 			select {
 			case resultChan <- fetchResult{entry: nil, err: err}:
 			case <-ctx.Done():
@@ -550,8 +549,8 @@ func (rc *rekorClient) worker(ctx context.Context, uuidChan <-chan string, resul
 
 // getWorkerCount returns the number of workers to use for parallel operations
 func (rc *rekorClient) getWorkerCount() int {
-	// Default to 4 workers (optimized for Rekor rate limits)
-	defaultWorkers := 4
+	// Default to 8 workers
+	defaultWorkers := 8
 
 	// Check environment variable
 	if workerStr := os.Getenv("EC_REKOR_WORKERS"); workerStr != "" {
@@ -642,65 +641,6 @@ func (rc *rekorClient) GetLogEntryByUUID(ctx context.Context, uuid string) (*mod
 	return nil, fmt.Errorf("log entry not found for UUID: %s", uuid)
 }
 
-// GetLogEntryByUUIDWithRetry fetches a log entry with exponential backoff retry logic
-func (rc *rekorClient) GetLogEntryByUUIDWithRetry(ctx context.Context, uuid string, maxRetries int) (*models.LogEntryAnon, error) {
-	var lastErr error
-
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		if attempt > 0 {
-			// Exponential backoff: 100ms, 200ms, 400ms
-			backoff := time.Duration(100*attempt) * time.Millisecond
-			log.Debugf("Retrying GetLogEntryByUUID for UUID %s (attempt %d/%d) after %v", uuid, attempt+1, maxRetries+1, backoff)
-
-			select {
-			case <-time.After(backoff):
-				// Continue with retry
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			}
-		}
-
-		entry, err := rc.GetLogEntryByUUID(ctx, uuid)
-		if err == nil {
-			if attempt > 0 {
-				log.Debugf("GetLogEntryByUUID succeeded for UUID %s on attempt %d", uuid, attempt+1)
-			}
-			return entry, nil
-		}
-
-		lastErr = err
-
-		// Don't retry on certain types of errors (e.g., not found, authentication)
-		if isNonRetryableError(err) {
-			log.Debugf("Non-retryable error for UUID %s: %v", uuid, err)
-			break
-		}
-	}
-
-	return nil, fmt.Errorf("failed to fetch log entry for UUID %s after %d attempts: %w", uuid, maxRetries+1, lastErr)
-}
-
-// isNonRetryableError determines if an error should not be retried
-func isNonRetryableError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	errStr := err.Error()
-	// Don't retry on authentication, authorization, or not found errors
-	nonRetryablePatterns := []string{
-		"401", "403", "404", "not found", "unauthorized", "forbidden",
-	}
-
-	for _, pattern := range nonRetryablePatterns {
-		if strings.Contains(strings.ToLower(errStr), pattern) {
-			return true
-		}
-	}
-
-	return false
-}
-
 // RekorVSADataRetriever implements VSADataRetriever for Rekor-based VSA retrieval
 type RekorVSADataRetriever struct {
 	rekorRetriever *RekorVSARetriever
@@ -720,31 +660,9 @@ func NewRekorVSADataRetriever(opts RetrievalOptions, imageDigest string) (*Rekor
 	}, nil
 }
 
-// RetrieveVSAData retrieves VSA data from Rekor and returns it as a string
-func (r *RekorVSADataRetriever) RetrieveVSAData(ctx context.Context) (string, error) {
-	// Get all entries for the image digest (without VSA filtering)
-	allEntries, err := r.rekorRetriever.GetAllEntriesForImageDigest(ctx, r.imageDigest)
-	if err != nil {
-		return "", fmt.Errorf("failed to get all entries for image digest: %w", err)
-	}
-
-	if len(allEntries) == 0 {
-		return "", fmt.Errorf("no entries found for image digest: %s", r.imageDigest)
-	}
-
-	// Find the latest matching pair where intoto has attestation and DSSE matches
-	latestPair := r.rekorRetriever.FindLatestMatchingPair(ctx, allEntries)
-	if latestPair == nil || latestPair.IntotoEntry == nil || latestPair.DSSEEntry == nil {
-		return "", fmt.Errorf("no complete intoto/DSSE pair found for image digest: %s", r.imageDigest)
-	}
-
-	// Always reconstruct the complete DSSE envelope
-	envelope, err := r.reconstructDSSEEnvelope(latestPair)
-	if err != nil {
-		return "", fmt.Errorf("failed to reconstruct DSSE envelope: %w", err)
-	}
-
-	return envelope, nil
+// RetrieveVSA retrieves VSA data as a DSSE envelope
+func (r *RekorVSADataRetriever) RetrieveVSA(ctx context.Context, imageDigest string) (*ssldsse.Envelope, error) {
+	return r.rekorRetriever.RetrieveVSA(ctx, imageDigest)
 }
 
 // extractStatementFromIntotoEntry extracts the in-toto Statement JSON from an intoto entry
@@ -786,67 +704,4 @@ func (r *RekorVSADataRetriever) extractStatementFromIntotoEntry(entry models.Log
 	}
 
 	return stmtBytes, nil
-}
-
-// reconstructDSSEEnvelope reconstructs the complete DSSE envelope from the latest intoto/DSSE pair.
-func (r *RekorVSADataRetriever) reconstructDSSEEnvelope(pair *DualEntryPair) (string, error) {
-
-	// 1) Extract the actual in-toto Statement JSON from the intoto entry
-	//    For intoto entries, we need to extract from spec.content structure, not from a DSSE envelope
-	stmtPayload, err := r.extractStatementFromIntotoEntry(*pair.IntotoEntry)
-	if err != nil {
-		return "", fmt.Errorf("failed to extract in-toto Statement payload: %w", err)
-	}
-
-	// 2) Optional but recommended: confirm the payload hash matches Rekor's recorded payloadHash
-	if pair.PayloadHash != "" {
-		h := sha256.Sum256(stmtPayload)
-		if fmt.Sprintf("%x", h[:]) != strings.ToLower(pair.PayloadHash) {
-			return "", fmt.Errorf("payload hash mismatch: computed sha256=%x, rekor payloadHash=%s", h[:], pair.PayloadHash)
-		}
-	}
-
-	// 3) Extract signatures from the DSSE entry (Rekor dsse.spec.signatures[])
-	sigObjs, err := r.rekorRetriever.extractSignaturesAndPublicKey(*pair.DSSEEntry)
-	if err != nil {
-		return "", fmt.Errorf("failed to extract signatures from DSSE entry: %w", err)
-	}
-
-	// 4) Use the standard in-toto payload type for VSA attestations
-	payloadType := "application/vnd.in-toto+json"
-
-	// 5) Build a canonical DSSE envelope with the original payload + signatures
-	envelope := DSSEEnvelope{
-		PayloadType: payloadType,
-		Payload:     base64.StdEncoding.EncodeToString(stmtPayload),
-		Signatures:  make([]Signature, 0, len(sigObjs)),
-	}
-	for _, s := range sigObjs {
-		var sigHex string
-		if v, ok := s["signature"].(string); ok {
-			sigHex = v
-		} else if v, ok := s["sig"].(string); ok {
-			sigHex = v
-		} else {
-			continue
-		}
-		keyid := ""
-		if v, ok := s["keyid"].(string); ok {
-			keyid = v
-		}
-		envelope.Signatures = append(envelope.Signatures, Signature{
-			KeyID: keyid,
-			Sig:   sigHex,
-		})
-	}
-	if len(envelope.Signatures) == 0 {
-		return "", fmt.Errorf("no usable signatures found in DSSE entry")
-	}
-
-	// 6) Return as JSON
-	out, err := json.Marshal(envelope)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal reconstructed DSSE envelope: %w", err)
-	}
-	return string(out), nil
 }

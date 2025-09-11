@@ -19,7 +19,6 @@ package vsa
 import (
 	"context"
 	"crypto"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -89,49 +88,41 @@ type Subject struct {
 
 // VSADataRetriever defines the interface for retrieving VSA data
 type VSADataRetriever interface {
-	// RetrieveVSAData retrieves VSA data as a string
-	RetrieveVSAData(ctx context.Context) (string, error)
+	// RetrieveVSA retrieves VSA data as a DSSE envelope
+	RetrieveVSA(ctx context.Context, imageDigest string) (*ssldsse.Envelope, error)
 }
 
-// ParseVSAContent parses VSA content in different formats and returns a Predicate
-// VSA content can be in different formats:
-// 1. Raw Predicate (just the VSA data)
-// 2. DSSE Envelope (signed VSA data)
-// 3. In-toto Statement wrapped in DSSE envelope
-func ParseVSAContent(content string) (*Predicate, error) {
+// ParseVSAContent parses VSA content from a DSSE envelope and returns a Predicate
+// The function handles different payload formats:
+// 1. In-toto Statement wrapped in DSSE envelope
+// 2. Raw Predicate directly in DSSE payload
+func ParseVSAContent(envelope *ssldsse.Envelope) (*Predicate, error) {
+	return ParseVSAContentFromPayload(envelope.Payload)
+}
+
+// ParseVSAContentFromPayload parses VSA content from a raw payload string and returns a Predicate
+// The function handles different payload formats:
+// 1. In-toto Statement wrapped in DSSE envelope
+// 2. Raw Predicate directly in DSSE payload
+func ParseVSAContentFromPayload(payload string) (*Predicate, error) {
 	var predicate Predicate
 
-	// First, try to parse as DSSE envelope
-	var envelope DSSEEnvelope
-	if err := json.Unmarshal([]byte(content), &envelope); err == nil && envelope.PayloadType != "" {
-		// It's a DSSE envelope, extract the payload
-		payloadBytes, err := base64.StdEncoding.DecodeString(envelope.Payload)
+	// Try to parse the payload as an in-toto statement first
+	var statement InTotoStatement
+	if err := json.Unmarshal([]byte(payload), &statement); err == nil && statement.PredicateType != "" {
+		// It's an in-toto statement, extract the predicate
+		predicateBytes, err := json.Marshal(statement.Predicate)
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode DSSE payload: %w", err)
+			return nil, fmt.Errorf("failed to marshal predicate: %w", err)
 		}
 
-		// Try to parse the payload as an in-toto statement
-		var statement InTotoStatement
-		if err := json.Unmarshal(payloadBytes, &statement); err == nil && statement.PredicateType != "" {
-			// It's an in-toto statement, extract the predicate
-			predicateBytes, err := json.Marshal(statement.Predicate)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal predicate: %w", err)
-			}
-
-			if err := json.Unmarshal(predicateBytes, &predicate); err != nil {
-				return nil, fmt.Errorf("failed to parse VSA predicate from in-toto statement: %w", err)
-			}
-		} else {
-			// The payload is directly the predicate
-			if err := json.Unmarshal(payloadBytes, &predicate); err != nil {
-				return nil, fmt.Errorf("failed to parse VSA predicate from DSSE payload: %w", err)
-			}
+		if err := json.Unmarshal(predicateBytes, &predicate); err != nil {
+			return nil, fmt.Errorf("failed to parse VSA predicate from in-toto statement: %w", err)
 		}
 	} else {
-		// Try to parse as raw predicate
-		if err := json.Unmarshal([]byte(content), &predicate); err != nil {
-			return nil, fmt.Errorf("failed to parse VSA content as predicate: %w", err)
+		// The payload is directly the predicate
+		if err := json.Unmarshal([]byte(payload), &predicate); err != nil {
+			return nil, fmt.Errorf("failed to parse VSA predicate from DSSE payload: %w", err)
 		}
 	}
 
@@ -303,7 +294,7 @@ func ValidateVSAWithContent(ctx context.Context, imageRef string, policy policy.
 	digest := ref.Identifier()
 
 	// Retrieve VSA data using the provided retriever
-	vsaContent, err := retriever.RetrieveVSAData(ctx)
+	envelope, err := retriever.RetrieveVSA(ctx, digest)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to retrieve VSA data: %w", err)
 	}
@@ -311,10 +302,7 @@ func ValidateVSAWithContent(ctx context.Context, imageRef string, policy policy.
 	// Verify signature if public key is provided
 	signatureVerified := false
 	if publicKey != "" {
-		if vsaContent == "" {
-			return nil, "", fmt.Errorf("signature verification not supported for this VSA retriever")
-		}
-		if err := verifyVSASignature(vsaContent, publicKey); err != nil {
+		if err := verifyVSASignatureFromEnvelope(envelope, publicKey); err != nil {
 			// For now, log the error but don't fail the validation
 			// This allows testing with mismatched keys
 			fmt.Printf("Warning: VSA signature verification failed: %v\n", err)
@@ -324,8 +312,8 @@ func ValidateVSAWithContent(ctx context.Context, imageRef string, policy policy.
 		}
 	}
 
-	// Parse the VSA content to extract violations and successes
-	predicate, err := ParseVSAContent(vsaContent)
+	// Parse the VSA content from DSSE envelope to extract violations and successes
+	predicate, err := ParseVSAContent(envelope)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to parse VSA content: %w", err)
 	}
@@ -383,7 +371,7 @@ func ValidateVSAWithContent(ctx context.Context, imageRef string, policy policy.
 	result := compareRules(vsaRuleResults, requiredRules, digest)
 	result.SignatureVerified = signatureVerified
 
-	return result, vsaContent, nil
+	return result, envelope.Payload, nil
 }
 
 // packageCache caches package name extractions to avoid repeated string operations
@@ -449,6 +437,39 @@ func verifyVSASignature(vsaContent string, publicKeyPath string) error {
 	// Verify the signature
 	ctx := context.Background()
 	if _, err := ev.Verify(ctx, &env); err != nil {
+		return fmt.Errorf("signature verification failed: %w", err)
+	}
+
+	return nil
+}
+
+// verifyVSASignatureFromEnvelope verifies the signature of a DSSE envelope
+func verifyVSASignatureFromEnvelope(envelope *ssldsse.Envelope, publicKeyPath string) error {
+	// Load the verifier from the public key file
+	verifier, err := signature.LoadVerifierFromPEMFile(publicKeyPath, crypto.SHA256)
+	if err != nil {
+		return fmt.Errorf("failed to load verifier from public key file: %w", err)
+	}
+
+	// Get the public key
+	pub, err := verifier.PublicKey()
+	if err != nil {
+		return fmt.Errorf("failed to get public key: %w", err)
+	}
+
+	// Create DSSE envelope verifier using go-securesystemslib
+	ev, err := ssldsse.NewEnvelopeVerifier(&sigd.VerifierAdapter{
+		SignatureVerifier: verifier,
+		Pub:               pub,
+		// PubKeyID left empty: accept this key without keyid constraint
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create envelope verifier: %w", err)
+	}
+
+	// Verify the signature
+	ctx := context.Background()
+	if _, err := ev.Verify(ctx, envelope); err != nil {
 		return fmt.Errorf("signature verification failed: %w", err)
 	}
 

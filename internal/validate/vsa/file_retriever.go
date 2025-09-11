@@ -18,8 +18,10 @@ package vsa
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
+	ssldsse "github.com/secure-systems-lab/go-securesystemslib/dsse"
 	"github.com/spf13/afero"
 )
 
@@ -39,18 +41,36 @@ func NewFileVSADataRetriever(fs afero.Fs, vsaPath string) *FileVSADataRetriever 
 	}
 }
 
-// RetrieveVSAData reads and returns VSA data as a string
-func (f *FileVSADataRetriever) RetrieveVSAData(ctx context.Context) (string, error) {
+// RetrieveVSA reads and returns VSA data as a DSSE envelope
+func (f *FileVSADataRetriever) RetrieveVSA(ctx context.Context, imageDigest string) (*ssldsse.Envelope, error) {
 	// Validate file path
 	if f.vsaPath == "" {
-		return "", fmt.Errorf("failed to read VSA file: file path is empty")
+		return nil, fmt.Errorf("failed to read VSA file: file path is empty")
 	}
 
 	// Read VSA file
 	data, err := afero.ReadFile(f.fs, f.vsaPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to read VSA file: %w", err)
+		return nil, fmt.Errorf("failed to read VSA file: %w", err)
 	}
 
-	return string(data), nil
+	// Try to parse as DSSE envelope first
+	var envelope ssldsse.Envelope
+	if err := json.Unmarshal(data, &envelope); err == nil {
+		// Successfully parsed as DSSE envelope
+		// Check if the envelope has valid DSSE fields
+		if envelope.PayloadType != "" && envelope.Payload != "" {
+			return &envelope, nil
+		}
+		// If it parsed but doesn't have valid DSSE fields, treat as raw content
+	}
+
+	// If not a DSSE envelope, wrap the content in a DSSE envelope
+	envelope = ssldsse.Envelope{
+		PayloadType: "application/vnd.in-toto+json",
+		Payload:     string(data),
+		Signatures:  []ssldsse.Signature{},
+	}
+
+	return &envelope, nil
 }

@@ -17,11 +17,10 @@
 package vsa
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"testing"
 
 	appapi "github.com/konflux-ci/application-api/api/v1alpha1"
+	ssldsse "github.com/secure-systems-lab/go-securesystemslib/dsse"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -65,31 +64,19 @@ func TestParseVSAContent(t *testing.T) {
 		},
 		{
 			name: "DSSE envelope with raw predicate payload",
-			content: func() string {
-				predicate := &Predicate{
-					ImageRef:     "quay.io/test/app:latest",
-					Timestamp:    "2024-01-01T00:00:00Z",
-					Verifier:     "ec-cli",
-					PolicySource: "test-policy",
-					Component: map[string]interface{}{
-						"name":           "test-component",
-						"containerImage": "quay.io/test/app:latest",
-					},
-					Results: &FilteredReport{
-						Components: []applicationsnapshot.Component{},
-					},
+			content: `{
+				"imageRef": "quay.io/test/app:latest",
+				"timestamp": "2024-01-01T00:00:00Z",
+				"verifier": "ec-cli",
+				"policySource": "test-policy",
+				"component": {
+					"name": "test-component",
+					"containerImage": "quay.io/test/app:latest"
+				},
+				"results": {
+					"components": []
 				}
-				predicateJSON, _ := json.Marshal(predicate)
-				payload := base64.StdEncoding.EncodeToString(predicateJSON)
-
-				envelope := DSSEEnvelope{
-					Payload:     payload,
-					PayloadType: "application/vnd.in-toto+json",
-					Signatures:  []Signature{},
-				}
-				envelopeJSON, _ := json.Marshal(envelope)
-				return string(envelopeJSON)
-			}(),
+			}`,
 			expectError: false,
 			validate: func(t *testing.T, predicate *Predicate) {
 				assert.Equal(t, "quay.io/test/app:latest", predicate.ImageRef)
@@ -98,46 +85,29 @@ func TestParseVSAContent(t *testing.T) {
 		},
 		{
 			name: "DSSE envelope with in-toto statement payload",
-			content: func() string {
-				predicate := &Predicate{
-					ImageRef:     "quay.io/test/app:latest",
-					Timestamp:    "2024-01-01T00:00:00Z",
-					Verifier:     "ec-cli",
-					PolicySource: "test-policy",
-					Component: map[string]interface{}{
-						"name":           "test-component",
-						"containerImage": "quay.io/test/app:latest",
+			content: `{
+				"_type": "https://in-toto.io/Statement/v0.1",
+				"predicateType": "https://conforma.dev/vsa/v0.1",
+				"subject": [{
+					"name": "quay.io/test/app:latest",
+					"digest": {
+						"sha256": "abc123"
+					}
+				}],
+				"predicate": {
+					"imageRef": "quay.io/test/app:latest",
+					"timestamp": "2024-01-01T00:00:00Z",
+					"verifier": "ec-cli",
+					"policySource": "test-policy",
+					"component": {
+						"name": "test-component",
+						"containerImage": "quay.io/test/app:latest"
 					},
-					Results: &FilteredReport{
-						Components: []applicationsnapshot.Component{},
-					},
+					"results": {
+						"components": []
+					}
 				}
-
-				statement := InTotoStatement{
-					Type:          "https://in-toto.io/Statement/v0.1",
-					PredicateType: "https://conforma.dev/vsa/v0.1",
-					Subject: []Subject{
-						{
-							Name: "quay.io/test/app:latest",
-							Digest: map[string]string{
-								"sha256": "abc123",
-							},
-						},
-					},
-					Predicate: predicate,
-				}
-
-				statementJSON, _ := json.Marshal(statement)
-				payload := base64.StdEncoding.EncodeToString(statementJSON)
-
-				envelope := DSSEEnvelope{
-					Payload:     payload,
-					PayloadType: "application/vnd.in-toto+json",
-					Signatures:  []Signature{},
-				}
-				envelopeJSON, _ := json.Marshal(envelope)
-				return string(envelopeJSON)
-			}(),
+			}`,
 			expectError: false,
 			validate: func(t *testing.T, predicate *Predicate) {
 				assert.Equal(t, "quay.io/test/app:latest", predicate.ImageRef)
@@ -148,30 +118,17 @@ func TestParseVSAContent(t *testing.T) {
 			name:        "invalid JSON",
 			content:     `invalid json content`,
 			expectError: true,
-			errorMsg:    "failed to parse VSA content as predicate",
+			errorMsg:    "failed to parse VSA predicate from DSSE payload",
 		},
 		{
-			name: "DSSE envelope with invalid base64 payload",
-			content: `{
-				"payload": "invalid-base64",
-				"payloadType": "application/vnd.in-toto+json",
-				"signatures": []
-			}`,
+			name:        "DSSE envelope with invalid base64 payload",
+			content:     "invalid-base64",
 			expectError: true,
-			errorMsg:    "failed to decode DSSE payload",
+			errorMsg:    "failed to parse VSA predicate from DSSE payload",
 		},
 		{
-			name: "DSSE envelope with invalid JSON payload",
-			content: func() string {
-				payload := base64.StdEncoding.EncodeToString([]byte("invalid json"))
-				envelope := DSSEEnvelope{
-					Payload:     payload,
-					PayloadType: "application/vnd.in-toto+json",
-					Signatures:  []Signature{},
-				}
-				envelopeJSON, _ := json.Marshal(envelope)
-				return string(envelopeJSON)
-			}(),
+			name:        "DSSE envelope with invalid JSON payload",
+			content:     "invalid json",
 			expectError: true,
 			errorMsg:    "failed to parse VSA predicate from DSSE payload",
 		},
@@ -179,7 +136,13 @@ func TestParseVSAContent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			predicate, err := ParseVSAContent(tt.content)
+			// Create a DSSE envelope from the content
+			envelope := &ssldsse.Envelope{
+				PayloadType: "application/vnd.in-toto+json",
+				Payload:     tt.content,
+				Signatures:  []ssldsse.Signature{},
+			}
+			predicate, err := ParseVSAContent(envelope)
 
 			if tt.expectError {
 				require.Error(t, err)
