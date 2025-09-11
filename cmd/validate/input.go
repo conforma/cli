@@ -43,6 +43,7 @@ func validateInputCmd(validate InputValidationFunc) *cobra.Command {
 	data := struct {
 		effectiveTime       string
 		filePaths           []string
+		filterType          string
 		info                bool
 		namespaces          []string
 		output              []string
@@ -51,8 +52,9 @@ func validateInputCmd(validate InputValidationFunc) *cobra.Command {
 		strict              bool
 		workers             int
 	}{
-		strict:  true,
-		workers: 5,
+		strict:     true,
+		workers:    5,
+		filterType: "include-exclude", // Default to include-exclude filter
 	}
 	cmd := &cobra.Command{
 		Use:   "input",
@@ -257,6 +259,11 @@ func validateInputCmd(validate InputValidationFunc) *cobra.Command {
 
 	cmd.Flags().IntVar(&data.workers, "workers", data.workers, hd.Doc(`
 		Number of workers to use for validation. Defaults to 5.`))
+
+	cmd.Flags().StringVar(&data.filterType, "filter-type", data.filterType, hd.Doc(`
+		Filter type to use for policy evaluation. Options: "include-exclude" (default) or "ec-policy".
+		- "include-exclude": Uses traditional include/exclude filtering without pipeline intentions
+		- "ec-policy": Uses Enterprise Contract policy filtering with pipeline intention support`))
 
 	if err := cmd.MarkFlagRequired("file"); err != nil {
 		panic(err)

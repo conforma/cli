@@ -639,13 +639,17 @@ func (r *basePolicyResolver) baseDeterminePackageInclusion(pkg string, pkgRules 
 		}
 	}
 
-	// Package inclusion logic: if ANY rule is included → Package is included
+	// Package inclusion logic:
+	// - If ANY rule is included → Package is included
+	// - If NO rules are included but SOME rules are excluded → Package is STILL included
+	//   (excluded rules will be filtered out post-evaluation)
+	// - If NO rules are included and NO rules are excluded → Package is not categorized
 	if hasIncludedRules {
 		result.IncludedPackages[pkg] = true
 		result.Explanations[pkg] = "package contains included rules"
 	} else if hasExcludedRules {
-		result.ExcludedPackages[pkg] = true
-		result.Explanations[pkg] = "package contains an excluded rule"
+		result.IncludedPackages[pkg] = true
+		result.Explanations[pkg] = "package contains excluded rules (will be filtered post-evaluation)"
 	}
 }
 
@@ -702,24 +706,24 @@ func (r *ECPolicyResolver) processPackage(pkg string, pkgRules []rule.Info, targ
 	// Debug: Log package being processed
 	log.Debugf("[processPackage] Processing package: %s with %d rules", pkg, len(pkgRules))
 
-	// Phase 1: Pipeline Intention Filtering
-	// Check if package should be included based on pipeline intentions
-	// if any rule has pipeline intention metadata, the package is excluded or included based on the policy
-	if !r.matchesPipelineIntention(pkgRules) {
-		log.Debugf("[processPackage] Package %s does NOT match pipeline intention criteria", pkg)
-		result.Explanations[pkg] = "package does not match pipeline intention criteria"
-		return
-	}
-	log.Debugf("[processPackage] Package %s matches pipeline intention criteria", pkg)
-
-	// Phase 2: Rule-by-Rule Evaluation
+	// Phase 1: Rule-by-Rule Evaluation with Pipeline Intention Filtering
 	// Evaluate each rule in the package and determine if it should be included or excluded
+	// Pipeline intention filtering now happens at the rule level, not package level
 	for _, ruleInfo := range pkgRules {
-		ruleID := ruleInfo.Code // FIX: use ruleInfo.Code, not pkg.pkg.rule
+		ruleID := ruleInfo.Code
+
+		// Check if this specific rule matches pipeline intention criteria
+		if !r.ruleMatchesPipelineIntention(ruleInfo) {
+			log.Debugf("[processPackage] Rule %s does NOT match pipeline intention criteria", ruleID)
+			result.Explanations[ruleID] = "rule does not match pipeline intention criteria"
+			continue
+		}
+
+		// Rule matches pipeline intention, proceed with normal rule evaluation
 		r.baseEvaluateRuleInclusion(ruleID, ruleInfo, target, result)
 	}
 
-	// Phase 3: Package-Level Determination
+	// Phase 2: Package-Level Determination
 	// Determine package inclusion based on its rules
 	r.baseDeterminePackageInclusion(pkg, pkgRules, result)
 }
@@ -738,25 +742,18 @@ func (r *ECPolicyResolver) processPackage(pkg string, pkgRules []rule.Info, targ
 // 3. The package-level organization is maintained for reporting and filtering purposes
 //
 
-// matchesPipelineIntention checks if the package matches pipeline intention criteria
-func (r *ECPolicyResolver) matchesPipelineIntention(pkgRules []rule.Info) bool {
+// ruleMatchesPipelineIntention checks if a specific rule matches pipeline intention criteria
+func (r *ECPolicyResolver) ruleMatchesPipelineIntention(ruleInfo rule.Info) bool {
 	if len(r.pipelineIntentions) == 0 {
-		// No pipeline intention specified, only include packages where ALL rules have no pipeline intention metadata
-		for _, rule := range pkgRules {
-			if len(rule.PipelineIntention) > 0 {
-				return false // Exclude packages with any rules that have pipeline intention metadata
-			}
-		}
-		return true // Include packages where all rules have no pipeline intention metadata
+		// No pipeline intention specified, only include rules with no pipeline intention metadata
+		return len(ruleInfo.PipelineIntention) == 0
 	}
 
-	// Pipeline intention specified, check if any rule matches
-	for _, rule := range pkgRules {
-		for _, intention := range rule.PipelineIntention {
-			for _, targetIntention := range r.pipelineIntentions {
-				if intention == targetIntention {
-					return true
-				}
+	// Pipeline intention specified, check if this rule matches
+	for _, intention := range ruleInfo.PipelineIntention {
+		for _, targetIntention := range r.pipelineIntentions {
+			if intention == targetIntention {
+				return true
 			}
 		}
 	}
