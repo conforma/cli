@@ -22,6 +22,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 
@@ -401,8 +402,28 @@ func validateAllComponentsFromPredicate(ctx context.Context, predicate *Predicat
 
 	// Pre-allocate slices with estimated capacity for better performance
 	componentCount := len(predicate.Results.Components)
-	allMissingRules := make([]MissingRule, 0, componentCount*2) // Estimate 2 missing rules per component
-	allFailingRules := make([]FailingRule, 0, componentCount*2) // Estimate 2 failing rules per component
+
+	// Validate input bounds to prevent DoS attacks
+	if componentCount < 0 {
+		return nil, fmt.Errorf("negative component count: %d", componentCount)
+	}
+
+	// Reasonable limit to prevent DoS attacks while allowing legitimate large predicates
+	const maxComponents = 1000000 // 1 million components max
+	if componentCount > maxComponents {
+		return nil, fmt.Errorf("VSA predicate has too many components: %d (max: %d). This may indicate a malformed or malicious predicate.",
+			componentCount, maxComponents)
+	}
+
+	// Safe capacity calculation with overflow protection
+	capacity := componentCount * 2
+	if componentCount > math.MaxInt/2 {
+		// If doubling would overflow, use a reasonable maximum
+		capacity = math.MaxInt / 4
+	}
+
+	allMissingRules := make([]MissingRule, 0, capacity)
+	allFailingRules := make([]FailingRule, 0, capacity)
 
 	var totalPassingCount, totalRequired int
 
@@ -525,7 +546,26 @@ func createValidationResult(missingRules []MissingRule, failingRules []FailingRu
 // It processes successes, violations, and warnings into a unified rule results map.
 func extractRuleResultsFromComponent(component applicationsnapshot.Component) map[string][]RuleResult {
 	// Pre-allocate with estimated capacity for better performance
-	totalRules := len(component.Successes) + len(component.Violations) + len(component.Warnings)
+	// Safe addition to prevent integer overflow
+	successes := len(component.Successes)
+	violations := len(component.Violations)
+	warnings := len(component.Warnings)
+
+	// Safe addition to prevent integer overflow
+	var totalRules int
+	// Check if any individual length is too large first
+	if successes > math.MaxInt/3 || violations > math.MaxInt/3 || warnings > math.MaxInt/3 {
+		// Individual slice too large, use conservative estimate
+		totalRules = math.MaxInt / 4
+	} else {
+		// Safe to add - check for overflow
+		totalRules = successes + violations + warnings
+		if totalRules < 0 {
+			// Overflow detected (result wrapped to negative)
+			totalRules = math.MaxInt / 4
+		}
+	}
+
 	ruleResults := make(map[string][]RuleResult, totalRules/2) // Estimate 2 rules per ruleID
 
 	// Process all rule types using a helper function to reduce code duplication
