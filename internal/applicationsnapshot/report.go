@@ -18,12 +18,12 @@ package applicationsnapshot
 
 import (
 	"bytes"
-	"context"
 	"embed"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
@@ -216,20 +216,28 @@ func (r *Report) toFormat(format string) (data []byte, err error) {
 	case PolicyInput:
 		data = bytes.Join(r.PolicyInput, []byte("\n"))
 	case VSA:
-		data, err = r.toVSA()
+		data, err = r.toVSAReport()
 	default:
 		return nil, fmt.Errorf("%q is not a valid report format", format)
 	}
 	return
 }
 
-func (r *Report) toVSA() ([]byte, error) {
-	generator := NewSnapshotVSAGenerator(*r)
-	predicate, err := generator.GeneratePredicate(context.Background())
-	if err != nil {
-		return []byte{}, err
+// toVSAReport converts the report to VSA format
+func (r *Report) toVSAReport() ([]byte, error) {
+	// Convert existing components to VSA components
+	var vsaComponents []VSAComponent
+	for _, comp := range r.Components {
+		vsaComp := VSAComponent{
+			Name:           comp.Name,
+			ContainerImage: comp.ContainerImage,
+			Success:        comp.Success,
+		}
+		vsaComponents = append(vsaComponents, vsaComp)
 	}
-	return json.Marshal(predicate)
+
+	vsaReport := NewVSAReport(vsaComponents, []VSAViolation{}, []VSAMissingRule{})
+	return json.Marshal(vsaReport)
 }
 
 // toSummary returns a condensed version of the report.
@@ -316,6 +324,114 @@ func generateMarkdownSummary(r *Report) ([]byte, error) {
 	writeMarkdownField(&markdownBuffer, "Warnings", totalWarnings, writeIcon(totalWarnings == 0))
 	writeMarkdownField(&markdownBuffer, "Result", "", writeIcon(r.Success))
 	return markdownBuffer.Bytes(), nil
+}
+
+// WriteVSAReport writes a VSA report using the format system
+func WriteVSAReport(report VSAReport, targets []string, p format.TargetParser) error {
+	if len(targets) == 0 {
+		targets = append(targets, "text")
+	}
+
+	for _, targetName := range targets {
+		target, err := p.Parse(targetName)
+		if err != nil {
+			return err
+		}
+
+		data, err := vsaReportToFormat(report, target.Format)
+		if err != nil {
+			return err
+		}
+
+		if _, err := target.Write(data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// vsaReportToFormat converts the VSA report into the given format
+func vsaReportToFormat(report VSAReport, format string) ([]byte, error) {
+	switch format {
+	case "json":
+		return json.MarshalIndent(report, "", "  ")
+	case "yaml":
+		return yaml.Marshal(report)
+	case "text":
+		return generateVSATextReport(report), nil
+	default:
+		return nil, fmt.Errorf("%q is not a valid report format", format)
+	}
+}
+
+// generateVSATextReport generates a human-readable text report for VSA
+func generateVSATextReport(report VSAReport) []byte {
+	var buf strings.Builder
+
+	buf.WriteString("VSA Validation Report\n")
+	buf.WriteString("=====================\n\n")
+
+	buf.WriteString(fmt.Sprintf("Summary: %s\n", report.Summary))
+	buf.WriteString(fmt.Sprintf("Overall Success: %t\n\n", report.Success))
+
+	// Display violations in the detailed format
+	if len(report.Violations) > 0 {
+		buf.WriteString("Violations:\n")
+		for _, violation := range report.Violations {
+			buf.WriteString(fmt.Sprintf("✕ [Violation] %s\n", violation.RuleID))
+			buf.WriteString(fmt.Sprintf("  ImageRef: %s\n", violation.ImageRef))
+			buf.WriteString(fmt.Sprintf("  Reason: %s\n", violation.Reason))
+
+			if violation.Title != "" {
+				buf.WriteString(fmt.Sprintf("  Title: %s\n", violation.Title))
+			}
+
+			if violation.Description != "" {
+				buf.WriteString(fmt.Sprintf("  Description: %s\n", violation.Description))
+			}
+
+			if violation.Solution != "" {
+				buf.WriteString(fmt.Sprintf("  Solution: %s\n", violation.Solution))
+			}
+
+			buf.WriteString("\n")
+		}
+	}
+
+	// Display missing rules in the detailed format
+	if len(report.Missing) > 0 {
+		buf.WriteString("Missing Rules:\n")
+		for _, missing := range report.Missing {
+			buf.WriteString(fmt.Sprintf("✕ [Missing] %s\n", missing.RuleID))
+			buf.WriteString(fmt.Sprintf("  Package: %s\n", missing.Package))
+			buf.WriteString(fmt.Sprintf("  ImageRef: %s\n", missing.ImageRef))
+			buf.WriteString(fmt.Sprintf("  Reason: %s\n", missing.Reason))
+			buf.WriteString("\n")
+		}
+	}
+
+	// Display component summaries
+	if len(report.Components) > 0 {
+		buf.WriteString("Components:\n")
+		for _, comp := range report.Components {
+			buf.WriteString(fmt.Sprintf("- Name: %s\n", comp.Name))
+			buf.WriteString(fmt.Sprintf("  ImageRef: %s\n", comp.ContainerImage))
+			buf.WriteString(fmt.Sprintf("  Success: %t\n", comp.Success))
+
+			if comp.FailingRulesCount > 0 {
+				buf.WriteString(fmt.Sprintf("  Failing Rules: %d\n", comp.FailingRulesCount))
+			}
+			if comp.MissingRulesCount > 0 {
+				buf.WriteString(fmt.Sprintf("  Missing Rules: %d\n", comp.MissingRulesCount))
+			}
+			if comp.Error != "" {
+				buf.WriteString(fmt.Sprintf("  Error: %s\n", comp.Error))
+			}
+			buf.WriteString("\n")
+		}
+	}
+
+	return []byte(buf.String())
 }
 
 //go:embed templates/*.tmpl
@@ -417,5 +533,79 @@ func AppstudioReportForError(prefix string, err error) TestReport {
 		Failures:  0,
 		Result:    "ERROR",
 		Note:      fmt.Sprintf("Error: %s: %s", prefix, err.Error()),
+	}
+}
+
+// VSAComponent represents a VSA validation result for a single component
+type VSAComponent struct {
+	Name           string `json:"name"`
+	ContainerImage string `json:"container_image"`
+	Success        bool   `json:"success"`
+	Error          string `json:"error,omitempty"`
+	// Count fields for better reporting
+	FailingRulesCount int `json:"failing_rules_count,omitempty"`
+	MissingRulesCount int `json:"missing_rules_count,omitempty"`
+}
+
+// VSAViolation represents a single violation with all its details
+type VSAViolation struct {
+	RuleID      string `json:"rule_id"`
+	ImageRef    string `json:"image_ref"`
+	Reason      string `json:"reason"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	Solution    string `json:"solution,omitempty"`
+}
+
+// VSAMissingRule represents a single missing rule with all its details
+type VSAMissingRule struct {
+	RuleID   string `json:"rule_id"`
+	Package  string `json:"package"`
+	Reason   string `json:"reason"`
+	ImageRef string `json:"image_ref"`
+}
+
+// VSAReport represents the overall VSA validation report
+type VSAReport struct {
+	Success    bool             `json:"success"`
+	Summary    string           `json:"summary"`
+	Violations []VSAViolation   `json:"violations"`
+	Missing    []VSAMissingRule `json:"missing,omitempty"`
+	Components []VSAComponent   `json:"components,omitempty"`
+}
+
+// NewVSAReport creates a new VSA report from validation results
+func NewVSAReport(components []VSAComponent, violations []VSAViolation, missing []VSAMissingRule) VSAReport {
+	success := true
+
+	// Process each component to check success status
+	for i := range components {
+		comp := &components[i]
+		if !comp.Success {
+			success = false
+		}
+	}
+
+	summary := fmt.Sprintf("VSA validation completed with %d components", len(components))
+	if !success {
+		summary = "VSA validation failed for some components"
+	}
+
+	// Ensure violations is never nil - use empty slice if nil
+	if violations == nil {
+		violations = make([]VSAViolation, 0)
+	}
+
+	// Ensure missing is never nil - use empty slice if nil
+	if missing == nil {
+		missing = make([]VSAMissingRule, 0)
+	}
+
+	return VSAReport{
+		Success:    success,
+		Summary:    summary,
+		Violations: violations,
+		Missing:    missing,
+		Components: components,
 	}
 }

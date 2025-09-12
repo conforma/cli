@@ -19,6 +19,7 @@ package applicationsnapshot
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 
 	"github.com/in-toto/in-toto-golang/in_toto"
 
@@ -53,7 +54,14 @@ func NewAttestationResult(att attestation.Attestation) AttestationResult {
 }
 
 func (r *Report) renderAttestations() ([]byte, error) {
-	byts := make([][]byte, 0, len(r.Components)*2)
+	// Safe capacity calculation with overflow protection
+	componentCount := len(r.Components)
+	capacity := componentCount * 2
+	if componentCount > math.MaxInt/2 {
+		// If doubling would overflow, use a reasonable maximum
+		capacity = math.MaxInt / 4
+	}
+	byts := make([][]byte, 0, capacity)
 
 	for _, c := range r.Components {
 		for _, a := range c.Attestations {

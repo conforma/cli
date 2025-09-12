@@ -91,6 +91,10 @@ func (s *snapshot) merge(snap app.SnapshotSpec) {
 }
 
 func DetermineInputSpec(ctx context.Context, input Input) (*app.SnapshotSpec, *ExpansionInfo, error) {
+	return DetermineInputSpecWithExpansion(ctx, input, false)
+}
+
+func DetermineInputSpecWithExpansion(ctx context.Context, input Input, skipExpansion bool) (*app.SnapshotSpec, *ExpansionInfo, error) {
 	var snapshot snapshot
 	provided := false
 
@@ -173,11 +177,16 @@ func DetermineInputSpec(ctx context.Context, input Input) (*app.SnapshotSpec, *E
 		log.Debug("No application snapshot available")
 		return nil, nil, errors.New("neither Snapshot nor image reference provided to validate")
 	}
-	exp := expandImageIndex(ctx, &snapshot.SnapshotSpec)
+	var exp *ExpansionInfo
+	if !skipExpansion {
+		exp = expandImageIndex(ctx, &snapshot.SnapshotSpec)
+	}
 
 	// Store expansion info in the snapshot for later use
 	// This will be used when building the Report
-	snapshot.Expansion = exp
+	if exp != nil {
+		snapshot.Expansion = exp
+	}
 
 	return &snapshot.SnapshotSpec, exp, nil
 }
