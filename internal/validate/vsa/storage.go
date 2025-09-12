@@ -149,6 +149,8 @@ func UploadVSAEnvelope(ctx context.Context, envelopePath string, storageConfigs 
 
 	// Read envelope content
 	envelopeContent, err := os.ReadFile(envelopePath)
+	log.Debugf("UploadVSAEnvelope called with envelopePath: %s", envelopePath)
+	log.Debugf("UploadVSAEnvelope called with envelopeContent: %s", string(envelopeContent))
 	if err != nil {
 		return fmt.Errorf("failed to read VSA envelope from %s: %w", envelopePath, err)
 	}

@@ -306,6 +306,20 @@ func (r *RekorBackend) prepareDSSEForRekor(envelopeContent []byte, pubKeyBytes [
 		"payload_hash":     payloadHashHex,
 	}).Info("[VSA] DSSE envelope structure before re-marshaling")
 
+	// Log signature details before re-marshaling
+	for i, sig := range env.Signatures {
+		previewLen := 50
+		if len(sig.Sig) < previewLen {
+			previewLen = len(sig.Sig)
+		}
+		log.WithFields(log.Fields{
+			"signature_index":   i,
+			"signature_length":  len(sig.Sig),
+			"signature_preview": sig.Sig[:previewLen],
+			"keyid":             sig.KeyID,
+		}).Info("[VSA] Signature before re-marshaling")
+	}
+
 	// Re-marshal envelope **only** with publicKey additions (no payload/sig changes)
 	out, err := json.Marshal(env)
 	if err != nil {
@@ -321,6 +335,20 @@ func (r *RekorBackend) prepareDSSEForRekor(envelopeContent []byte, pubKeyBytes [
 			"remarshaled_payload_type":     verifyEnv.PayloadType,
 			"remarshaled_signatures_count": len(verifyEnv.Signatures),
 		}).Info("[VSA] DSSE envelope structure after re-marshaling")
+
+		// Log signature details after re-marshaling
+		for i, sig := range verifyEnv.Signatures {
+			previewLen := 50
+			if len(sig.Sig) < previewLen {
+				previewLen = len(sig.Sig)
+			}
+			log.WithFields(log.Fields{
+				"signature_index":   i,
+				"signature_length":  len(sig.Sig),
+				"signature_preview": sig.Sig[:previewLen],
+				"keyid":             sig.KeyID,
+			}).Info("[VSA] Signature after re-marshaling")
+		}
 	}
 
 	return out, payloadHashHex, nil

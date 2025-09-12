@@ -19,6 +19,7 @@ package vsa
 import (
 	"context"
 	"crypto"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -97,7 +98,12 @@ type VSADataRetriever interface {
 // 1. In-toto Statement wrapped in DSSE envelope
 // 2. Raw Predicate directly in DSSE payload
 func ParseVSAContent(envelope *ssldsse.Envelope) (*Predicate, error) {
-	return ParseVSAContentFromPayload(envelope.Payload)
+	// Decode the base64-encoded payload
+	payloadBytes, err := base64.StdEncoding.DecodeString(envelope.Payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode DSSE payload: %w", err)
+	}
+	return ParseVSAContentFromPayload(string(payloadBytes))
 }
 
 // ParseVSAContentFromPayload parses VSA content from a raw payload string and returns a Predicate
@@ -461,7 +467,7 @@ func verifyVSASignatureFromEnvelope(envelope *ssldsse.Envelope, publicKeyPath st
 	ev, err := ssldsse.NewEnvelopeVerifier(&sigd.VerifierAdapter{
 		SignatureVerifier: verifier,
 		Pub:               pub,
-		// PubKeyID left empty: accept this key without keyid constraint
+		PubKeyID:          "default", // Match the KeyID we set in the signature
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create envelope verifier: %w", err)
@@ -469,8 +475,13 @@ func verifyVSASignatureFromEnvelope(envelope *ssldsse.Envelope, publicKeyPath st
 
 	// Verify the signature
 	ctx := context.Background()
-	if _, err := ev.Verify(ctx, envelope); err != nil {
+	acceptedSignatures, err := ev.Verify(ctx, envelope)
+	if err != nil {
 		return fmt.Errorf("signature verification failed: %w", err)
+	}
+
+	if len(acceptedSignatures) == 0 {
+		return fmt.Errorf("signature verification failed: no signatures were accepted")
 	}
 
 	return nil
