@@ -28,6 +28,9 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	ssldsse "github.com/secure-systems-lab/go-securesystemslib/dsse"
 	"github.com/sigstore/sigstore/pkg/signature"
+	log "github.com/sirupsen/logrus"
+
+	"github.com/conforma/cli/internal/applicationsnapshot"
 	sigd "github.com/sigstore/sigstore/pkg/signature/dsse"
 
 	"github.com/conforma/cli/internal/evaluator"
@@ -291,10 +294,32 @@ func ValidateVSA(ctx context.Context, imageRef string, policy policy.Policy, ret
 
 // ValidateVSAWithContent returns both validation result and VSA content to avoid redundant retrieval
 func ValidateVSAWithContent(ctx context.Context, imageRef string, policy policy.Policy, retriever VSADataRetriever, publicKey string) (*ValidationResult, string, error) {
+	result, payload, _, err := validateVSAWithPredicate(ctx, imageRef, policy, retriever, publicKey)
+	return result, payload, err
+}
+
+// ValidateVSAWithContentAndComponents returns validation result, VSA content, and all components that were processed.
+// This function is optimized for cases where individual components need to be extracted for output formatting.
+func ValidateVSAWithContentAndComponents(ctx context.Context, imageRef string, policy policy.Policy, retriever VSADataRetriever, publicKey string) (*ValidationResult, string, []applicationsnapshot.Component, error) {
+	// Use the existing function and extract components from the parsed predicate
+	result, payload, predicate, err := validateVSAWithPredicate(ctx, imageRef, policy, retriever, publicKey)
+	if err != nil {
+		return nil, "", nil, err
+	}
+
+	// Extract components from the VSA predicate
+	components := extractComponentsFromPredicate(predicate)
+
+	return result, payload, components, nil
+}
+
+// validateVSAWithPredicate is a helper function that returns the parsed predicate along with validation results.
+// This avoids code duplication while providing access to the parsed predicate.
+func validateVSAWithPredicate(ctx context.Context, imageRef string, policy policy.Policy, retriever VSADataRetriever, publicKey string) (*ValidationResult, string, *Predicate, error) {
 	// Extract digest from image reference
 	ref, err := name.ParseReference(imageRef)
 	if err != nil {
-		return nil, "", fmt.Errorf("invalid image reference: %w", err)
+		return nil, "", nil, fmt.Errorf("invalid image reference: %w", err)
 	}
 
 	digest := ref.Identifier()
@@ -302,7 +327,7 @@ func ValidateVSAWithContent(ctx context.Context, imageRef string, policy policy.
 	// Retrieve VSA data using the provided retriever
 	envelope, err := retriever.RetrieveVSA(ctx, digest)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to retrieve VSA data: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to retrieve VSA data: %w", err)
 	}
 
 	// Verify signature if public key is provided
@@ -311,7 +336,7 @@ func ValidateVSAWithContent(ctx context.Context, imageRef string, policy policy.
 		if err := verifyVSASignatureFromEnvelope(envelope, publicKey); err != nil {
 			// For now, log the error but don't fail the validation
 			// This allows testing with mismatched keys
-			fmt.Printf("Warning: VSA signature verification failed: %v\n", err)
+			log.Warnf("VSA signature verification failed: %v", err)
 			signatureVerified = false
 		} else {
 			signatureVerified = true
@@ -321,7 +346,7 @@ func ValidateVSAWithContent(ctx context.Context, imageRef string, policy policy.
 	// Parse the VSA content from DSSE envelope to extract violations and successes
 	predicate, err := ParseVSAContent(envelope)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to parse VSA content: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to parse VSA content: %w", err)
 	}
 
 	// Create policy resolver and discover available rules
@@ -342,7 +367,7 @@ func ValidateVSAWithContent(ctx context.Context, imageRef string, policy policy.
 		ruleDiscovery := evaluator.NewRuleDiscoveryService()
 		rules, nonAnnotatedRules, err := ruleDiscovery.DiscoverRulesWithNonAnnotated(ctx, policySources)
 		if err != nil {
-			return nil, "", fmt.Errorf("failed to discover rules from policy sources: %w", err)
+			return nil, "", nil, fmt.Errorf("failed to discover rules from policy sources: %w", err)
 		}
 
 		// Combine rules for filtering
@@ -355,29 +380,197 @@ func ValidateVSAWithContent(ctx context.Context, imageRef string, policy policy.
 		vsaPolicyResolver = NewPolicyResolver(policyResolver, availableRules)
 	}
 
-	// Extract rule results from VSA predicate
+	// Process all components from the VSA predicate
+	result, err := validateAllComponentsFromPredicate(ctx, predicate, vsaPolicyResolver, digest)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("failed to validate components from VSA: %w", err)
+	}
+
+	result.SignatureVerified = signatureVerified
+
+	return result, envelope.Payload, predicate, nil
+}
+
+// extractComponentsFromPredicate extracts components from a parsed VSA predicate.
+// This function is separated for better testability and reusability.
+func extractComponentsFromPredicate(predicate *Predicate) []applicationsnapshot.Component {
+	if predicate.Results != nil && len(predicate.Results.Components) > 0 {
+		log.Debugf("Extracted %d components from VSA predicate for output", len(predicate.Results.Components))
+		return predicate.Results.Components
+	}
+
+	return []applicationsnapshot.Component{}
+}
+
+// validateAllComponentsFromPredicate processes all components from the VSA predicate.
+// It aggregates validation results from multiple components into a single result.
+func validateAllComponentsFromPredicate(ctx context.Context, predicate *Predicate, vsaPolicyResolver PolicyResolver, digest string) (*ValidationResult, error) {
+	// Check if we have components to process
+	if !hasComponents(predicate) {
+		log.Debugf("No components found in VSA predicate, using single-component logic")
+		return validateSingleComponent(ctx, predicate, vsaPolicyResolver, digest)
+	}
+
+	log.Debugf("Found %d components in VSA predicate", len(predicate.Results.Components))
+
+	// Pre-allocate slices with estimated capacity for better performance
+	componentCount := len(predicate.Results.Components)
+	allMissingRules := make([]MissingRule, 0, componentCount*2) // Estimate 2 missing rules per component
+	allFailingRules := make([]FailingRule, 0, componentCount*2) // Estimate 2 failing rules per component
+
+	var totalPassingCount, totalRequired int
+
+	// Process each component
+	for _, component := range predicate.Results.Components {
+		componentResult, err := validateComponent(ctx, component, vsaPolicyResolver)
+		if err != nil {
+			log.Warnf("Failed to validate component %s: %v", component.ContainerImage, err)
+			continue
+		}
+
+		// Aggregate results
+		allMissingRules = append(allMissingRules, componentResult.MissingRules...)
+		allFailingRules = append(allFailingRules, componentResult.FailingRules...)
+		totalPassingCount += componentResult.PassingCount
+		totalRequired += componentResult.TotalRequired
+	}
+
+	return createValidationResult(allMissingRules, allFailingRules, totalPassingCount, totalRequired, digest), nil
+}
+
+// hasComponents checks if the predicate has components to process.
+func hasComponents(predicate *Predicate) bool {
+	return predicate.Results != nil && len(predicate.Results.Components) > 0
+}
+
+// validateComponent validates a single component and returns its validation result.
+func validateComponent(ctx context.Context, component applicationsnapshot.Component, vsaPolicyResolver PolicyResolver) (*ValidationResult, error) {
+	// Extract rule results for this component
+	componentRuleResults := extractRuleResultsFromComponent(component)
+
+	// Get required rules for this component's image
+	requiredRules, err := getRequiredRulesForComponent(ctx, component, componentRuleResults, vsaPolicyResolver)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get required rules for component %s: %w", component.ContainerImage, err)
+	}
+
+	// Compare rules for this component
+	return compareRules(componentRuleResults, requiredRules, component.ContainerImage), nil
+}
+
+// getRequiredRulesForComponent gets the required rules for a component, with fallback logic.
+func getRequiredRulesForComponent(ctx context.Context, component applicationsnapshot.Component, componentRuleResults map[string][]RuleResult, vsaPolicyResolver PolicyResolver) (map[string]bool, error) {
+	if vsaPolicyResolver == nil {
+		// If no policy resolver is available, consider all rules in component as required
+		return createRequiredRulesFromResults(componentRuleResults), nil
+	}
+
+	requiredRules, err := vsaPolicyResolver.GetRequiredRules(ctx, component.ContainerImage)
+	if err != nil {
+		log.Warnf("Failed to get required rules for component %s: %v", component.ContainerImage, err)
+		// Use all rules found in the component as required
+		return createRequiredRulesFromResults(componentRuleResults), nil
+	}
+
+	return requiredRules, nil
+}
+
+// createRequiredRulesFromResults creates a required rules map from component rule results.
+func createRequiredRulesFromResults(componentRuleResults map[string][]RuleResult) map[string]bool {
+	requiredRules := make(map[string]bool, len(componentRuleResults))
+	for ruleID := range componentRuleResults {
+		requiredRules[ruleID] = true
+	}
+	return requiredRules
+}
+
+// validateSingleComponent handles the fallback case for single-component validation.
+func validateSingleComponent(ctx context.Context, predicate *Predicate, vsaPolicyResolver PolicyResolver, digest string) (*ValidationResult, error) {
+	// Extract rule results from VSA predicate (original logic)
 	vsaRuleResults := extractRuleResultsFromPredicate(predicate)
 
 	// Get required rules from policy resolver
-	var requiredRules map[string]bool
-	if vsaPolicyResolver != nil {
-		requiredRules, err = vsaPolicyResolver.GetRequiredRules(ctx, digest)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to get required rules from policy: %w", err)
-		}
-	} else {
-		// If no policy resolver is available, consider all rules in VSA as required
-		requiredRules = make(map[string]bool)
-		for ruleID := range vsaRuleResults {
-			requiredRules[ruleID] = true
-		}
+	requiredRules, err := getRequiredRulesForDigest(ctx, digest, vsaRuleResults, vsaPolicyResolver)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get required rules from policy: %w", err)
 	}
 
 	// Compare VSA rules against required rules
-	result := compareRules(vsaRuleResults, requiredRules, digest)
-	result.SignatureVerified = signatureVerified
+	return compareRules(vsaRuleResults, requiredRules, digest), nil
+}
 
-	return result, envelope.Payload, nil
+// getRequiredRulesForDigest gets the required rules for a digest, with fallback logic.
+func getRequiredRulesForDigest(ctx context.Context, digest string, vsaRuleResults map[string][]RuleResult, vsaPolicyResolver PolicyResolver) (map[string]bool, error) {
+	if vsaPolicyResolver == nil {
+		// If no policy resolver is available, consider all rules in VSA as required
+		return createRequiredRulesFromResults(vsaRuleResults), nil
+	}
+
+	requiredRules, err := vsaPolicyResolver.GetRequiredRules(ctx, digest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get required rules: %w", err)
+	}
+
+	return requiredRules, nil
+}
+
+// createValidationResult creates a ValidationResult from aggregated component results.
+func createValidationResult(missingRules []MissingRule, failingRules []FailingRule, passingCount, totalRequired int, digest string) *ValidationResult {
+	result := &ValidationResult{
+		MissingRules:  missingRules,
+		FailingRules:  failingRules,
+		PassingCount:  passingCount,
+		TotalRequired: totalRequired,
+		ImageDigest:   digest,
+		Passed:        len(missingRules) == 0 && len(failingRules) == 0,
+	}
+
+	// Generate summary
+	if result.Passed {
+		result.Summary = fmt.Sprintf("PASS: All %d required rules are present and passing", totalRequired)
+	} else {
+		result.Summary = fmt.Sprintf("FAIL: %d rules missing, %d rules failing", len(missingRules), len(failingRules))
+	}
+
+	return result
+}
+
+// extractRuleResultsFromComponent extracts rule results from a single component.
+// It processes successes, violations, and warnings into a unified rule results map.
+func extractRuleResultsFromComponent(component applicationsnapshot.Component) map[string][]RuleResult {
+	// Pre-allocate with estimated capacity for better performance
+	totalRules := len(component.Successes) + len(component.Violations) + len(component.Warnings)
+	ruleResults := make(map[string][]RuleResult, totalRules/2) // Estimate 2 rules per ruleID
+
+	// Process all rule types using a helper function to reduce code duplication
+	processRuleResults(component.Successes, "success", component.ContainerImage, ruleResults)
+	processRuleResults(component.Violations, "failure", component.ContainerImage, ruleResults)
+	processRuleResults(component.Warnings, "warning", component.ContainerImage, ruleResults)
+
+	return ruleResults
+}
+
+// processRuleResults processes a slice of rule results and adds them to the ruleResults map.
+// This helper function reduces code duplication across different rule types.
+func processRuleResults(rules []evaluator.Result, status, componentImage string, ruleResults map[string][]RuleResult) {
+	for _, rule := range rules {
+		ruleID := extractMetadataString(rule, "code")
+		if ruleID == "" {
+			continue // Skip rules without a code
+		}
+
+		ruleResult := RuleResult{
+			RuleID:         ruleID,
+			Status:         status,
+			Message:        rule.Message,
+			Title:          extractMetadataString(rule, "title"),
+			Description:    extractMetadataString(rule, "description"),
+			Solution:       extractMetadataString(rule, "solution"),
+			ComponentImage: componentImage,
+		}
+
+		ruleResults[ruleID] = append(ruleResults[ruleID], ruleResult)
+	}
 }
 
 // packageCache caches package name extractions to avoid repeated string operations
