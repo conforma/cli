@@ -78,50 +78,6 @@ func NewRekorVSARetrieverWithClient(client RekorClient, opts RetrievalOptions) *
 	}
 }
 
-// verifyEntryContainsImageDigest checks if an entry contains the specified image digest
-func (r *RekorVSARetriever) verifyEntryContainsImageDigest(entry models.LogEntryAnon, imageDigest string) bool {
-	// Check if the entry has attestation data
-	if entry.Attestation == nil || entry.Attestation.Data == nil {
-		return false
-	}
-
-	// The attestation data should contain the VSA content
-	attestationData := entry.Attestation.Data
-
-	// Parse the VSA content
-	var vsaContent map[string]any
-	if err := json.Unmarshal(attestationData, &vsaContent); err != nil {
-		return false
-	}
-
-	// Check if the subject contains the image digest
-	if subject, ok := vsaContent["subject"].([]any); ok {
-		for _, subj := range subject {
-			if subjMap, ok := subj.(map[string]any); ok {
-				if digest, ok := subjMap["digest"].(map[string]any); ok {
-					if sha256, ok := digest["sha256"].(string); ok {
-						// Check for exact match or if the VSA digest is contained in the search digest
-						if strings.Contains(imageDigest, sha256) || strings.Contains(sha256, imageDigest) {
-							return true
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// Also check the predicate for imageRef field which might contain the manifest digest
-	if predicate, ok := vsaContent["predicate"].(map[string]any); ok {
-		if imageRef, ok := predicate["imageRef"].(string); ok {
-			if strings.Contains(imageRef, imageDigest) {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
 // findLatestEntryByIntegratedTime finds the entry with the latest IntegratedTime
 // If multiple entries have the same time or no IntegratedTime, returns the first one
 func (r *RekorVSARetriever) findLatestEntryByIntegratedTime(entries []models.LogEntryAnon) *models.LogEntryAnon {
@@ -813,45 +769,4 @@ func NewRekorVSADataRetriever(opts RetrievalOptions, imageDigest string) (*Rekor
 func (r *RekorVSADataRetriever) RetrieveVSA(ctx context.Context, imageDigest string) (*ssldsse.Envelope, error) {
 	log.Debugf("RekorVSADataRetriever.RetrieveVSA called with digest: %s - DEBUG LOG ADDED", imageDigest)
 	return r.rekorRetriever.RetrieveVSA(ctx, imageDigest)
-}
-
-// extractStatementFromIntotoEntry extracts the in-toto Statement JSON from an intoto entry
-// This method handles the actual structure of intoto entries from Rekor
-func (r *RekorVSADataRetriever) extractStatementFromIntotoEntry(entry models.LogEntryAnon) ([]byte, error) {
-	// For intoto entries, the VSA data is in the Attestation field, not in Body.spec.content
-	if entry.Attestation != nil && entry.Attestation.Data != nil {
-		// The attestation data contains the actual in-toto Statement JSON
-		return entry.Attestation.Data, nil
-	}
-
-	// Fallback: try to extract from body structure (though this shouldn't be needed)
-	body, err := r.rekorRetriever.decodeBodyJSON(entry)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode entry body: %w", err)
-	}
-
-	// Check if this is an intoto entry
-	if kind, ok := body["kind"].(string); !ok || kind != "intoto" {
-		return nil, fmt.Errorf("entry is not an intoto entry (kind: %s)", kind)
-	}
-
-	// Extract the content from spec.content
-	spec, ok := body["spec"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("spec field not found in intoto entry")
-	}
-
-	content, ok := spec["content"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("content field not found in intoto entry spec")
-	}
-
-	// The content should contain the in-toto Statement JSON
-	// Convert to JSON bytes
-	stmtBytes, err := json.Marshal(content)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal in-toto Statement content: %w", err)
-	}
-
-	return stmtBytes, nil
 }

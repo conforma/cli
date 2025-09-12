@@ -36,14 +36,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // RekorBackend implements VSA storage in Rekor transparency log using single in-toto 0.0.2 entries
 type RekorBackend struct {
 	serverURL string

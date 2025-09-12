@@ -28,11 +28,10 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	ssldsse "github.com/secure-systems-lab/go-securesystemslib/dsse"
 	"github.com/sigstore/sigstore/pkg/signature"
+	sigd "github.com/sigstore/sigstore/pkg/signature/dsse"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/conforma/cli/internal/applicationsnapshot"
-	sigd "github.com/sigstore/sigstore/pkg/signature/dsse"
-
 	"github.com/conforma/cli/internal/evaluator"
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/policy/source"
@@ -106,19 +105,12 @@ func ParseVSAContent(envelope *ssldsse.Envelope) (*Predicate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode DSSE payload: %w", err)
 	}
-	return ParseVSAContentFromPayload(string(payloadBytes))
-}
 
-// ParseVSAContentFromPayload parses VSA content from a raw payload string and returns a Predicate
-// The function handles different payload formats:
-// 1. In-toto Statement wrapped in DSSE envelope
-// 2. Raw Predicate directly in DSSE payload
-func ParseVSAContentFromPayload(payload string) (*Predicate, error) {
 	var predicate Predicate
 
 	// Try to parse the payload as an in-toto statement first
 	var statement InTotoStatement
-	if err := json.Unmarshal([]byte(payload), &statement); err == nil && statement.PredicateType != "" {
+	if err := json.Unmarshal(payloadBytes, &statement); err == nil && statement.PredicateType != "" {
 		// It's an in-toto statement, extract the predicate
 		predicateBytes, err := json.Marshal(statement.Predicate)
 		if err != nil {
@@ -130,7 +122,7 @@ func ParseVSAContentFromPayload(payload string) (*Predicate, error) {
 		}
 	} else {
 		// The payload is directly the predicate
-		if err := json.Unmarshal([]byte(payload), &predicate); err != nil {
+		if err := json.Unmarshal(payloadBytes, &predicate); err != nil {
 			return nil, fmt.Errorf("failed to parse VSA predicate from DSSE payload: %w", err)
 		}
 	}
@@ -601,45 +593,6 @@ func extractPackageFromCode(code string) string {
 	packageCacheMutex.Unlock()
 
 	return packageName
-}
-
-// verifyVSASignature verifies the signature of a VSA file using cosign's DSSE verification
-func verifyVSASignature(vsaContent string, publicKeyPath string) error {
-	// Load the verifier from the public key file
-	verifier, err := signature.LoadVerifierFromPEMFile(publicKeyPath, crypto.SHA256)
-	if err != nil {
-		return fmt.Errorf("failed to load verifier from public key file: %w", err)
-	}
-
-	// Get the public key
-	pub, err := verifier.PublicKey()
-	if err != nil {
-		return fmt.Errorf("failed to get public key: %w", err)
-	}
-
-	// Create DSSE envelope verifier using go-securesystemslib
-	ev, err := ssldsse.NewEnvelopeVerifier(&sigd.VerifierAdapter{
-		SignatureVerifier: verifier,
-		Pub:               pub,
-		// PubKeyID left empty: accept this key without keyid constraint
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create envelope verifier: %w", err)
-	}
-
-	// Parse the DSSE envelope
-	var env ssldsse.Envelope
-	if err := json.Unmarshal([]byte(vsaContent), &env); err != nil {
-		return fmt.Errorf("failed to parse DSSE envelope: %w", err)
-	}
-
-	// Verify the signature
-	ctx := context.Background()
-	if _, err := ev.Verify(ctx, &env); err != nil {
-		return fmt.Errorf("signature verification failed: %w", err)
-	}
-
-	return nil
 }
 
 // verifyVSASignatureFromEnvelope verifies the signature of a DSSE envelope
