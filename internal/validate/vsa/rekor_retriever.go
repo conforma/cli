@@ -100,11 +100,21 @@ func (r *RekorVSARetriever) verifyEntryContainsImageDigest(entry models.LogEntry
 			if subjMap, ok := subj.(map[string]any); ok {
 				if digest, ok := subjMap["digest"].(map[string]any); ok {
 					if sha256, ok := digest["sha256"].(string); ok {
-						if strings.Contains(imageDigest, sha256) {
+						// Check for exact match or if the VSA digest is contained in the search digest
+						if strings.Contains(imageDigest, sha256) || strings.Contains(sha256, imageDigest) {
 							return true
 						}
 					}
 				}
+			}
+		}
+	}
+
+	// Also check the predicate for imageRef field which might contain the manifest digest
+	if predicate, ok := vsaContent["predicate"].(map[string]any); ok {
+		if imageRef, ok := predicate["imageRef"].(string); ok {
+			if strings.Contains(imageRef, imageDigest) {
+				return true
 			}
 		}
 	}
@@ -342,19 +352,7 @@ func (r *RekorVSARetriever) RetrieveVSA(ctx context.Context, imageDigest string)
 		return nil, fmt.Errorf("failed to select latest in-toto 0.0.2 entry for image digest: %s", imageDigest)
 	}
 
-	// Special case: Try to fetch the specific UUID that contains the correct VSA content
-	// This is a workaround for the UUID mapping issue
-	specificUUID := "108e9186e8c5677a74190cd0448406d223d49e339a86d5c0b8a26f57fec6cdf0d5b050131b3d00ac"
-	if specificEntry, err := r.client.GetLogEntryByUUID(ctx, specificUUID); err == nil {
-		if specificEntry != nil {
-			log.Debugf("Successfully fetched specific UUID: %s", specificUUID)
-			// Verify this entry contains the correct image digest
-			if r.verifyEntryContainsImageDigest(*specificEntry, imageDigest) {
-				log.Debugf("Specific UUID contains correct image digest, using it")
-				intotoV002Entry = specificEntry
-			}
-		}
-	}
+	// Note: Removed hardcoded UUID workaround - let normal selection logic work
 
 	// Log the selected entry details
 	selectedUUID := "unknown"
