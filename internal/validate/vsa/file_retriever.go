@@ -18,6 +18,7 @@ package vsa
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -66,9 +67,11 @@ func (f *FileVSADataRetriever) RetrieveVSA(ctx context.Context, imageDigest stri
 	}
 
 	// If not a DSSE envelope, wrap the content in a DSSE envelope
+	// Base64 encode the payload as expected by DSSE format
+	payload := base64.StdEncoding.EncodeToString(data)
 	envelope = ssldsse.Envelope{
 		PayloadType: "application/vnd.in-toto+json",
-		Payload:     string(data),
+		Payload:     payload,
 		Signatures:  []ssldsse.Signature{},
 	}
 

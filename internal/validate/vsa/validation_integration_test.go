@@ -18,6 +18,7 @@ package vsa
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"testing"
 	"time"
@@ -223,9 +224,11 @@ func TestValidateVSAWithDetails(t *testing.T) {
 			validateResult: func(t *testing.T, result *ValidationResult, content string) {
 				assert.True(t, result.Passed)
 				assert.NotEmpty(t, content)
-				// Verify the content is valid JSON
+				// Verify the content is valid base64-encoded JSON
+				decodedContent, err := base64.StdEncoding.DecodeString(content)
+				assert.NoError(t, err)
 				var predicate Predicate
-				err := json.Unmarshal([]byte(content), &predicate)
+				err = json.Unmarshal(decodedContent, &predicate)
 				assert.NoError(t, err)
 			},
 		},
@@ -391,9 +394,12 @@ func createTestVSAContent(t *testing.T, ruleResults map[string]string) string {
 func createTestDSSEEnvelope(t *testing.T, ruleResults map[string]string) *ssldsse.Envelope {
 	vsaContent := createTestVSAContent(t, ruleResults)
 
+	// Base64 encode the payload as expected by DSSE format
+	payload := base64.StdEncoding.EncodeToString([]byte(vsaContent))
+
 	envelope := &ssldsse.Envelope{
 		PayloadType: "application/vnd.in-toto+json",
-		Payload:     vsaContent,
+		Payload:     payload,
 		Signatures: []ssldsse.Signature{
 			{
 				KeyID: "test-key-id",

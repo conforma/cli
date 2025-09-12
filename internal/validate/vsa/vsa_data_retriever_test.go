@@ -18,6 +18,7 @@ package vsa
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"testing"
 	"time"
@@ -54,7 +55,9 @@ func TestFileVSADataRetriever(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.NotNil(t, envelope)
-		assert.Equal(t, testVSA, envelope.Payload)
+		// The payload should be base64-encoded
+		expectedPayload := base64.StdEncoding.EncodeToString([]byte(testVSA))
+		assert.Equal(t, expectedPayload, envelope.Payload)
 	})
 
 	t.Run("returns error for non-existent file", func(t *testing.T) {
