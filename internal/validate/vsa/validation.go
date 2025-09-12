@@ -278,23 +278,18 @@ type ValidationResultWithContent struct {
 	VSAContent string
 }
 
-// ValidateVSA is the main validation function called by the command
+// ValidateVSA performs basic VSA validation and returns only the validation result.
+// Use this for simple validation cases where you only need to know if validation passed.
 func ValidateVSA(ctx context.Context, imageRef string, policy policy.Policy, retriever VSADataRetriever, publicKey string) (*ValidationResult, error) {
-	result, _, err := ValidateVSAWithContent(ctx, imageRef, policy, retriever, publicKey)
+	result, _, _, err := validateVSA(ctx, imageRef, policy, retriever, publicKey)
 	return result, err
 }
 
-// ValidateVSAWithContent returns both validation result and VSA content to avoid redundant retrieval
-func ValidateVSAWithContent(ctx context.Context, imageRef string, policy policy.Policy, retriever VSADataRetriever, publicKey string) (*ValidationResult, string, error) {
-	result, payload, _, err := validateVSAWithPredicate(ctx, imageRef, policy, retriever, publicKey)
-	return result, payload, err
-}
-
-// ValidateVSAWithContentAndComponents returns validation result, VSA content, and all components that were processed.
-// This function is optimized for cases where individual components need to be extracted for output formatting.
-func ValidateVSAWithContentAndComponents(ctx context.Context, imageRef string, policy policy.Policy, retriever VSADataRetriever, publicKey string) (*ValidationResult, string, []applicationsnapshot.Component, error) {
-	// Use the existing function and extract components from the parsed predicate
-	result, payload, predicate, err := validateVSAWithPredicate(ctx, imageRef, policy, retriever, publicKey)
+// ValidateVSAWithDetails performs VSA validation and returns the validation result,
+// VSA content, and all components that were processed.
+// Use this when you need the VSA content or component details for further processing.
+func ValidateVSAWithDetails(ctx context.Context, imageRef string, policy policy.Policy, retriever VSADataRetriever, publicKey string) (*ValidationResult, string, []applicationsnapshot.Component, error) {
+	result, payload, predicate, err := validateVSA(ctx, imageRef, policy, retriever, publicKey)
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -305,9 +300,8 @@ func ValidateVSAWithContentAndComponents(ctx context.Context, imageRef string, p
 	return result, payload, components, nil
 }
 
-// validateVSAWithPredicate is a helper function that returns the parsed predicate along with validation results.
-// This avoids code duplication while providing access to the parsed predicate.
-func validateVSAWithPredicate(ctx context.Context, imageRef string, policy policy.Policy, retriever VSADataRetriever, publicKey string) (*ValidationResult, string, *Predicate, error) {
+// validateVSA is the core implementation that returns the parsed predicate along with validation results.
+func validateVSA(ctx context.Context, imageRef string, policy policy.Policy, retriever VSADataRetriever, publicKey string) (*ValidationResult, string, *Predicate, error) {
 	// Extract digest from image reference
 	ref, err := name.ParseReference(imageRef)
 	if err != nil {

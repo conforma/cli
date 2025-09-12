@@ -197,8 +197,8 @@ func TestValidateVSA(t *testing.T) {
 	}
 }
 
-// TestValidateVSAWithContent tests the ValidateVSAWithContent function
-func TestValidateVSAWithContent(t *testing.T) {
+// TestValidateVSAWithDetails tests the ValidateVSAWithDetails function
+func TestValidateVSAWithDetails(t *testing.T) {
 	tests := []struct {
 		name           string
 		imageRef       string
@@ -249,7 +249,7 @@ func TestValidateVSAWithContent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, content, err := ValidateVSAWithContent(context.Background(), tt.imageRef, tt.policy, tt.retriever, tt.publicKey)
+			result, content, _, err := ValidateVSAWithDetails(context.Background(), tt.imageRef, tt.policy, tt.retriever, tt.publicKey)
 
 			if tt.expectError {
 				require.Error(t, err)
