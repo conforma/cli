@@ -69,6 +69,7 @@ mark (?) sign, for example: --output text=output.txt?show-successes=false
 --retry-max-retry:: maximum number of retry attempts (Default: 3)
 --retry-max-wait:: maximum wait time between retries (Default: 3s)
 --show-successes::  (Default: false)
+--show-warnings::  (Default: true)
 --timeout:: max overall execution duration (Default: 5m0s)
 --trace:: enable trace logging, set one or more comma separated values: none,all,perf,cpu,mem,opa,log (Default: none)
 --verbose:: more verbose output (Default: false)
