@@ -376,7 +376,7 @@ func validateImagesFromRekor(ctx context.Context, cmd *cobra.Command, data struc
 			}
 
 			// Call the validation function with content retrieval and component extraction
-			validationResult, vsaContent, vsaComponents, err := vsa.ValidateVSAWithContentAndComponents(ctx, comp.ContainerImage, data.policy, rekorRetriever, data.publicKey)
+			validationResult, vsaContent, vsaComponents, err := vsa.ValidateVSAWithDetails(ctx, comp.ContainerImage, data.policy, rekorRetriever, data.publicKey)
 			if err != nil {
 				err = fmt.Errorf("validation failed for %s: %w", comp.ContainerImage, err)
 				results <- result{err: err, component: comp, validationResult: nil, vsaComponents: nil}
