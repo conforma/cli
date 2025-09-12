@@ -127,7 +127,7 @@ func TestRekorVSARetriever_RetrieveVSA(t *testing.T) {
 			"content": {
 				"envelope": {
 					"payloadType": "application/vnd.in-toto+json",
-					"signatures": [{"sig": "dGVzdA==", "keyid": "test-key-id"}]
+					"signatures": [{"sig": "ZEdWemRBPT0=", "keyid": "test-key-id"}]
 				}
 			}
 		}
@@ -140,7 +140,7 @@ func TestRekorVSARetriever_RetrieveVSA(t *testing.T) {
 				LogID:    &[]string{"intoto-v002-uuid"}[0],
 				Body:     base64.StdEncoding.EncodeToString([]byte(intotoV002Body)),
 				Attestation: &models.LogEntryAnonAttestation{
-					Data: strfmt.Base64(base64.StdEncoding.EncodeToString([]byte(vsaStatement))),
+					Data: strfmt.Base64([]byte(vsaStatement)),
 				},
 			},
 		},
@@ -161,6 +161,10 @@ func TestRekorVSARetriever_RetrieveVSA(t *testing.T) {
 	payloadBytes, err := base64.StdEncoding.DecodeString(envelope.Payload)
 	assert.NoError(t, err)
 	assert.Equal(t, vsaStatement, string(payloadBytes))
+
+	// Verify the payload itself is base64-encoded
+	expectedPayload := base64.StdEncoding.EncodeToString([]byte(vsaStatement))
+	assert.Equal(t, expectedPayload, envelope.Payload)
 
 	// Verify signatures
 	assert.Len(t, envelope.Signatures, 1)

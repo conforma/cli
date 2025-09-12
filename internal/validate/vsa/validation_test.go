@@ -17,6 +17,7 @@
 package vsa
 
 import (
+	"encoding/base64"
 	"testing"
 
 	appapi "github.com/konflux-ci/application-api/api/v1alpha1"
@@ -137,9 +138,11 @@ func TestParseVSAContent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a DSSE envelope from the content
+			// Base64 encode the payload as expected by DSSE format
+			payload := base64.StdEncoding.EncodeToString([]byte(tt.content))
 			envelope := &ssldsse.Envelope{
 				PayloadType: "application/vnd.in-toto+json",
-				Payload:     tt.content,
+				Payload:     payload,
 				Signatures:  []ssldsse.Signature{},
 			}
 			predicate, err := ParseVSAContent(envelope)
