@@ -22,6 +22,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/conforma/cli/cmd/compare"
 	"github.com/conforma/cli/cmd/fetch"
 	"github.com/conforma/cli/cmd/initialize"
 	"github.com/conforma/cli/cmd/inspect"
@@ -56,6 +57,7 @@ func init() {
 }
 
 func AddCommandsTo(cmd *cobra.Command) {
+	cmd.AddCommand(compare.CompareCmd)
 	cmd.AddCommand(fetch.FetchCmd)
 	cmd.AddCommand(initialize.InitCmd)
 	cmd.AddCommand(inspect.InspectCmd)
