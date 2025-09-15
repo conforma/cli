@@ -1,5 +1,6 @@
 * xref:reference.adoc[Command Reference]
 ** xref:ec.adoc[ec]
+** xref:ec_compare.adoc[ec compare]
 ** xref:ec_fetch.adoc[ec fetch]
 ** xref:ec_fetch_policy.adoc[ec fetch policy]
 ** xref:ec_init.adoc[ec init]
