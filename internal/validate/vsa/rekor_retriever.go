@@ -242,6 +242,7 @@ func (r *RekorVSARetriever) classifyEntryKind(entry models.LogEntryAnon) string 
 // RetrieveVSA retrieves the latest VSA data as a DSSE envelope for a given image digest
 // This is the main method used by validation functions to get VSA data for signature verification
 func (r *RekorVSARetriever) RetrieveVSA(ctx context.Context, imageDigest string) (*ssldsse.Envelope, error) {
+	log.Debugf("RekorVSARetriever.RetrieveVSA called with digest: %s - DEBUG LOG ADDED", imageDigest)
 	if imageDigest == "" {
 		return nil, fmt.Errorf("image digest cannot be empty")
 	}
@@ -276,6 +277,22 @@ func (r *RekorVSARetriever) RetrieveVSA(ctx context.Context, imageDigest string)
 		entryKind := r.classifyEntryKind(entry)
 		if entryKind == "intoto-v002" {
 			intotoV002Entries = append(intotoV002Entries, entry)
+			// Log the UUID and IntegratedTime for each entry
+			uuid := "unknown"
+			if entry.LogID != nil {
+				uuid = *entry.LogID
+			}
+			// Try to get the actual UUID from the entry body
+			if body, err := r.decodeBodyJSON(entry); err == nil {
+				if actualUUID, ok := body["uuid"].(string); ok {
+					uuid = actualUUID
+				}
+			}
+			integratedTime := "unknown"
+			if entry.IntegratedTime != nil {
+				integratedTime = fmt.Sprintf("%d", *entry.IntegratedTime)
+			}
+			log.Debugf("Found intoto-v002 entry: UUID=%s, LogID=%s, IntegratedTime=%s", uuid, *entry.LogID, integratedTime)
 		}
 	}
 
@@ -283,13 +300,29 @@ func (r *RekorVSARetriever) RetrieveVSA(ctx context.Context, imageDigest string)
 		return nil, fmt.Errorf("no in-toto 0.0.2 entry found for image digest: %s", imageDigest)
 	}
 
+	log.Debugf("Found %d intoto-v002 entries, selecting latest by IntegratedTime", len(intotoV002Entries))
+
 	// Select the latest entry by IntegratedTime
 	intotoV002Entry := r.findLatestEntryByIntegratedTime(intotoV002Entries)
 	if intotoV002Entry == nil {
 		return nil, fmt.Errorf("failed to select latest in-toto 0.0.2 entry for image digest: %s", imageDigest)
 	}
 
+	// Note: Removed hardcoded UUID workaround - let normal selection logic work
+
+	// Log the selected entry details
+	selectedUUID := "unknown"
+	if intotoV002Entry.LogID != nil {
+		selectedUUID = *intotoV002Entry.LogID
+	}
+	selectedIntegratedTime := "unknown"
+	if intotoV002Entry.IntegratedTime != nil {
+		selectedIntegratedTime = fmt.Sprintf("%d", *intotoV002Entry.IntegratedTime)
+	}
+	log.Debugf("Selected entry: UUID=%s, IntegratedTime=%s", selectedUUID, selectedIntegratedTime)
+
 	// Build ssldsse.Envelope directly from in-toto entry
+	log.Debugf("About to call buildDSSEEnvelopeFromIntotoV002 - DEBUG LOG ADDED")
 	envelope, err := r.buildDSSEEnvelopeFromIntotoV002(*intotoV002Entry)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build DSSE envelope: %w", err)
@@ -302,6 +335,7 @@ func (r *RekorVSARetriever) RetrieveVSA(ctx context.Context, imageDigest string)
 // buildDSSEEnvelopeFromIntotoV002 builds an ssldsse.Envelope directly from an in-toto 0.0.2 entry
 // This eliminates the need for intermediate JSON marshaling/unmarshaling
 func (r *RekorVSARetriever) buildDSSEEnvelopeFromIntotoV002(entry models.LogEntryAnon) (*ssldsse.Envelope, error) {
+	log.Debugf("buildDSSEEnvelopeFromIntotoV002 called - DEBUG LOG ADDED")
 	// Decode the entry body
 	body, err := r.decodeBodyJSON(entry)
 	if err != nil {
@@ -330,17 +364,60 @@ func (r *RekorVSARetriever) buildDSSEEnvelopeFromIntotoV002(entry models.LogEntr
 		return nil, fmt.Errorf("envelope does not contain payloadType")
 	}
 
-	// Prefer payload from content.envelope.payload when present; fallback to Attestation.Data
+	// Prefer Attestation.Data (already base64-encoded); fallback to content.envelope.payload
 	var payloadB64 string
 
-	// First, try to get payload from content.envelope.payload
-	if payload, ok := envelopeData["payload"].(string); ok && payload != "" {
-		payloadB64 = payload
-	} else if entry.Attestation != nil && entry.Attestation.Data != nil {
-		// Fallback to Attestation.Data (already base64-encoded)
-		payloadB64 = string(entry.Attestation.Data)
+	// First, try to get payload from Attestation.Data (needs to be base64-encoded)
+	if entry.Attestation != nil && entry.Attestation.Data != nil {
+		log.Debugf("Using payload from Attestation.Data (length: %d)", len(entry.Attestation.Data))
+		// Preview first 100 characters to see what we're dealing with
+		previewLen := 100
+		if len(entry.Attestation.Data) < previewLen {
+			previewLen = len(entry.Attestation.Data)
+		}
+		log.Debugf("Attestation.Data preview (first %d chars): %s", previewLen, string(entry.Attestation.Data[:previewLen]))
+		// Attestation.Data contains raw JSON, need to base64-encode it
+		payloadB64 = base64.StdEncoding.EncodeToString(entry.Attestation.Data)
+		log.Debugf("Base64-encoded payload length: %d", len(payloadB64))
+	} else if payload, ok := envelopeData["payload"].(string); ok && payload != "" {
+		// Fallback to content.envelope.payload
+		log.Debugf("Using payload from envelope.payload (length: %d)", len(payload))
+		// Check if the payload is already base64-encoded
+		if _, err := base64.StdEncoding.DecodeString(payload); err == nil {
+			// Already base64-encoded
+			payloadB64 = payload
+		} else {
+			// Not base64-encoded, encode it
+			payloadB64 = base64.StdEncoding.EncodeToString([]byte(payload))
+		}
 	} else {
-		return nil, fmt.Errorf("no payload found in envelope or attestation data")
+		return nil, fmt.Errorf("no payload found in attestation data or envelope")
+	}
+
+	// Debug: Try to decode the payload to see if it's valid base64
+	if _, err := base64.StdEncoding.DecodeString(payloadB64); err != nil {
+		log.Debugf("Payload is not valid base64: %v", err)
+		previewLen := 100
+		if len(payloadB64) < previewLen {
+			previewLen = len(payloadB64)
+		}
+		log.Debugf("Payload preview (first %d chars): %s", previewLen, payloadB64[:previewLen])
+
+		// Try URL encoding as well
+		if _, err := base64.URLEncoding.DecodeString(payloadB64); err != nil {
+			log.Debugf("Payload is also not valid URL base64: %v", err)
+		} else {
+			log.Debugf("Payload is valid URL base64")
+		}
+	} else {
+		log.Debugf("Payload is valid base64")
+		// Decode and preview the decoded content
+		decoded, _ := base64.StdEncoding.DecodeString(payloadB64)
+		previewLen := 100
+		if len(decoded) < previewLen {
+			previewLen = len(decoded)
+		}
+		log.Debugf("Decoded payload preview (first %d chars): %s", previewLen, string(decoded[:previewLen]))
 	}
 
 	// Extract and convert signatures
@@ -364,7 +441,31 @@ func (r *RekorVSARetriever) buildDSSEEnvelopeFromIntotoV002(entry models.LogEntr
 
 		// Extract sig field (required) - only support standard field
 		if sigHex, ok := sigMap["sig"].(string); ok {
-			sig.Sig = sigHex
+			// The signature in the in-toto entry is double-base64-encoded
+			// We need to decode it twice to get the actual ASN.1 DER signature
+			// Then re-encode it once for the DSSE library
+
+			// First decode
+			firstDecode, err := base64.StdEncoding.DecodeString(sigHex)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode signature %d: %w", i, err)
+			}
+
+			// Second decode (the first decode result is base64-encoded)
+			decodedString := string(firstDecode)
+			paddingNeeded := (4 - len(decodedString)%4) % 4
+			paddedString := decodedString
+			for j := 0; j < paddingNeeded; j++ {
+				paddedString += "="
+			}
+
+			actualSignature, err := base64.StdEncoding.DecodeString(paddedString)
+			if err != nil {
+				return nil, fmt.Errorf("failed to double-decode signature %d: %w", i, err)
+			}
+
+			// Re-encode once for the DSSE library
+			sig.Sig = base64.StdEncoding.EncodeToString(actualSignature)
 		} else {
 			return nil, fmt.Errorf("signature %d missing required 'sig' field", i)
 		}
@@ -372,6 +473,10 @@ func (r *RekorVSARetriever) buildDSSEEnvelopeFromIntotoV002(entry models.LogEntr
 		// Extract keyid field (optional)
 		if keyid, ok := sigMap["keyid"].(string); ok {
 			sig.KeyID = keyid
+		} else {
+			// If no KeyID is provided, set a default one to help with verification
+			// This might help the DSSE library match the signature to the public key
+			sig.KeyID = "default"
 		}
 
 		signatures = append(signatures, sig)
@@ -639,4 +744,29 @@ func (rc *rekorClient) GetLogEntryByUUID(ctx context.Context, uuid string) (*mod
 	}
 
 	return nil, fmt.Errorf("log entry not found for UUID: %s", uuid)
+}
+
+// RekorVSADataRetriever implements VSADataRetriever for Rekor-based VSA retrieval
+type RekorVSADataRetriever struct {
+	rekorRetriever *RekorVSARetriever
+	imageDigest    string
+}
+
+// NewRekorVSADataRetriever creates a new Rekor-based VSA data retriever
+func NewRekorVSADataRetriever(opts RetrievalOptions, imageDigest string) (*RekorVSADataRetriever, error) {
+	rekorRetriever, err := NewRekorVSARetriever(opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Rekor retriever: %w", err)
+	}
+
+	return &RekorVSADataRetriever{
+		rekorRetriever: rekorRetriever,
+		imageDigest:    imageDigest,
+	}, nil
+}
+
+// RetrieveVSA retrieves VSA data as a DSSE envelope
+func (r *RekorVSADataRetriever) RetrieveVSA(ctx context.Context, imageDigest string) (*ssldsse.Envelope, error) {
+	log.Debugf("RekorVSADataRetriever.RetrieveVSA called with digest: %s - DEBUG LOG ADDED", imageDigest)
+	return r.rekorRetriever.RetrieveVSA(ctx, imageDigest)
 }

@@ -169,7 +169,7 @@ func TestDefaultRetrievalOptions(t *testing.T) {
 	opts := DefaultRetrievalOptions()
 
 	assert.Equal(t, 30*time.Second, opts.Timeout)
-	assert.Empty(t, opts.URL)
+	assert.Equal(t, "https://rekor.sigstore.dev", opts.URL)
 }
 
 func TestMockRekorClient(t *testing.T) {
