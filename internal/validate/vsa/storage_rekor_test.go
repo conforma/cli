@@ -18,6 +18,7 @@ package vsa
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -302,84 +303,215 @@ func TestRekorBackend_PrepareDSSEForRekor(t *testing.T) {
 }
 
 func TestRekorBackend_UploadSingle_Consistency(t *testing.T) {
-	// Create a test backend
-	backend := &RekorBackend{
-		serverURL: "https://rekor.test",
+	tests := []struct {
+		name                string
+		backend             *RekorBackend
+		envelopeContent     []byte
+		pubKeyBytes         []byte
+		expectError         bool
+		expectedErrorMsg    string
+		validateConsistency bool
+	}{
+		{
+			name: "consistent preparation with valid DSSE envelope",
+			backend: &RekorBackend{
+				serverURL: "https://rekor.test",
+				timeout:   30 * time.Second,
+				retries:   3,
+			},
+			envelopeContent: []byte(`{
+				"payload": "dGVzdC1wYXlsb2Fk",
+				"payloadType": "application/vnd.in-toto+json",
+				"signatures": [
+					{
+						"sig": "dGVzdC1zaWduYXR1cmU="
+					}
+				]
+			}`),
+			pubKeyBytes:         []byte("-----BEGIN PUBLIC KEY-----\ntest-key\n-----END PUBLIC KEY-----"),
+			expectError:         false,
+			validateConsistency: true,
+		},
+		{
+			name: "consistent preparation with different valid envelope",
+			backend: &RekorBackend{
+				serverURL: "https://rekor.sigstore.dev",
+				timeout:   60 * time.Second,
+				retries:   5,
+			},
+			envelopeContent: []byte(`{
+				"payload": "YW5vdGhlci10ZXN0LXBheWxvYWQ=",
+				"payloadType": "application/vnd.in-toto+json",
+				"signatures": [
+					{
+						"sig": "YW5vdGhlci1zaWduYXR1cmU="
+					}
+				]
+			}`),
+			pubKeyBytes:         []byte("-----BEGIN PUBLIC KEY-----\nanother-key\n-----END PUBLIC KEY-----"),
+			expectError:         false,
+			validateConsistency: true,
+		},
+		{
+			name: "failure with invalid JSON envelope",
+			backend: &RekorBackend{
+				serverURL: "https://rekor.test",
+				timeout:   30 * time.Second,
+				retries:   3,
+			},
+			envelopeContent:     []byte(`{invalid json envelope`),
+			pubKeyBytes:         []byte("-----BEGIN PUBLIC KEY-----\ntest-key\n-----END PUBLIC KEY-----"),
+			expectError:         true,
+			expectedErrorMsg:    "invalid character",
+			validateConsistency: false,
+		},
 	}
 
-	// Create test envelope content with required payloadType field
-	envelopeContent := []byte(`{
-		"payload": "dGVzdC1wYXlsb2Fk",
-		"payloadType": "application/vnd.in-toto+json",
-		"signatures": [
-			{
-				"sig": "dGVzdC1zaWduYXR1cmU="
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test that prepareDSSEForRekor produces consistent output for single entry upload
+			preparedEnvelope1, payloadHash1, err := tt.backend.prepareDSSEForRekor(tt.envelopeContent, tt.pubKeyBytes)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedErrorMsg)
+				assert.Empty(t, preparedEnvelope1)
+				assert.Empty(t, payloadHash1)
+				return
 			}
-		]
-	}`)
 
-	// Mock public key
-	pubKeyBytes := []byte("-----BEGIN PUBLIC KEY-----\ntest-key\n-----END PUBLIC KEY-----")
+			require.NoError(t, err)
+			require.NotEmpty(t, payloadHash1)
 
-	// Test that prepareDSSEForRekor produces consistent output for single entry upload
-	preparedEnvelope1, payloadHash1, err := backend.prepareDSSEForRekor(envelopeContent, pubKeyBytes)
-	require.NoError(t, err)
-	require.NotEmpty(t, payloadHash1)
+			preparedEnvelope2, payloadHash2, err := tt.backend.prepareDSSEForRekor(tt.envelopeContent, tt.pubKeyBytes)
+			require.NoError(t, err)
+			require.NotEmpty(t, payloadHash2)
 
-	preparedEnvelope2, payloadHash2, err := backend.prepareDSSEForRekor(envelopeContent, pubKeyBytes)
-	require.NoError(t, err)
-	require.NotEmpty(t, payloadHash2)
+			if tt.validateConsistency {
+				// Verify that the same input produces the same output (deterministic)
+				require.Equal(t, preparedEnvelope1, preparedEnvelope2, "Prepared envelopes should be identical for single entry")
+				require.Equal(t, payloadHash1, payloadHash2, "Payload hashes should be identical for single entry")
 
-	// Verify that the same input produces the same output (deterministic)
-	require.Equal(t, preparedEnvelope1, preparedEnvelope2, "Prepared envelopes should be identical for single entry")
-	require.Equal(t, payloadHash1, payloadHash2, "Payload hashes should be identical for single entry")
+				// Verify that the content contains the injected public key
+				require.Contains(t, string(preparedEnvelope1), "-----BEGIN PUBLIC KEY-----", "Prepared content should contain public key")
 
-	// Verify that the content contains the injected public key
-	require.Contains(t, string(preparedEnvelope1), "-----BEGIN PUBLIC KEY-----", "Prepared content should contain public key")
+				// Verify that the content structure is preserved (not canonicalized)
+				// Parse the JSON to check specific fields
+				var envelope map[string]interface{}
+				err = json.Unmarshal(preparedEnvelope1, &envelope)
+				require.NoError(t, err)
 
-	// Verify that the content structure is preserved (not canonicalized)
-	// Parse the JSON to check specific fields
-	var envelope map[string]interface{}
-	err = json.Unmarshal(preparedEnvelope1, &envelope)
-	require.NoError(t, err)
+				// Check that payload field is preserved exactly
+				if payload, ok := envelope["payload"].(string); ok {
+					require.NotEmpty(t, payload, "Payload should be preserved")
+				}
 
-	// Check that payload field is preserved exactly
-	if payload, ok := envelope["payload"].(string); ok {
-		require.Equal(t, "dGVzdC1wYXlsb2Fk", payload, "Payload should be preserved exactly")
-	}
+				// Check that payloadType field is preserved exactly
+				if payloadType, ok := envelope["payloadType"].(string); ok {
+					require.Equal(t, "application/vnd.in-toto+json", payloadType, "PayloadType should be preserved exactly")
+				}
 
-	// Check that payloadType field is preserved exactly
-	if payloadType, ok := envelope["payloadType"].(string); ok {
-		require.Equal(t, "application/vnd.in-toto+json", payloadType, "PayloadType should be preserved exactly")
-	}
+				// Check signature field is preserved exactly
+				if signatures, ok := envelope["signatures"].([]interface{}); ok && len(signatures) > 0 {
+					if sigMap, ok := signatures[0].(map[string]interface{}); ok {
+						if sigValue, ok := sigMap["sig"].(string); ok {
+							require.NotEmpty(t, sigValue, "Signature should be preserved")
+						}
+					}
+				}
 
-	// Check signature field is preserved exactly
-	if signatures, ok := envelope["signatures"].([]interface{}); ok && len(signatures) > 0 {
-		if sigMap, ok := signatures[0].(map[string]interface{}); ok {
-			if sigValue, ok := sigMap["sig"].(string); ok {
-				require.Equal(t, "dGVzdC1zaWduYXR1cmU=", sigValue, "Signature should be preserved exactly")
+				// Verify that both the original and prepared content can be parsed as valid JSON
+				var originalEnvelope map[string]interface{}
+				err = json.Unmarshal(tt.envelopeContent, &originalEnvelope)
+				require.NoError(t, err, "Original envelope should be valid JSON")
+
+				var preparedEnvelope map[string]interface{}
+				err = json.Unmarshal(preparedEnvelope1, &preparedEnvelope)
+				require.NoError(t, err, "Prepared envelope should be valid JSON")
+
+				// Verify that the prepared envelope has the expected structure
+				require.Contains(t, preparedEnvelope, "payload", "Prepared envelope should contain payload")
+				require.Contains(t, preparedEnvelope, "payloadType", "Prepared envelope should contain payloadType")
+				require.Contains(t, preparedEnvelope, "signatures", "Prepared envelope should contain signatures")
+
+				// Check that the first signature contains publicKey
+				if signatures, ok := preparedEnvelope["signatures"].([]interface{}); ok && len(signatures) > 0 {
+					if sigMap, ok := signatures[0].(map[string]interface{}); ok {
+						require.Contains(t, sigMap, "publicKey", "First signature should contain publicKey field")
+					}
+				}
 			}
-		}
+		})
+	}
+}
+
+func TestRekorBackend_UploadWithSigner_EarlyValidation(t *testing.T) {
+	tests := []struct {
+		name             string
+		backend          *RekorBackend
+		signer           *Signer
+		envelopeContent  []byte
+		expectError      bool
+		expectedErrorMsg string
+	}{
+		{
+			name: "nil signer validation",
+			backend: &RekorBackend{
+				serverURL: "https://rekor.test",
+				timeout:   30 * time.Second,
+				retries:   3,
+			},
+			signer:           nil,
+			envelopeContent:  []byte(`{"test": "envelope"}`),
+			expectError:      true,
+			expectedErrorMsg: "signer is nil",
+		},
+		{
+			name: "empty envelope content validation",
+			backend: &RekorBackend{
+				serverURL: "https://rekor.test",
+				timeout:   30 * time.Second,
+				retries:   3,
+			},
+			signer: &Signer{
+				SignerVerifier: &mockSignerVerifier{
+					publicKey: func() crypto.PublicKey {
+						privateKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+						return &privateKey.PublicKey
+					}(),
+				},
+			},
+			envelopeContent:  []byte{},
+			expectError:      true,
+			expectedErrorMsg: "failed to prepare DSSE envelope",
+		},
+		{
+			name: "signer with nil public key",
+			backend: &RekorBackend{
+				serverURL: "https://rekor.test",
+				timeout:   30 * time.Second,
+				retries:   3,
+			},
+			signer: &Signer{
+				SignerVerifier: &mockSignerVerifier{
+					publicKey: nil,
+				},
+			},
+			envelopeContent:  []byte(`{"test": "envelope"}`),
+			expectError:      true,
+			expectedErrorMsg: "public key is nil",
+		},
 	}
 
-	// Verify that both the original and prepared content can be parsed as valid JSON
-	var originalEnvelope map[string]interface{}
-	err = json.Unmarshal(envelopeContent, &originalEnvelope)
-	require.NoError(t, err, "Original envelope should be valid JSON")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
 
-	var preparedEnvelope map[string]interface{}
-	err = json.Unmarshal(preparedEnvelope1, &preparedEnvelope)
-	require.NoError(t, err, "Prepared envelope should be valid JSON")
+			result, err := tt.backend.UploadWithSigner(ctx, tt.envelopeContent, tt.signer)
 
-	// Verify that the prepared envelope has the expected structure
-	require.Contains(t, preparedEnvelope, "payload", "Prepared envelope should contain payload")
-	require.Contains(t, preparedEnvelope, "payloadType", "Prepared envelope should contain payloadType")
-	require.Contains(t, preparedEnvelope, "signatures", "Prepared envelope should contain signatures")
-
-	// Check that the first signature contains publicKey
-	if signatures, ok := preparedEnvelope["signatures"].([]interface{}); ok && len(signatures) > 0 {
-		if sigMap, ok := signatures[0].(map[string]interface{}); ok {
-			require.Contains(t, sigMap, "publicKey", "First signature should contain publicKey field")
-		}
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tt.expectedErrorMsg)
+			assert.Empty(t, result)
+		})
 	}
 }

@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"testing"
 	"time"
 
@@ -626,4 +627,220 @@ func TestCreateVSACheckerFromUploadFlags(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestNewWriter tests the NewWriter constructor function
+func TestNewWriter(t *testing.T) {
+	writer := NewWriter()
+
+	// Verify default values are set correctly
+	assert.NotNil(t, writer)
+	assert.NotNil(t, writer.FS)
+	assert.Equal(t, "vsa-", writer.TempDirPrefix)
+	assert.Equal(t, os.FileMode(0o600), writer.FilePerm)
+}
+
+// TestNewGenerator tests the NewGenerator constructor function
+func TestNewGenerator(t *testing.T) {
+	// Create test data
+	report := applicationsnapshot.Report{
+		Policy: ecapi.EnterpriseContractPolicySpec{
+			Name: "test-policy",
+		},
+		EcVersion: "1.0.0",
+	}
+
+	component := applicationsnapshot.Component{
+		SnapshotComponent: appapi.SnapshotComponent{
+			Name:           "test-component",
+			ContainerImage: "test-image:tag",
+		},
+	}
+
+	// Test NewGenerator
+	generator := NewGenerator(report, component)
+
+	// Verify the generator is created correctly
+	assert.NotNil(t, generator)
+	assert.Equal(t, report, generator.Report)
+	assert.Equal(t, component, generator.Component)
+}
+
+// TestNewSignerVSA tests the NewSigner constructor function
+func TestNewSignerVSA(t *testing.T) {
+	// Set up test environment
+	t.Setenv("COSIGN_PASSWORD", "") // Use unencrypted key
+
+	// Create test key content (same as used in existing tests)
+	testKey := `-----BEGIN ENCRYPTED SIGSTORE PRIVATE KEY-----
+eyJrZGYiOnsibmFtZSI6InNjcnlwdCIsInBhcmFtcyI6eyJOIjo2NTUzNiwiciI6
+OCwicCI6MX0sInNhbHQiOiJLYU9OQzduQVJLOVgxM1FoaWFucjAwTTBGYys2Sitr
+dnAxN1FuanpiVk9nPSJ9LCJjaXBoZXIiOnsibmFtZSI6Im5hY2wvc2VjcmV0Ym94
+Iiwibm9uY2UiOiJVOHZqWWtqMlZOUFZGdlZFZWZ3bXZ5VGloUERrelBoaCJ9LCJj
+aXBoZXJ0ZXh0IjoidWNWMnQ4TTZVNFJvb29FOXc0d3dkc3E1RDYrS2RKY245dERT
+KzFwRDRGN040SVJOWEgzSTBua3h1a3NackFOUHR1emIvTkVYQ201dUp3Zjh3Qzl1
+VlprbXdwNU5jRUZ6b3ZNS3JCZmNvdXdjaEkrMzkrQ0NhbVZPbzBucmRnZjhvcmpK
+dXdrWDBYL1phY0RUTERGaUxyc1laMWVMMmlqMGU1MVRpZmVQNTl4WXNPK1FnM1Jv
+OURRVjNQMk9ndDFDaVFHeGg1VXhUZytGc3c9PSJ9
+-----END ENCRYPTED SIGSTORE PRIVATE KEY-----`
+
+	// Set up test filesystem
+	fs := afero.NewMemMapFs()
+	keyPath := "/test.key"
+	err := afero.WriteFile(fs, keyPath, []byte(testKey), 0600)
+	require.NoError(t, err)
+
+	t.Run("successful signer creation", func(t *testing.T) {
+		signer, err := NewSigner(keyPath, fs)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, signer)
+		assert.Equal(t, keyPath, signer.KeyPath)
+		assert.Equal(t, fs, signer.FS)
+		assert.NotNil(t, signer.WrapSigner)
+		assert.NotNil(t, signer.SignerVerifier)
+	})
+
+	t.Run("missing key file", func(t *testing.T) {
+		signer, err := NewSigner("/nonexistent.key", fs)
+
+		assert.Error(t, err)
+		assert.Nil(t, signer)
+		assert.Contains(t, err.Error(), "read key")
+	})
+
+	t.Run("invalid key content", func(t *testing.T) {
+		invalidKeyPath := "/invalid.key"
+		err := afero.WriteFile(fs, invalidKeyPath, []byte("invalid key content"), 0600)
+		require.NoError(t, err)
+
+		signer, err := NewSigner(invalidKeyPath, fs)
+
+		assert.Error(t, err)
+		assert.Nil(t, signer)
+		assert.Contains(t, err.Error(), "load private key")
+	})
+}
+
+// TestNewAttestor tests the NewAttestor constructor function
+func TestNewAttestorVSA(t *testing.T) {
+	// Set up test environment
+	t.Setenv("COSIGN_PASSWORD", "")
+
+	fs := afero.NewMemMapFs()
+	keyPath := "/test.key"
+	testKey := `-----BEGIN ENCRYPTED SIGSTORE PRIVATE KEY-----
+eyJrZGYiOnsibmFtZSI6InNjcnlwdCIsInBhcmFtcyI6eyJOIjo2NTUzNiwiciI6
+OCwicCI6MX0sInNhbHQiOiJLYU9OQzduQVJLOVgxM1FoaWFucjAwTTBGYys2Sitr
+dnAxN1FuanpiVk9nPSJ9LCJjaXBoZXIiOnsibmFtZSI6Im5hY2wvc2VjcmV0Ym94
+Iiwibm9uY2UiOiJVOHZqWWtqMlZOUFZGdlZFZWZ3bXZ5VGloUERrelBoaCJ9LCJj
+aXBoZXJ0ZXh0IjoidWNWMnQ4TTZVNFJvb29FOXc0d3dkc3E1RDYrS2RKY245dERT
+KzFwRDRGN040SVJOWEgzSTBua3h1a3NackFOUHR1emIvTkVYQ201dUp3Zjh3Qzl1
+VlprbXdwNU5jRUZ6b3ZNS3JCZmNvdXdjaEkrMzkrQ0NhbVZPbzBucmRnZjhvcmpK
+dXdrWDBYL1phY0RUTERGaUxyc1laMWVMMmlqMGU1MVRpZmVQNTl4WXNPK1FnM1Jv
+OURRVjNQMk9ndDFDaVFHeGg1VXhUZytGc3c9PSJ9
+-----END ENCRYPTED SIGSTORE PRIVATE KEY-----`
+
+	err := afero.WriteFile(fs, keyPath, []byte(testKey), 0600)
+	require.NoError(t, err)
+
+	signer, err := NewSigner(keyPath, fs)
+	require.NoError(t, err)
+
+	t.Run("successful attestor creation", func(t *testing.T) {
+		predicatePath := "/test.vsa.json"
+		repo := "quay.io/test/image"
+		digest := "sha256:abcd1234"
+
+		attestor, err := NewAttestor(predicatePath, repo, digest, signer)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, attestor)
+		assert.Equal(t, predicatePath, attestor.PredicatePath)
+		assert.Equal(t, "https://conforma.dev/verification_summary/v1", attestor.PredicateType)
+		assert.Equal(t, digest, attestor.Digest)
+		assert.Equal(t, repo, attestor.Repo)
+		assert.Equal(t, signer, attestor.Signer)
+	})
+}
+
+// TestWriterWithCustomSettings tests Writer with custom filesystem and settings
+func TestWriterWithCustomSettings(t *testing.T) {
+	// Create custom writer with different settings
+	fs := afero.NewMemMapFs()
+	writer := &Writer{
+		FS:            fs,
+		TempDirPrefix: "custom-vsa-",
+		FilePerm:      0o644,
+	}
+
+	// Create test predicate
+	pred := &Predicate{
+		ImageRef:     "test-image:tag",
+		Timestamp:    "2024-03-21T12:00:00Z",
+		Verifier:     "ec-cli",
+		PolicySource: "test-policy",
+		Component: map[string]interface{}{
+			"name":           "test-component",
+			"containerImage": "test-image:tag",
+		},
+	}
+
+	// Write predicate
+	vsaPath, err := writer.WritePredicate(pred)
+	require.NoError(t, err)
+
+	// Verify custom settings were used
+	assert.Contains(t, vsaPath, "custom-vsa-")
+
+	// Verify file was written to custom filesystem
+	exists, err := afero.Exists(fs, vsaPath)
+	assert.NoError(t, err)
+	assert.True(t, exists)
+}
+
+// TestWriterErrorHandling tests Writer error handling scenarios
+func TestWriterErrorHandling(t *testing.T) {
+	t.Run("filesystem write error", func(t *testing.T) {
+		// Create a read-only filesystem to simulate write errors
+		fs := afero.NewReadOnlyFs(afero.NewMemMapFs())
+		writer := &Writer{
+			FS:            fs,
+			TempDirPrefix: "vsa-",
+			FilePerm:      0o600,
+		}
+
+		pred := &Predicate{
+			ImageRef:  "test-image:tag",
+			Timestamp: "2024-03-21T12:00:00Z",
+			Verifier:  "ec-cli",
+			Component: map[string]interface{}{
+				"name": "test-component",
+			},
+		}
+
+		_, err := writer.WritePredicate(pred)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create temp directory")
+	})
+
+	t.Run("invalid predicate serialization", func(t *testing.T) {
+		fs := afero.NewMemMapFs()
+		writer := &Writer{
+			FS:            fs,
+			TempDirPrefix: "vsa-",
+			FilePerm:      0o600,
+		}
+
+		// Create predicate with data that can't be marshaled
+		pred := &Predicate{
+			Component: map[string]interface{}{
+				"invalid": make(chan int), // channels can't be marshaled to JSON
+			},
+		}
+
+		_, err := writer.WritePredicate(pred)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to marshal VSA predicate")
+	})
 }

@@ -289,6 +289,45 @@ func TestAttestPredicate(t *testing.T) {
 	}
 }
 
+func TestTargetDigest(t *testing.T) {
+	tests := []struct {
+		name           string
+		attestor       Attestor
+		expectedDigest string
+	}{
+		{
+			name: "valid sha256 digest",
+			attestor: Attestor{
+				Digest: "sha256:abc123def456789012345678901234567890123456789012345678901234567890",
+			},
+			expectedDigest: "sha256:abc123def456789012345678901234567890123456789012345678901234567890",
+		},
+		{
+			name: "different valid digest",
+			attestor: Attestor{
+				Digest: "sha256:fedcba0987654321098765432109876543210987654321098765432109876543",
+			},
+			expectedDigest: "sha256:fedcba0987654321098765432109876543210987654321098765432109876543",
+		},
+		{
+			name: "empty digest",
+			attestor: Attestor{
+				Digest: "",
+			},
+			expectedDigest: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.attestor.TargetDigest()
+			if result != tt.expectedDigest {
+				t.Errorf("TargetDigest() = %q, want %q", result, tt.expectedDigest)
+			}
+		})
+	}
+}
+
 func TestWriteEnvelope(t *testing.T) {
 	t.Setenv("COSIGN_PASSWORD", "")
 

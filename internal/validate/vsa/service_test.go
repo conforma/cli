@@ -18,16 +18,128 @@ package vsa
 
 import (
 	"context"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"encoding/base64"
+	"encoding/json"
+	"io"
+	"math/big"
 	"testing"
 
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
 	app "github.com/konflux-ci/application-api/api/v1alpha1"
+	"github.com/sigstore/cosign/v2/pkg/types"
+	"github.com/sigstore/sigstore/pkg/signature"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/conforma/cli/internal/applicationsnapshot"
 	"github.com/conforma/cli/internal/evaluator"
 )
+
+// testFakeSigner implements signature.SignerVerifier for testing
+type testFakeSigner struct{}
+
+func (f *testFakeSigner) PublicKey(opts ...signature.PublicKeyOption) (crypto.PublicKey, error) {
+	return &ecdsa.PublicKey{
+		Curve: elliptic.P256(),
+		X:     big.NewInt(1),
+		Y:     big.NewInt(1),
+	}, nil
+}
+
+func (f *testFakeSigner) SignMessage(rawMessage io.Reader, opts ...signature.SignOption) ([]byte, error) {
+	env := struct {
+		Payload     string `json:"payload"`
+		PayloadType string `json:"payloadType"`
+	}{
+		Payload:     base64.StdEncoding.EncodeToString([]byte(`{"predicateType":"https://conforma.dev/verification_summary/v1"}`)),
+		PayloadType: types.IntotoPayloadType,
+	}
+	return json.Marshal(env)
+}
+
+func (f *testFakeSigner) VerifySignature(signature, message io.Reader, opts ...signature.VerifyOption) error {
+	return nil
+}
+
+func TestNewServiceWithFS(t *testing.T) {
+	tests := []struct {
+		name           string
+		signer         *Signer
+		fs             afero.Fs
+		expectNonNil   bool
+		validateFields bool
+	}{
+		{
+			name: "valid signer and memory filesystem",
+			signer: &Signer{
+				KeyPath:        "/test/key.pem",
+				FS:             afero.NewMemMapFs(),
+				WrapSigner:     &testFakeSigner{},
+				SignerVerifier: &testFakeSigner{},
+			},
+			fs:             afero.NewMemMapFs(),
+			expectNonNil:   true,
+			validateFields: true,
+		},
+		{
+			name: "valid signer and OS filesystem",
+			signer: &Signer{
+				KeyPath:        "/another/key.pem",
+				FS:             afero.NewOsFs(),
+				WrapSigner:     &testFakeSigner{},
+				SignerVerifier: &testFakeSigner{},
+			},
+			fs:             afero.NewOsFs(),
+			expectNonNil:   true,
+			validateFields: true,
+		},
+		{
+			name:           "nil signer with filesystem",
+			signer:         nil,
+			fs:             afero.NewMemMapFs(),
+			expectNonNil:   true,
+			validateFields: false, // Service should still be created but with nil signer
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := NewServiceWithFS(tt.signer, tt.fs)
+
+			if tt.expectNonNil {
+				assert.NotNil(t, service, "NewServiceWithFS should return non-nil service")
+			} else {
+				assert.Nil(t, service, "NewServiceWithFS should return nil service")
+				return
+			}
+
+			if tt.validateFields {
+				// Validate that fields are properly assigned
+				assert.Equal(t, tt.signer, service.signer, "Service signer should match input")
+				assert.Equal(t, tt.fs, service.fs, "Service filesystem should match input")
+
+				// Validate that the service is properly structured
+				assert.NotNil(t, service.signer, "Service signer should not be nil when provided")
+				assert.NotNil(t, service.fs, "Service filesystem should not be nil")
+
+				// Validate signer fields if signer is provided
+				if tt.signer != nil {
+					assert.Equal(t, tt.signer.KeyPath, service.signer.KeyPath, "KeyPath should be preserved")
+					assert.Equal(t, tt.signer.FS, service.signer.FS, "Signer FS should be preserved")
+					assert.Equal(t, tt.signer.WrapSigner, service.signer.WrapSigner, "WrapSigner should be preserved")
+					assert.Equal(t, tt.signer.SignerVerifier, service.signer.SignerVerifier, "SignerVerifier should be preserved")
+				}
+			} else {
+				// For nil signer case, validate that service is still created
+				assert.Nil(t, service.signer, "Service signer should be nil when nil input provided")
+				assert.Equal(t, tt.fs, service.fs, "Service filesystem should still be assigned")
+			}
+		})
+	}
+}
 
 func TestService_ProcessComponentVSA(t *testing.T) {
 	ctx := context.Background()
