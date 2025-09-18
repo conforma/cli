@@ -49,7 +49,8 @@ ARG TARGETOS
 ARG TARGETARCH
 
 LABEL \
-  name="ec" \
+  name="rhtas/ec-rhel9" \
+  cpe="cpe:/a:redhat:trusted_artifact_signer:1.0::el9" \
   description="Conforma verifies and checks supply chain artifacts to ensure they meet security and business policies." \
   io.k8s.description="Conforma verifies and checks supply chain artifacts to ensure they meet security and business policies." \
   summary="Provides the binaries for downloading the Conforma CLI. Also used as a runner image for Tekton tasks." \
