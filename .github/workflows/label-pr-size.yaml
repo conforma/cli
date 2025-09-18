@@ -1,0 +1,76 @@
+# Copyright The Conforma Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: Pull request size
+on: pull_request_target
+
+jobs:
+  size-label:
+    name: Size label
+    permissions:
+      contents: read
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Calculate size
+        run: |
+          #!/usr/bin/bash
+          set -euo pipefail
+
+          additions=$(curl -s "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}" | jq '.additions')
+          deletions=$(curl -s "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}" | jq '.deletions')
+          size=$((additions + deletions))
+
+          sizelabel=XS
+          if [ ${size} -gt 600 ]; then
+            sizelabel="XXL"
+          elif [ ${size} -gt 240 ]; then
+            sizelabel="XL"
+          elif [ ${size} -gt 120 ]; then
+            sizelabel="L"
+          elif [ ${size} -gt 60 ]; then
+            sizelabel="M"
+          elif [ ${size} -gt 35 ]; then
+            sizelabel="S"
+          fi
+
+          echo "Removing existing size labels..."
+          # Get current labels
+          current_labels=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/labels | \
+            jq -r '.[] | select(.name | startswith("size:")) | .name')
+          
+          # Remove each existing size label (only if labels exist)
+          if [ -n "$current_labels" ]; then
+            echo "$current_labels" | while read -r label; do
+              if [ -n "$label" ]; then
+                echo "Removing label: $label"
+                curl -s --fail-with-body -X DELETE -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                  -H "Accept: application/vnd.github.v3+json" \
+                  "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/labels/$(echo "$label" | sed 's/ /%20/g')"
+              fi
+            done
+          else
+            echo "No existing size labels found"
+          fi
+
+          echo "Adding size: ${sizelabel}"
+          curl -s --fail-with-body -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/labels \
+            -d "[\"size: ${sizelabel}\"]"
