@@ -12,9 +12,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | main.rego | examples/happy_day.rego |
     Given policy configuration named "ec-policy" with specification
@@ -37,9 +35,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | main.rego | examples/happy_day.rego |
     Given a git repository named "happy-config" with
@@ -52,9 +48,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | main.rego | examples/happy_day.rego |
     Given a git repository named "happy-config" with
@@ -67,9 +61,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | main.rego | examples/happy_day.rego |
     Given a git repository named "happy-config" with
@@ -103,9 +95,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | main.rego | examples/happy_day.rego |
     Given policy configuration named "ec-policy" with specification
@@ -128,9 +118,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | main.rego | examples/happy_day.rego |
     Given policy configuration named "ec-policy" with specification
@@ -155,7 +143,6 @@ Feature: evaluate enterprise contract
     Given an image named "acceptance/invalid-image-signature"
     Given a valid image signature of "acceptance/invalid-image-signature" image signed by the "known" key
     Given a valid attestation of "acceptance/invalid-image-signature" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/invalid-image-signature"
     Given a git repository named "invalid-image-signature" with
       | main.rego | examples/happy_day.rego |
     Given policy configuration named "invalid-image-signature-policy" with specification
@@ -199,9 +186,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | main.rego | examples/happy_day.rego |
     When ec command is run with "validate image --image ${REGISTRY}/acceptance/ec-happy-day --policy {"sources":[{"policy":["git::https://${GITHOST}/git/happy-day-policy.git"]}]} --public-key ${known_PUBLIC_KEY} --rekor-url ${REKOR} --show-successes --output json"
@@ -212,9 +197,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "future-deny-policy" with
       | main.rego | examples/future_deny.rego |
     When ec command is run with "validate image --image ${REGISTRY}/acceptance/ec-happy-day --policy {"sources":[{"policy":["git::https://${GITHOST}/git/future-deny-policy.git"]}]} --public-key ${known_PUBLIC_KEY} --rekor-url ${REKOR} --show-successes --output json"
@@ -225,9 +208,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "future-deny-policy" with
       | main.rego | examples/future_deny.rego |
     When ec command is run with "validate image --image ${REGISTRY}/acceptance/ec-happy-day --policy {"sources":[{"policy":["git::https://${GITHOST}/git/future-deny-policy.git"]}]} --public-key ${known_PUBLIC_KEY} --rekor-url ${REKOR} --effective-time 2100-01-01T12:00:00Z --show-successes --output json"
@@ -238,9 +219,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "dynamic-severity-policy" with
       | main.rego | examples/dynamic_severity.rego |
     When ec command is run with "validate image --image ${REGISTRY}/acceptance/ec-happy-day --policy {"sources":[{"policy":["git::https://${GITHOST}/git/dynamic-severity-policy.git"]}]} --public-key ${known_PUBLIC_KEY} --rekor-url ${REKOR} --show-successes --output json --info"
@@ -251,9 +230,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-multiple-sources"
     Given a valid image signature of "acceptance/ec-multiple-sources" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-multiple-sources"
     Given a valid attestation of "acceptance/ec-multiple-sources" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-multiple-sources"
     Given a git repository named "repository1" with
       | main.rego | examples/happy_day.rego |
     Given a git repository named "repository2" with
@@ -283,9 +260,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-multiple-sources"
     Given a valid image signature of "acceptance/ec-multiple-sources" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-multiple-sources"
     Given a valid attestation of "acceptance/ec-multiple-sources" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-multiple-sources"
     Given a git repository named "repository1" with
       | main.rego | examples/happy_day.rego |
     Given a git repository named "repository2" with
@@ -318,9 +293,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | main.rego | examples/allow_all.rego |
     Given policy configuration named "ec-policy" with specification
@@ -343,9 +316,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "banana_check" with
       | main.rego | examples/fail_with_data.rego |
     Given a git repository named "banana_data_1" with
@@ -383,10 +354,8 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key, patched with
       | [{"op": "add", "path": "/predicate/metadata", "value": {}}, {"op": "add", "path": "/predicate/metadata/buildFinishedOn", "value": "2100-01-01T00:00:00Z"}] |
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "future-deny-policy" with
       | main.rego | examples/future_deny.rego |
     When ec command is run with "validate image --image ${REGISTRY}/acceptance/ec-happy-day --policy {"sources":[{"policy":["git::https://${GITHOST}/git/future-deny-policy.git"]}]} --rekor-url ${REKOR} --public-key ${known_PUBLIC_KEY} --effective-time attestation --show-successes --output json"
@@ -397,9 +366,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/image"
     Given a valid image signature of "acceptance/image" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/image"
     Given a valid attestation of "acceptance/image" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/image"
     Given a git repository named "happy-day-policy" with
       | happy_day.rego | examples/happy_day.rego      |
       | reject.rego    | examples/reject.rego         |
@@ -425,9 +392,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | filtering.rego | examples/filtering.rego |
     Given policy configuration named "ec-policy" with specification
@@ -454,9 +419,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | filtering.rego | examples/filtering.rego |
     Given policy configuration named "ec-policy" with specification
@@ -494,9 +457,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | filtering.rego | examples/filtering.rego |
     Given policy configuration named "ec-policy" with specification
@@ -534,9 +495,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | filtering.rego | examples/filtering.rego |
     Given policy configuration named "ec-policy" with specification
@@ -563,9 +522,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | filtering.rego | examples/filtering.rego |
     Given policy configuration named "ec-policy" with specification
@@ -592,9 +549,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | filtering.rego | examples/filtering.rego |
     Given policy configuration named "ec-policy" with specification
@@ -621,9 +576,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | main.rego | examples/happy_day.rego |
     Given policy configuration named "ec-policy" with specification
@@ -646,9 +599,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | main.rego | examples/happy_day.rego |
     Given an Snapshot named "happy" with specification
@@ -682,9 +633,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/image"
     Given a valid image signature of "acceptance/image" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/image"
     Given a valid attestation of "acceptance/image" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/image"
     Given a git repository named "my-policy" with
       | happy_day.rego | examples/happy_day.rego      |
       | reject.rego    | examples/reject.rego         |
@@ -711,9 +660,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/my-image"
     Given a valid image signature of "acceptance/my-image" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/my-image"
     Given a valid attestation of "acceptance/my-image" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/my-image"
     Given a OCI policy bundle named "acceptance/happy-day-policy:tag" with
       | main.rego | examples/happy_day.rego |
     Given a OCI policy bundle named "acceptance/allow-all:latest" with
@@ -739,9 +686,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
     Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/ec-happy-day"
     Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/ec-happy-day"
     Given a git repository named "happy-day-policy" with
       | main.rego | examples/disallowed_functions.rego |
     Given policy configuration named "ec-policy" with specification
@@ -764,9 +709,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/image"
     Given a valid image signature of "acceptance/image" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/image"
     Given a valid attestation of "acceptance/image" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/image"
     Given a git repository named "my-policy1" with
       | rule_data.rego | examples/rule_data.rego |
     Given a git repository named "my-policy2" with
@@ -802,10 +745,8 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/image"
     Given a valid image signature of "acceptance/image" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/image"
     Given an image named "acceptance/bad-actor" with signature from "acceptance/image"
     Given a valid attestation of "acceptance/bad-actor" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/bad-actor"
     Given a git repository named "mismatched-image-digest" with
       | main.rego | examples/happy_day.rego |
     Given policy configuration named "mismatched-image-digest" with specification
@@ -828,10 +769,8 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/image"
     Given a valid attestation of "acceptance/image" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/image"
     Given an image named "acceptance/bad-actor" with attestation from "acceptance/image"
     Given a valid image signature of "acceptance/bad-actor" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/bad-actor"
     Given a git repository named "mismatched-image-digest" with
       | main.rego | examples/happy_day.rego |
     Given policy configuration named "mismatched-image-digest" with specification
@@ -854,9 +793,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/source"
     Given a valid image signature of "acceptance/source" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/source"
     Given a valid attestation of "acceptance/source" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/source"
     Given a git repository named "happy-day-policy" with
       | main.rego | examples/happy_day.rego |
     Given policy configuration named "ec-policy" with specification
@@ -880,9 +817,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/image"
     Given a valid image signature of "acceptance/image" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/image"
     Given a valid attestation of "acceptance/image" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/image"
     Given a git repository named "with-dependencies" with
       | main.rego | examples/rules_with_dependencies.rego |
     Given policy configuration named "ec-policy" with specification
@@ -905,9 +840,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/unique-successes"
     Given a valid image signature of "acceptance/unique-successes" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/unique-successes"
     Given a valid attestation of "acceptance/unique-successes" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/unique-successes"
     Given a git repository named "unique-successes" with
       | happy.rego  | examples/happy_day.rego   |
       | reject.rgo  | examples/reject.rego      |
@@ -924,9 +857,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/image-config"
     Given a valid image signature of "acceptance/image-config" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/image-config"
     Given a valid attestation of "acceptance/image-config" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/image-config"
     Given a git repository named "image-config-policy" with
       | image_config.rego | examples/image_config.rego |
     Given policy configuration named "ec-policy" with specification
@@ -941,9 +872,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
       And an image named "acceptance/image"
       And a valid image signature of "acceptance/image" image signed by the "known" key
-      Given a valid Rekor entry for image signature of "acceptance/image"
       And a valid attestation of "acceptance/image" signed by the "known" key
-      Given a valid Rekor entry for attestation of "acceptance/image"
       And a git repository named "my-policy" with
       | happy.rego  | examples/happy_day.rego   |
       And policy configuration named "ec-policy" with specification
@@ -967,9 +896,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/policy-input-output"
     Given a valid image signature of "acceptance/policy-input-output" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/policy-input-output"
     Given a valid attestation of "acceptance/policy-input-output" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/policy-input-output"
     Given a git repository named "policy-input-output-policy" with
       | main.rego | examples/happy_day.rego |
     Given policy configuration named "ec-policy" with specification
@@ -995,11 +922,12 @@ Feature: evaluate enterprise contract
     Then the exit status should be 0
     Then the output should match the snapshot
 
-  Scenario: rekor entries required
+  Scenario: signatures with embedded bundles verify without external rekor queries
     Given a key pair named "known"
     Given an image named "acceptance/rekor-by-default"
     Given a valid image signature of "acceptance/rekor-by-default" image signed by the "known" key
     Given a valid attestation of "acceptance/rekor-by-default" signed by the "known" key
+    Given rekor entries are cleared
     Given a git repository named "rekor-by-default" with
       | main.rego | examples/happy_day.rego |
     Given policy configuration named "ec-policy" with specification
@@ -1007,7 +935,7 @@ Feature: evaluate enterprise contract
     {"sources": [{"policy": ["git::https://${GITHOST}/git/rekor-by-default.git"]}]}
     """
     When ec command is run with "validate image --image ${REGISTRY}/acceptance/rekor-by-default --rekor-url ${REKOR} --policy acceptance/ec-policy --public-key ${known_PUBLIC_KEY} --output json"
-    Then the exit status should be 1
+    Then the exit status should be 0
     Then the output should match the snapshot
 
   Scenario: OLM manifests
@@ -1057,9 +985,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/fetch-oci-blob"
     Given a valid image signature of "acceptance/fetch-oci-blob" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/fetch-oci-blob"
     Given a valid attestation of "acceptance/fetch-oci-blob" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/fetch-oci-blob"
     Given an OCI blob with content "spam" in the repo "acceptance/fetch-oci-blob"
     Given a git repository named "fetch-oci-blob-policy" with
       | main.rego | examples/fetch_blob.rego |
@@ -1083,9 +1009,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/oci-image-manifest"
     Given a valid image signature of "acceptance/oci-image-manifest" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/oci-image-manifest"
     Given a valid attestation of "acceptance/oci-image-manifest" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/oci-image-manifest"
     Given a git repository named "oci-image-manifest-policy" with
       | main.rego | examples/oci_image_manifest.rego |
     Given policy configuration named "ec-policy" with specification
@@ -1110,9 +1034,7 @@ Feature: evaluate enterprise contract
       | manifests/some.crd.yaml                   | examples/some.crd.yaml                   |
       | manifests/some.clusterserviceversion.yaml | examples/some.clusterserviceversion.yaml |
     Given a valid image signature of "acceptance/oci-image-files" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/oci-image-files"
     Given a valid attestation of "acceptance/oci-image-files" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/oci-image-files"
     Given a git repository named "oci-image-files-policy" with
       | main.rego | examples/oci_image_files.rego |
     Given policy configuration named "ec-policy" with specification
@@ -1135,9 +1057,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "trace_debug"
       And an image named "acceptance/trace-debug"
       And a valid image signature of "acceptance/trace-debug" image signed by the "trace_debug" key
-      And a valid Rekor entry for image signature of "acceptance/trace-debug"
       And a valid attestation of "acceptance/trace-debug" signed by the "trace_debug" key
-      And a valid Rekor entry for attestation of "acceptance/trace-debug"
       And a git repository named "trace-debug" with
       | main.rego | examples/trace_debug.rego |
       And policy configuration named "ec-policy" with specification
@@ -1167,9 +1087,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/purl"
     Given a valid image signature of "acceptance/purl" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/purl"
     Given a valid attestation of "acceptance/purl" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/purl"
     Given an OCI blob with content "spam" in the repo "acceptance/purl"
     Given a git repository named "purl-policy" with
       | main.rego | examples/purl.rego |
@@ -1193,9 +1111,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
     Given an image named "acceptance/sigstore"
     Given a valid image signature of "acceptance/sigstore" image signed by the "known" key
-    Given a valid Rekor entry for image signature of "acceptance/sigstore"
     Given a valid attestation of "acceptance/sigstore" signed by the "known" key
-    Given a valid Rekor entry for attestation of "acceptance/sigstore"
     Given a git repository named "sigstore" with
       | main.rego | examples/sigstore.rego |
     Given policy configuration named "ec-policy" with specification
@@ -1239,9 +1155,7 @@ Feature: evaluate enterprise contract
     Given a key pair named "known"
       And an image named "acceptance/image"
       And a valid image signature of "acceptance/image" image signed by the "known" key
-      And a valid Rekor entry for image signature of "acceptance/image"
       And a valid attestation of "acceptance/image" signed by the "known" key
-      And a valid Rekor entry for attestation of "acceptance/image"
       And a git repository named "my-policy" with
       | happy_day.rego | examples/happy_day.rego      |
       | reject.rego    | examples/reject.rego         |

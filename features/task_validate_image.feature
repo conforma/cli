@@ -3,6 +3,7 @@ Feature: Verify Enterprise Contract Tekton Tasks
 
   Background:
     Given a cluster running
+    Given stub rekord running
     Given stub tuf running
     Given stub git daemon running
 

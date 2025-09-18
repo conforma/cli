@@ -22,6 +22,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
@@ -46,17 +47,21 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/sigstore/cosign/v2/pkg/cosign"
+	"github.com/sigstore/cosign/v2/pkg/cosign/bundle"
 	"github.com/sigstore/cosign/v2/pkg/oci"
 	"github.com/sigstore/cosign/v2/pkg/oci/layout"
 	cosignRemote "github.com/sigstore/cosign/v2/pkg/oci/remote"
 	"github.com/sigstore/cosign/v2/pkg/oci/static"
 	cosigntypes "github.com/sigstore/cosign/v2/pkg/types"
+	rc "github.com/sigstore/rekor/pkg/client"
+	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	"github.com/sigstore/sigstore/pkg/signature"
 	"gopkg.in/go-jose/go-jose.v2/json"
 
 	"github.com/conforma/cli/acceptance/attestation"
 	"github.com/conforma/cli/acceptance/crypto"
 	"github.com/conforma/cli/acceptance/registry"
+	"github.com/conforma/cli/acceptance/rekor"
 	"github.com/conforma/cli/acceptance/testenv"
 )
 
@@ -135,7 +140,7 @@ func imageFrom(ctx context.Context, imageName string) (v1.Image, error) {
 // CreateAndPushImageSignature for a named image in the Context creates a signature
 // image, same as `cosign sign` or Tekton Chains would, of that named image and pushes it
 // to the stub registry as a new tag for that image akin to how cosign and Tekton Chains
-// do it
+// do it. This implementation includes transparency log upload to generate bundle information.
 func CreateAndPushImageSignature(ctx context.Context, imageName string, keyName string) (context.Context, error) {
 	var state *imageState
 	ctx, err := testenv.SetupState(ctx, &state)
@@ -169,29 +174,101 @@ func CreateAndPushImageSignature(ctx context.Context, imageName string, keyName 
 		return ctx, err
 	}
 
-	// creates a cosign signature payload signs it and provides the raw signature
-	payload, signature, err := signature.SignImage(signer, digestImage, map[string]interface{}{})
+	// Create the cosign signature payload and sign it
+	payload, rawSignature, err := signature.SignImage(signer, digestImage, map[string]interface{}{})
 	if err != nil {
 		return ctx, err
 	}
 
-	signatureBase64 := base64.StdEncoding.EncodeToString(signature)
+	signatureBase64 := base64.StdEncoding.EncodeToString(rawSignature)
 
-	// creates the layer with the image signature
-	signatureLayer, err := static.NewSignature(payload, signatureBase64)
+	// Create the signature structure for the stub rekor entry
+	signature := Signature{
+		KeyID:     "",
+		Signature: signatureBase64,
+	}
+
+	signatureJSON, err := json.Marshal(signature)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to marshal signature structure: %w", err)
+	}
+
+	// Get the public key from the signer for hashedrekord validation
+	publicKey, err := signer.PublicKey()
+	if err != nil {
+		return ctx, fmt.Errorf("failed to get public key: %w", err)
+	}
+
+	publicKeyBytes, err := cryptoutils.MarshalPublicKeyToPEM(publicKey)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to marshal public key: %w", err)
+	}
+
+	// Create stubs for both Rekor entry signature creation and retrieval endpoints
+	err = rekor.StubRekorEntryCreationForSignature(ctx, payload, rawSignature, signatureJSON, publicKeyBytes)
+	if err != nil {
+		return ctx, fmt.Errorf("error stubbing rekor endpoints: %w", err)
+	}
+
+	// Upload to transparency log to get bundle information like Tekton Chains does
+	rekorURL, err := rekor.StubRekor(ctx)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to get stub rekor URL: %w", err)
+	}
+
+	rekorClient, err := rc.GetRekorClient(rekorURL)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to get rekor client: %w", err)
+	}
+
+	// Get public key or cert for transparency log upload
+	pkoc, err := getPublicKeyOrCert(signer)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to get public key or cert: %w", err)
+	}
+
+	// Compute payload checksum
+	checksum := sha256.New()
+	if _, err := checksum.Write(payload); err != nil {
+		return ctx, fmt.Errorf("error checksuming payload: %w", err)
+	}
+
+	tlogEntry, err := cosign.TLogUpload(ctx, rekorClient, rawSignature, checksum, pkoc)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to upload to transparency log: %w", err)
+	}
+
+	// Create bundle from the actual transparency log entry
+	rekorBundle := bundle.EntryToBundle(tlogEntry)
+	if rekorBundle == nil {
+		return ctx, fmt.Errorf("rekorBundle is nil after EntryToBundle")
+	}
+
+	// Create the signature layer with bundle information using static.WithBundle
+	signatureLayer, err := static.NewSignature(payload, signatureBase64, static.WithBundle(rekorBundle))
 	if err != nil {
 		return ctx, err
 	}
+
+	// Extract bundle information from signatureLayer to include in annotations
+	annotations := map[string]string{
+		static.SignatureAnnotationKey: signatureBase64,
+	}
+
+	// Add bundle annotation if bundle information exists
+	bundleJSON, err := json.Marshal(rekorBundle)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to marshal bundle for annotation: %w", err)
+	}
+	annotations[static.BundleAnnotationKey] = string(bundleJSON)
 
 	// creates the signature image with the correct media type and config and appends
 	// the signature layer to it
-	singnatureImage := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
-	singnatureImage = mutate.ConfigMediaType(singnatureImage, types.OCIConfigJSON)
-	singnatureImage, err = mutate.Append(singnatureImage, mutate.Addendum{
-		Layer: signatureLayer,
-		Annotations: map[string]string{
-			static.SignatureAnnotationKey: signatureBase64,
-		},
+	signatureImage := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
+	signatureImage = mutate.ConfigMediaType(signatureImage, types.OCIConfigJSON)
+	signatureImage, err = mutate.Append(signatureImage, mutate.Addendum{
+		Layer:       signatureLayer,
+		Annotations: annotations,
 	})
 	if err != nil {
 		return ctx, err
@@ -204,16 +281,13 @@ func CreateAndPushImageSignature(ctx context.Context, imageName string, keyName 
 	}
 
 	// push to the registry
-	err = remote.Write(ref, singnatureImage)
+	err = remote.Write(ref, signatureImage)
 	if err != nil {
 		return ctx, err
 	}
 
 	state.Signatures[imageName] = ref.String()
-	state.ImageSignatures[imageName] = Signature{
-		KeyID:     "",
-		Signature: signatureBase64,
-	}
+	state.ImageSignatures[imageName] = signature
 
 	return ctx, nil
 }
@@ -229,7 +303,8 @@ func CreateAndPushAttestation(ctx context.Context, imageName, keyName string) (c
 // image, same as `cosign attest` or Tekton Chains would, and pushes it to the stub
 // registry as a new tag for that image akin to how cosign and Tekton Chains do
 // it; this variant applies additional JSON Patch patches to the SLSA provenance
-// statement as required by the tests
+// statement as required by the tests. This implementation now includes transparency
+// log upload to generate bundle information like Tekton Chains does for attestations.
 func createAndPushAttestationWithPatches(ctx context.Context, imageName, keyName string, patches *godog.Table) (context.Context, error) {
 	var state *imageState
 	ctx, err := testenv.SetupState(ctx, &state)
@@ -267,34 +342,117 @@ func createAndPushAttestationWithPatches(ctx context.Context, imageName, keyName
 		return ctx, err
 	}
 
-	if sig, err := unmarshallSignatures(signedAttestation); err != nil {
-		return ctx, err
-	} else {
-		state.AttestationSignatures[imageName] = Signature{
-			KeyID:     sig.KeyID,
-			Signature: sig.Sig,
-		}
-	}
-
-	attestationLayer, err := static.NewAttestation(signedAttestation)
+	// Extract signature information from the signed attestation
+	var sig *cosign.Signatures
+	sig, err = unmarshallSignatures(signedAttestation)
 	if err != nil {
 		return ctx, err
 	}
+	if sig == nil {
+		return ctx, fmt.Errorf("failed to extract signature from attestation: no signatures found")
+	}
+
+	state.AttestationSignatures[imageName] = Signature{
+		KeyID:     sig.KeyID,
+		Signature: sig.Sig,
+	}
+
+	// Extract raw signature from the signed attestation for transparency log upload
+	var rawSignature []byte
+	if sig.Sig != "" {
+		rawSignature, err = base64.StdEncoding.DecodeString(sig.Sig)
+		if err != nil {
+			return ctx, fmt.Errorf("failed to decode signature: %w", err)
+		}
+	}
+
+	// Get the signer for transparency log operations
+	signer, err := crypto.SignerWithKey(ctx, keyName)
+	if err != nil {
+		return ctx, err
+	}
+
+	// Get the public key from the signer for intoto validation
+	publicKey, err := signer.PublicKey()
+	if err != nil {
+		return ctx, fmt.Errorf("failed to get public key: %w", err)
+	}
+
+	publicKeyBytes, err := cryptoutils.MarshalPublicKeyToPEM(publicKey)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to marshal public key: %w", err)
+	}
+
+	// Create stubs for both Rekor entry creation and retrieval endpoints for attestations
+	err = rekor.StubRekorEntryCreationForAttestation(ctx, signedAttestation, publicKeyBytes)
+	if err != nil {
+		return ctx, fmt.Errorf("error stubbing rekor endpoints for attestation: %w", err)
+	}
+
+	// Upload to transparency log to get bundle information like Tekton Chains does
+	rekorURL, err := rekor.StubRekor(ctx)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to get stub rekor URL: %w", err)
+	}
+
+	rekorClient, err := rc.GetRekorClient(rekorURL)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to get rekor client: %w", err)
+	}
+
+	// Get public key or cert for transparency log upload
+	pkoc, err := getPublicKeyOrCert(signer)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to get public key or cert: %w", err)
+	}
+
+	// Compute payload checksum
+	checksum := sha256.New()
+	if _, err := checksum.Write(signedAttestation); err != nil {
+		return ctx, fmt.Errorf("error checksuming attestation: %w", err)
+	}
+
+	tlogEntry, err := cosign.TLogUpload(ctx, rekorClient, rawSignature, checksum, pkoc)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to upload attestation to transparency log: %w", err)
+	}
+
+	// Create bundle from the actual transparency log entry
+	rekorBundle := bundle.EntryToBundle(tlogEntry)
+	if rekorBundle == nil {
+		return ctx, fmt.Errorf("rekorBundle is nil after EntryToBundle")
+	}
+
+	// Create the attestation layer with bundle information using static.WithBundle
+	attestationLayer, err := static.NewAttestation(signedAttestation, static.WithBundle(rekorBundle))
+	if err != nil {
+		return ctx, err
+	}
+
+	// Extract bundle information from attestationLayer to include in annotations
+	annotations := map[string]string{
+		// When cosign creates an attestation, it sets this annotation to an empty
+		// string, as seen here:
+		// https://github.com/sigstore/cosign/blob/34afd5240ce8490a4fa427c3f46523246643047c/pkg/oci/static/signature.go#L52-L55
+		// We choose to mimic the cosign behavior to avoid inconsistencies in the tests.
+		static.SignatureAnnotationKey: "",
+	}
+
+	// Add bundle annotation if bundle information exists
+	bundleJSON, err := json.Marshal(rekorBundle)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to marshal bundle for annotation: %w", err)
+	}
+	annotations[static.BundleAnnotationKey] = string(bundleJSON)
 
 	// creates the attestation image with the correct media type and config and appends
 	// the attestation layer to it
 	attestationImage := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
 	attestationImage = mutate.ConfigMediaType(attestationImage, types.OCIConfigJSON)
 	attestationImage, err = mutate.Append(attestationImage, mutate.Addendum{
-		MediaType: cosigntypes.DssePayloadType,
-		Layer:     attestationLayer,
-		Annotations: map[string]string{
-			// When cosign creates an attestation, it sets this annotation to an empty
-			// string, as seen here:
-			// https://github.com/sigstore/cosign/blob/34afd5240ce8490a4fa427c3f46523246643047c/pkg/oci/static/signature.go#L52-L55
-			// We choose to mimic the cosign behavior to avoid inconsistencies in the tests.
-			static.SignatureAnnotationKey: "",
-		},
+		MediaType:   cosigntypes.DssePayloadType,
+		Layer:       attestationLayer,
+		Annotations: annotations,
 	})
 	if err != nil {
 		return ctx, err
@@ -860,6 +1018,22 @@ func RawImageSignaturesFrom(ctx context.Context) map[string]string {
 	}
 
 	return ret
+}
+
+// getPublicKeyOrCert returns the cert if we have it, otherwise return public key
+// This mimics the same logic used in Tekton Chains
+func getPublicKeyOrCert(signer signature.SignerVerifier) ([]byte, error) {
+	// For now, we'll always use the public key since we're using test keys
+	// In a real scenario with certificates, we'd check for cert first
+	pub, err := signer.PublicKey()
+	if err != nil {
+		return nil, fmt.Errorf("getting public key: %w", err)
+	}
+	pem, err := cryptoutils.MarshalPublicKeyToPEM(pub)
+	if err != nil {
+		return nil, fmt.Errorf("key to pem: %w", err)
+	}
+	return pem, nil
 }
 
 func applyPatches(statement *in_toto.ProvenanceStatementSLSA02, patches *godog.Table) (*in_toto.ProvenanceStatementSLSA02, error) {

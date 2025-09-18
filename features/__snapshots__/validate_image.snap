@@ -1260,13 +1260,13 @@ Error: success criteria not met
       "source": {},
       "violations": [
         {
-          "msg": "No image attestations found matching the given public key. Verify the correct public key was provided, and one or more attestations were created. Error: no matching attestations: could not verify envelope: accepted signatures do not match threshold, Found: 0, Expected 1",
+          "msg": "No image attestations found matching the given public key. Verify the correct public key was provided, and one or more attestations were created. Error: no matching attestations: error verifying bundle: comparing public key PEMs, expected ${unknown_PUBLIC_KEY_JSON}, got ${known_PUBLIC_KEY_JSON}",
           "metadata": {
             "code": "builtin.attestation.signature_check"
           }
         },
         {
-          "msg": "No image signatures found matching the given public key. Verify the correct public key was provided, and a signature was created. Error: no matching signatures: searching log query: \u0026{0 } (*models.Error) is not supported by the TextConsumer, can be resolved by supporting TextUnmarshaler interface",
+          "msg": "No image signatures found matching the given public key. Verify the correct public key was provided, and a signature was created. Error: no matching signatures: error verifying bundle: comparing public key PEMs, expected ${unknown_PUBLIC_KEY_JSON}, got ${known_PUBLIC_KEY_JSON}",
           "metadata": {
             "code": "builtin.image.signature_check"
           }
@@ -5221,5 +5221,56 @@ Error: success criteria not met
 ---
 
 [policy rule filtering fails due to inexistent inclusion patterns:stderr - 1]
+
+---
+
+[signatures with embedded bundles verify without external rekor queries:stdout - 1]
+{
+  "success": true,
+  "components": [
+    {
+      "name": "Unnamed",
+      "containerImage": "${REGISTRY}/acceptance/rekor-by-default@sha256:${REGISTRY_acceptance/rekor-by-default:latest_DIGEST}",
+      "source": {},
+      "success": true,
+      "signatures": [
+        {
+          "keyid": "",
+          "sig": "${IMAGE_SIGNATURE_acceptance/rekor-by-default}"
+        }
+      ],
+      "attestations": [
+        {
+          "type": "https://in-toto.io/Statement/v0.1",
+          "predicateType": "https://slsa.dev/provenance/v0.2",
+          "predicateBuildType": "https://tekton.dev/attestations/chains/pipelinerun@v2",
+          "signatures": [
+            {
+              "keyid": "",
+              "sig": "${ATTESTATION_SIGNATURE_acceptance/rekor-by-default}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "key": "${known_PUBLIC_KEY_JSON}",
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::${GITHOST}/git/rekor-by-default.git?ref=${LATEST_COMMIT}"
+        ]
+      }
+    ],
+    "rekorUrl": "${REKOR}",
+    "publicKey": "${known_PUBLIC_KEY}"
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[signatures with embedded bundles verify without external rekor queries:stderr - 1]
 
 ---

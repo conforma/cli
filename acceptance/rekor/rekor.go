@@ -39,12 +39,12 @@ import (
 	"github.com/sigstore/cosign/v2/pkg/cosign"
 	"github.com/sigstore/cosign/v2/pkg/cosign/bundle"
 	"github.com/sigstore/rekor/pkg/generated/models"
-	intoto "github.com/sigstore/rekor/pkg/types/intoto/v0.0.1"
+	hashedrekord "github.com/sigstore/rekor/pkg/types/hashedrekord/v0.0.1"
+	intoto "github.com/sigstore/rekor/pkg/types/intoto/v0.0.2"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	"github.com/transparency-dev/merkle/rfc6962"
 
 	"github.com/conforma/cli/acceptance/crypto"
-	"github.com/conforma/cli/acceptance/image"
 	"github.com/conforma/cli/acceptance/testenv"
 	"github.com/conforma/cli/acceptance/wiremock"
 )
@@ -98,21 +98,10 @@ func stubRekordRunning(ctx context.Context) (context.Context, error) {
 	return ctx, nil
 }
 
-// randomHex generates a random hex string of the given length
-func randomHex(len int) string {
-	b := make([]byte, len/2)
-	_, err := rand.Read(b)
-	if err != nil {
-		panic(err)
-	}
-
-	return hex.EncodeToString(b)
-}
-
-// computeLogID returns a hex-encoded SHA-256 digest of the
+// ComputeLogID returns a hex-encoded SHA-256 digest of the
 // SubjectPublicKeyInfo ASN.1 structure for the given
 // PEM-encoded public key
-func computeLogID(publicKey []byte) (string, error) {
+func ComputeLogID(publicKey []byte) (string, error) {
 	pub, err := cryptoutils.UnmarshalPEMToPublicKey(publicKey)
 	if err != nil {
 		return "", err
@@ -125,35 +114,36 @@ func computeLogID(publicKey []byte) (string, error) {
 	return hex.EncodeToString(digest[:]), nil
 }
 
-// computeLogEntry constructs a Rekor log entry and provides it's UUID
-// for the provided public key and data
-func computeLogEntry(ctx context.Context, publicKey, data []byte) (logEntry *models.LogEntryAnon, entryUUID []byte, err error) {
-	// the body of the log entry is an in-toto payload
-	logBody := intoto.NewEntry()
+// computeLogEntryForSignature constructs a Rekor log entry and provides its UUID
+// for the provided public key, data, and signature
+func computeLogEntryForSignature(ctx context.Context, publicKey, data, signature []byte) (logEntry *models.LogEntryAnon, entryUUID []byte, err error) {
+	// the body of the log entry is a hashedrekord payload
+	logBody := hashedrekord.NewEntry()
 
-	algorithm := models.IntotoV001SchemaContentPayloadHashAlgorithmSha256
+	algorithm := models.HashedrekordV001SchemaDataHashAlgorithmSha256
 
-	// the contentHash should relate to other entries but since we're faking a single
-	// entry, not related to other entries -- any random contentHash-like hex will be
-	// okay. Similarly, for testing purposes, any payload hash will do.
-	hash := randomHex(64)
+	// compute the actual hash of the payload data for proper verification
+	payloadHash := sha256.Sum256(data)
+	hash := hex.EncodeToString(payloadHash[:])
 
 	publicKeyBase64 := strfmt.Base64(publicKey)
+	signatureBase64 := strfmt.Base64(signature)
 
-	// the only way to set fields of the intoto Entry
-	err = logBody.Unmarshal(&models.Intoto{
-		Spec: models.IntotoV001Schema{
-			Content: &models.IntotoV001SchemaContent{
-				Hash: &models.IntotoV001SchemaContentHash{
-					Algorithm: &algorithm,
-					Value:     &hash,
-				},
-				PayloadHash: &models.IntotoV001SchemaContentPayloadHash{
+	// the only way to set fields of the hashedrekord Entry
+	err = logBody.Unmarshal(&models.Hashedrekord{
+		Spec: models.HashedrekordV001Schema{
+			Data: &models.HashedrekordV001SchemaData{
+				Hash: &models.HashedrekordV001SchemaDataHash{
 					Algorithm: &algorithm,
 					Value:     &hash,
 				},
 			},
-			PublicKey: &publicKeyBase64,
+			Signature: &models.HashedrekordV001SchemaSignature{
+				Content: signatureBase64,
+				PublicKey: &models.HashedrekordV001SchemaSignaturePublicKey{
+					Content: publicKeyBase64,
+				},
+			},
 		},
 	})
 	if err != nil {
@@ -181,11 +171,16 @@ func computeLogEntry(ctx context.Context, publicKey, data []byte) (logEntry *mod
 	// simplest possible tree has the size of 2
 	logIndex := int64(1)
 	treeSize := int64(2)
-	time := int64(0)
-	logID, err := computeLogID(publicKey)
+
+	// Use Rekor public key for logID computation
+	state := testenv.FetchState[rekorState](ctx)
+	logID, err := ComputeLogID(state.KeyPair.PublicBytes)
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// Use current Unix timestamp for integrated time
+	time := time.Now().Unix()
 
 	// fill in the entry with the attestation and in-toto entry for the log
 	// and add the verification
@@ -210,10 +205,129 @@ func computeLogEntry(ctx context.Context, publicKey, data []byte) (logEntry *mod
 	return logEntry, entryUUID, nil
 }
 
-// computeEntryTimestamp signs Rekor log entryies body, integrated timestam,
+// computeLogEntryForAttestation constructs a Rekor log entry using intoto format
+// for attestations, providing the entry's UUID
+func computeLogEntryForAttestation(ctx context.Context, publicKey []byte, attestationData []byte) (logEntry *models.LogEntryAnon, entryUUID []byte, err error) {
+	// the body of the log entry is an intoto payload for attestations
+	logBody := intoto.NewEntry()
+
+	// Parse the DSSE envelope that was created by attestation.SignStatement
+	var dsseEnvelope struct {
+		Payload     string `json:"payload"`
+		PayloadType string `json:"payloadType"`
+		Signatures  []struct {
+			Keyid string `json:"keyid"`
+			Sig   string `json:"sig"`
+		} `json:"signatures"`
+	}
+
+	err = json.Unmarshal(attestationData, &dsseEnvelope)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse DSSE envelope: %w", err)
+	}
+
+	// Convert public key to base64
+	publicKeyBase64 := strfmt.Base64(publicKey)
+
+	// Create signature structure for the envelope
+	sigBase64 := strfmt.Base64(dsseEnvelope.Signatures[0].Sig)
+	signatures := []*models.IntotoV002SchemaContentEnvelopeSignaturesItems0{
+		{
+			PublicKey: &publicKeyBase64,
+			Sig:       &sigBase64,
+		},
+	}
+
+	// For intoto v0.0.2, create the proper envelope structure
+	algorithm := models.IntotoV002SchemaContentPayloadHashAlgorithmSha256
+
+	// compute hash of the entire attestation data (the DSSE envelope)
+	// This matches what cosign verification expects for attestations
+	payloadHash := sha256.Sum256(attestationData)
+	hash := hex.EncodeToString(payloadHash[:])
+
+	err = logBody.Unmarshal(&models.Intoto{
+		Spec: models.IntotoV002Schema{
+			Content: &models.IntotoV002SchemaContent{
+				Envelope: &models.IntotoV002SchemaContentEnvelope{
+					Payload:     strfmt.Base64(dsseEnvelope.Payload),
+					PayloadType: &dsseEnvelope.PayloadType,
+					Signatures:  signatures,
+				},
+				Hash: &models.IntotoV002SchemaContentHash{
+					Algorithm: &algorithm,
+					Value:     &hash,
+				},
+				PayloadHash: &models.IntotoV002SchemaContentPayloadHash{
+					Algorithm: &algorithm,
+					Value:     &hash,
+				},
+			},
+		},
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	logBodyBytes, err := logBody.Canonicalize(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	hasher := rfc6962.DefaultHasher
+
+	// needs to match the hash over body bytes
+	entryUUID = hasher.HashLeaf(logBodyBytes)
+
+	// create simplest Merkle tree
+	entryHash := hasher.HashChildren(hasher.EmptyRoot(), entryUUID)
+	hashes := []string{
+		hex.EncodeToString(entryHash),
+	}
+	rootHash := hasher.HashChildren(entryHash, entryUUID)
+	rootHashHex := hex.EncodeToString(rootHash)
+
+	// simplest possible tree has the size of 2
+	logIndex := int64(1)
+	treeSize := int64(2)
+
+	// Use the Rekor public key for logID computation, not the signing key
+	state := testenv.FetchState[rekorState](ctx)
+	logID, err := ComputeLogID(state.KeyPair.PublicBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Use current Unix timestamp for integrated time
+	time := time.Now().Unix()
+
+	// fill in the entry with the attestation and in-toto entry for the log
+	// and add the verification
+	logEntry = &models.LogEntryAnon{
+		Attestation: &models.LogEntryAnonAttestation{
+			Data: attestationData,
+		},
+		Body: base64.StdEncoding.EncodeToString(logBodyBytes),
+		Verification: &models.LogEntryAnonVerification{
+			InclusionProof: &models.InclusionProof{
+				RootHash: &rootHashHex,
+				Hashes:   hashes,
+				LogIndex: &logIndex,
+				TreeSize: &treeSize,
+			},
+		},
+		IntegratedTime: &time,
+		LogIndex:       &logIndex,
+		LogID:          &logID,
+	}
+
+	return logEntry, entryUUID, nil
+}
+
+// ComputeEntryTimestamp signs Rekor log entryies body, integrated timestam,
 // log index and log ID with the provided private key encrypted by the given
 // password
-func computeEntryTimestamp(privateKey, password []byte, logEntry models.LogEntryAnon) ([]byte, error) {
+func ComputeEntryTimestamp(privateKey, password []byte, logEntry models.LogEntryAnon) ([]byte, error) {
 	encryptedPrivateKey, _ := pem.Decode(privateKey)
 	if encryptedPrivateKey == nil {
 		return nil, errors.New("unable to decode PEM encoded private key")
@@ -246,54 +360,144 @@ func computeEntryTimestamp(privateKey, password []byte, logEntry models.LogEntry
 	return ecdsa.SignASN1(rand.Reader, key.(*ecdsa.PrivateKey), payloadHash[:])
 }
 
-// stubRekorEntryFor instructs WireMock to return a bespoke Rekor log entry
-// for the given bytes, the entry is timestamped using the key stored in
-// state.KeyPair and a fake Merkle tree is created with an empty root
-// and this entries' hash
-func stubRekorEntryFor(ctx context.Context, data []byte, fn jsonPathExtractor) error {
+// StubRekorEntryCreationForSignature creates WireMock stubs for both Rekor entry creation and retrieval endpoints
+// This handles both POST /api/v1/log/entries (creation) and POST /api/v1/log/entries/retrieve (retrieval)
+func StubRekorEntryCreationForSignature(ctx context.Context, data []byte, signature []byte, signatureJSON []byte, publicKey []byte) error {
 	state := testenv.FetchState[rekorState](ctx)
 
-	logEntry, entryUUID, err := computeLogEntry(ctx, state.KeyPair.PublicBytes, data)
+	logEntry, entryUUID, err := computeLogEntryForSignature(ctx, publicKey, data, signature)
 	if err != nil {
 		return err
 	}
 
-	set, err := computeEntryTimestamp(state.KeyPair.PrivateBytes, state.KeyPair.Password(), *logEntry)
+	// Compute the signed entry timestamp using the Rekor private key
+	signedTimestamp, err := ComputeEntryTimestamp(state.KeyPair.PrivateBytes, state.KeyPair.Password(), *logEntry)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to compute signed entry timestamp: %w", err)
 	}
 
-	// this is what will be returned, albeit in an array
-	var logEntries models.LogEntry = models.LogEntry{}
-	entryID := hex.EncodeToString(entryUUID)
-	logEntries[entryID] = *logEntry
-
-	logEntry.Verification.SignedEntryTimestamp = strfmt.Base64(set)
-
-	// the response is in application/json
-	body, err := json.Marshal([]models.LogEntry{logEntries})
-	if err != nil {
-		return err
+	// Add the verification section with the signed entry timestamp
+	logEntry.Verification = &models.LogEntryAnonVerification{
+		SignedEntryTimestamp: strfmt.Base64(signedTimestamp),
 	}
 
-	jsonPath, err := fn(data)
-	if err != nil {
-		return fmt.Errorf("failed to extract JSON path: %w", err)
+	// Create the response format that Rekor creation endpoint returns: {uuid: logEntry}
+	response := map[string]*models.LogEntryAnon{
+		hex.EncodeToString(entryUUID): logEntry,
 	}
 
-	// return this entry for any lookup in Rekor
+	responseBody, err := json.Marshal(response)
+	if err != nil {
+		return fmt.Errorf("failed to marshal rekor response: %w", err)
+	}
+
+	// Create WireMock stub for POST /api/v1/log/entries (creation)
+	err = wiremock.StubFor(ctx, wiremock.Post(wiremock.URLPathEqualTo("/api/v1/log/entries")).
+		WillReturnResponse(wiremock.NewResponse().
+			WithBody(string(responseBody)).
+			WithHeaders(map[string]string{
+				"Content-Type": "application/json",
+			}).
+			WithStatus(201))) // Rekor returns 201 Created for successful entry creation
+	if err != nil {
+		return fmt.Errorf("failed to create creation endpoint stub: %w", err)
+	}
+
+	// Extract signature content for JSON path matching
+	jsonPathQueryValue, err := JsonPathFromSignature(signatureJSON)
+	if err != nil {
+		return fmt.Errorf("failed to extract JSON path from signature: %w", err)
+	}
+
+	// Create array response format for retrieval endpoint
+	retrievalResponse := []map[string]*models.LogEntryAnon{response}
+	retrievalResponseBody, err := json.Marshal(retrievalResponse)
+	if err != nil {
+		return fmt.Errorf("failed to marshal retrieval response: %w", err)
+	}
+
+	// Create WireMock stub for POST /api/v1/log/entries/retrieve (retrieval)
 	return wiremock.StubFor(ctx, wiremock.Post(wiremock.URLPathEqualTo("/api/v1/log/entries/retrieve")).
-		WithBodyPattern(wiremock.MatchingJsonPath(jsonPath)).
-		WillReturnResponse(wiremock.NewResponse().WithBody(string(body)).WithHeaders(
-			map[string]string{"Content-Type": "application/json"},
-		).WithStatus(200)))
+		WithBodyPattern(wiremock.MatchingJsonPath(jsonPathQueryValue)).
+		WillReturnResponse(wiremock.NewResponse().
+			WithBody(string(retrievalResponseBody)).
+			WithHeaders(map[string]string{
+				"Content-Type": "application/json",
+			}).
+			WithStatus(200))) // Rekor returns 200 OK for successful retrieval
 }
 
-type jsonPathExtractor func([]byte) (string, error)
+// StubRekorEntryCreationForAttestation creates WireMock stubs for both Rekor entry creation and retrieval endpoints
+// specifically for attestations using intoto entry type
+func StubRekorEntryCreationForAttestation(ctx context.Context, attestationData []byte, publicKey []byte) error {
+	state := testenv.FetchState[rekorState](ctx)
 
-// jsonPathFromSignature returns the JSON Path expression to be used in the wiremock stub
+	logEntry, entryUUID, err := computeLogEntryForAttestation(ctx, publicKey, attestationData)
+	if err != nil {
+		return err
+	}
+
+	// Compute the signed entry timestamp using the Rekor private key
+	signedTimestamp, err := ComputeEntryTimestamp(state.KeyPair.PrivateBytes, state.KeyPair.Password(), *logEntry)
+	if err != nil {
+		return fmt.Errorf("failed to compute signed entry timestamp: %w", err)
+	}
+
+	// Add the verification section with the signed entry timestamp
+	logEntry.Verification = &models.LogEntryAnonVerification{
+		SignedEntryTimestamp: strfmt.Base64(signedTimestamp),
+	}
+
+	// Create the response format that Rekor creation endpoint returns: {uuid: logEntry}
+	response := map[string]*models.LogEntryAnon{
+		hex.EncodeToString(entryUUID): logEntry,
+	}
+
+	responseBody, err := json.Marshal(response)
+	if err != nil {
+		return fmt.Errorf("failed to marshal rekor response: %w", err)
+	}
+
+	// Create WireMock stub for POST /api/v1/log/entries (creation)
+	err = wiremock.StubFor(ctx, wiremock.Post(wiremock.URLPathEqualTo("/api/v1/log/entries")).
+		WillReturnResponse(wiremock.NewResponse().
+			WithBody(string(responseBody)).
+			WithHeaders(map[string]string{
+				"Content-Type": "application/json",
+			}).
+			WithStatus(201))) // Rekor returns 201 Created for successful entry creation
+	if err != nil {
+		return fmt.Errorf("failed to create creation endpoint stub: %w", err)
+	}
+
+	// Extract attestation content for JSON path matching - compute the same hash as in computeLogEntryForAttestation
+	// Hash the entire DSSE envelope, not just the payload
+	payloadHash := sha256.Sum256(attestationData)
+	hash := hex.EncodeToString(payloadHash[:])
+
+	jsonPathQueryValue := fmt.Sprintf("$..[?(@.value=='%s')]", hash)
+
+	// Create array response format for retrieval endpoint
+	retrievalResponse := []map[string]*models.LogEntryAnon{response}
+	retrievalResponseBody, err := json.Marshal(retrievalResponse)
+	if err != nil {
+		return fmt.Errorf("failed to marshal retrieval response: %w", err)
+	}
+
+	// Create WireMock stub for POST /api/v1/log/entries/retrieve (retrieval)
+	return wiremock.StubFor(ctx, wiremock.Post(wiremock.URLPathEqualTo("/api/v1/log/entries/retrieve")).
+		WithBodyPattern(wiremock.MatchingJsonPath(jsonPathQueryValue)).
+		WillReturnResponse(wiremock.NewResponse().
+			WithBody(string(retrievalResponseBody)).
+			WithHeaders(map[string]string{
+				"Content-Type": "application/json",
+			}).
+			WithStatus(200))) // Rekor returns 200 OK for successful retrieval
+}
+
+// JsonPathFromSignature returns the JSON Path expression to be used in the wiremock stub
 // for a signature query. The expression matches the value of the signature's content.
-func jsonPathFromSignature(data []byte) (string, error) {
+func JsonPathFromSignature(data []byte) (string, error) {
 	signature := cosign.Signatures{}
 	if err := json.Unmarshal(data, &signature); err != nil {
 		return "", fmt.Errorf("unmarshalling signature: %w", err)
@@ -304,36 +508,6 @@ func jsonPathFromSignature(data []byte) (string, error) {
 	}
 
 	return fmt.Sprintf("$..[?(@.content=='%s')]", signature.Sig), nil
-}
-
-// jsonPathFromSignature returns the JSON Path expression to be used in the wiremock stub
-// for an attestaion query. The expression matches the value of the attestation's digest.
-func jsonPathFromAttestation(data []byte) (string, error) {
-	return fmt.Sprintf("$..[?(@.value=='%x')]", sha256.Sum256(data)), nil
-}
-
-// RekorEntryForAttestation given an image name for which attestation has been
-// previously performed via image.createAndPushAttestation, creates stub for a
-// mostly empty attestation log entry in Rekor
-func RekorEntryForAttestation(ctx context.Context, imageName string) error {
-	attestation, err := image.AttestationFrom(ctx, imageName)
-	if err != nil {
-		return err
-	}
-
-	return stubRekorEntryFor(ctx, attestation, jsonPathFromAttestation)
-}
-
-// RekorEntryForImageSignature given an image name for which signature has been
-// previously performed via image.createAndPushImageSignature, creates stub
-// log entry in Rekor
-func RekorEntryForImageSignature(ctx context.Context, imageName string) error {
-	signature, err := image.ImageSignatureFrom(ctx, imageName)
-	if err != nil {
-		return err
-	}
-
-	return stubRekorEntryFor(ctx, signature, jsonPathFromSignature)
 }
 
 // StubRekor returns the `http://host:port` of the stubbed Rekord
@@ -357,11 +531,22 @@ func IsRunning(ctx context.Context) bool {
 	return testenv.HasState[rekorState](ctx)
 }
 
+// ClearRekorEntries removes all Rekor entries by overriding
+// the retrieval endpoint to return an error
+func ClearRekorEntries(ctx context.Context) error {
+	// Create a stub that returns an error for any Rekor entry retrieval
+	// This simulates the case where Rekor entries are required but not available
+	return wiremock.StubFor(ctx, wiremock.Post(wiremock.URLPathEqualTo("/api/v1/log/entries/retrieve")).
+		WillReturnResponse(wiremock.NewResponse().
+			WithStatus(404).
+			WithHeader("Content-Type", "application/json").
+			WithBody(`{"message": "no entries found"}`))) // Error response
+}
+
 // AddStepsTo adds Gherkin steps to the godog ScenarioContext
 func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step(`^stub rekord running$`, stubRekordRunning)
-	sc.Step(`^a valid Rekor entry for attestation of "([^"]*)"$`, RekorEntryForAttestation)
-	sc.Step(`^a valid Rekor entry for image signature of "([^"]*)"$`, RekorEntryForImageSignature)
+	sc.Step(`^rekor entries are cleared$`, ClearRekorEntries)
 	sc.Step(`^VSA upload to Rekor should be expected$`, expectVSAUploadToRekor)
 	sc.Step(`^VSA should be uploaded to Rekor successfully$`, vsaShouldBeUploadedToRekor)
 	sc.Step(`^VSA index search should return no results$`, stubVSAIndexSearch)

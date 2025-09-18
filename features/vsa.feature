@@ -12,9 +12,7 @@ Feature: VSA generation and storage
     Given a key pair named "vsa-test"
     Given an image named "acceptance/vsa-test-image"
     Given a valid image signature of "acceptance/vsa-test-image" image signed by the "vsa-test" key
-    Given a valid Rekor entry for image signature of "acceptance/vsa-test-image"
     Given a valid attestation of "acceptance/vsa-test-image" signed by the "vsa-test" key
-    Given a valid Rekor entry for attestation of "acceptance/vsa-test-image"
     Given a git repository named "vsa-policy" with
       | main.rego | examples/happy_day.rego |
     Given policy configuration named "vsa-ec-policy" with specification
@@ -38,9 +36,7 @@ Feature: VSA generation and storage
     Given a key pair named "vsa-rekor"
     Given an image named "acceptance/vsa-rekor-image"
     Given a valid image signature of "acceptance/vsa-rekor-image" image signed by the "vsa-rekor" key
-    Given a valid Rekor entry for image signature of "acceptance/vsa-rekor-image"
     Given a valid attestation of "acceptance/vsa-rekor-image" signed by the "vsa-rekor" key
-    Given a valid Rekor entry for attestation of "acceptance/vsa-rekor-image"
     Given a git repository named "vsa-rekor-policy" with
       | main.rego | examples/happy_day.rego |
     Given policy configuration named "vsa-rekor-ec-policy" with specification
@@ -65,9 +61,7 @@ Feature: VSA generation and storage
     Given a key pair named "vsa-multi"
     Given an image named "acceptance/vsa-multi-image"
     Given a valid image signature of "acceptance/vsa-multi-image" image signed by the "vsa-multi" key
-    Given a valid Rekor entry for image signature of "acceptance/vsa-multi-image"
     Given a valid attestation of "acceptance/vsa-multi-image" signed by the "vsa-multi" key
-    Given a valid Rekor entry for attestation of "acceptance/vsa-multi-image"
     Given a git repository named "vsa-multi-policy" with
       | main.rego | examples/happy_day.rego |
     Given policy configuration named "vsa-multi-ec-policy" with specification
@@ -93,9 +87,7 @@ Feature: VSA generation and storage
     Given a key pair named "vsa-invalid"
     Given an image named "acceptance/vsa-invalid-image"
     Given a valid image signature of "acceptance/vsa-invalid-image" image signed by the "vsa-invalid" key
-    Given a valid Rekor entry for image signature of "acceptance/vsa-invalid-image"
     Given a valid attestation of "acceptance/vsa-invalid-image" signed by the "vsa-invalid" key
-    Given a valid Rekor entry for attestation of "acceptance/vsa-invalid-image"
     Given a git repository named "vsa-invalid-policy" with
       | main.rego | examples/happy_day.rego |
     Given policy configuration named "vsa-invalid-ec-policy" with specification

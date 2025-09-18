@@ -36,7 +36,6 @@ import (
 	"github.com/conforma/cli/acceptance/kubernetes/stub"
 	"github.com/conforma/cli/acceptance/kubernetes/types"
 	"github.com/conforma/cli/acceptance/registry"
-	"github.com/conforma/cli/acceptance/rekor"
 	"github.com/conforma/cli/acceptance/snaps"
 	"github.com/conforma/cli/acceptance/testenv"
 )
@@ -196,17 +195,7 @@ func createNamedSnapshotWithManyComponents(ctx context.Context, name string, amo
 			return ctx, err
 		}
 
-		err = rekor.RekorEntryForImageSignature(ctx, imageRef)
-		if err != nil {
-			return ctx, err
-		}
-
 		ctx, err = image.CreateAndPushAttestation(ctx, imageRef, key)
-		if err != nil {
-			return ctx, err
-		}
-
-		err = rekor.RekorEntryForAttestation(ctx, imageRef)
 		if err != nil {
 			return ctx, err
 		}
