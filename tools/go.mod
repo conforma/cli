@@ -3,15 +3,15 @@ module github.com/enterprise-contract/ec-cli/tools
 go 1.23.6
 
 require (
-	github.com/daixiang0/gci v0.13.5
+	github.com/daixiang0/gci v0.13.7
 	github.com/golangci/golangci-lint v1.60.3
 	github.com/google/addlicense v1.1.1
 	github.com/open-policy-agent/conftest v0.55.0
-	github.com/tektoncd/chains v0.22.0
-	github.com/tektoncd/cli v0.38.0
+	github.com/tektoncd/chains v0.22.3
+	github.com/tektoncd/cli v0.38.2
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	helm.sh/helm/v3 v3.15.4
-	k8s.io/kubernetes v1.31.12
+	k8s.io/kubernetes v1.31.13
 	sigs.k8s.io/kustomize/kustomize/v5 v5.4.3
 )
 
@@ -449,7 +449,7 @@ require (
 	github.com/tdakkota/asciicheck v0.2.0 // indirect
 	github.com/tektoncd/hub v1.18.0 // indirect
 	github.com/tektoncd/pipeline v0.66.0 // indirect
-	github.com/tektoncd/triggers v0.29.0 // indirect
+	github.com/tektoncd/triggers v0.29.1 // indirect
 	github.com/tetafro/godot v1.4.16 // indirect
 	github.com/thales-e-security/pool v0.0.2 // indirect
 	github.com/theupdateframework/go-tuf v0.7.0 // indirect

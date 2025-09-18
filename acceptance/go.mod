@@ -3,30 +3,30 @@ module github.com/enterprise-contract/ec-cli/acceptance
 go 1.23.6
 
 require (
-	cuelang.org/go v0.10.0
+	cuelang.org/go v0.10.1
 	github.com/cucumber/godog v0.14.1
 	github.com/cyberphone/json-canonicalization v0.0.0-20231217050601-ba74d44ecf5f
 	github.com/doiit/picocolors v1.0.1
-	github.com/enterprise-contract/enterprise-contract-controller/api v0.1.55
-	github.com/evanphx/json-patch/v5 v5.9.0
-	github.com/gkampitakis/go-snaps v0.5.7
+	github.com/enterprise-contract/enterprise-contract-controller/api v0.1.159
+	github.com/evanphx/json-patch/v5 v5.9.11
+	github.com/gkampitakis/go-snaps v0.5.15
 	github.com/go-git/go-billy/v5 v5.6.2
 	github.com/go-git/go-git/v5 v5.13.2
 	github.com/go-openapi/strfmt v0.23.0
-	github.com/google/go-containerregistry v0.20.2
+	github.com/google/go-containerregistry v0.20.6
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/in-toto/in-toto-golang v0.9.1-0.20240317085821-8e2966059a09
 	github.com/konflux-ci/application-api v0.0.0-20240812090716-e7eb2ecfb409
-	github.com/otiai10/copy v1.14.0
+	github.com/otiai10/copy v1.14.1
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/pkg/diff v0.0.0-20210226163009-20ebb0f2a09e
 	github.com/pkg/errors v0.9.1
-	github.com/secure-systems-lab/go-securesystemslib v0.9.0
-	github.com/sigstore/cosign/v2 v2.4.0
-	github.com/sigstore/rekor v1.3.6
+	github.com/secure-systems-lab/go-securesystemslib v0.9.1
+	github.com/sigstore/cosign/v2 v2.4.3
+	github.com/sigstore/rekor v1.3.10
 	github.com/sigstore/sigstore v1.8.15
 	github.com/stretchr/testify v1.10.0
-	github.com/tektoncd/cli v0.38.0
+	github.com/tektoncd/cli v0.38.2
 	github.com/tektoncd/pipeline v0.70.0
 	github.com/testcontainers/testcontainers-go v0.33.0
 	github.com/transparency-dev/merkle v0.0.2
@@ -34,9 +34,9 @@ require (
 	github.com/yudai/gojsondiff v1.0.0
 	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948
 	gopkg.in/go-jose/go-jose.v2 v2.6.3
-	k8s.io/api v0.31.6
-	k8s.io/apimachinery v0.31.6
-	k8s.io/client-go v0.31.6
+	k8s.io/api v0.31.13
+	k8s.io/apimachinery v0.31.13
+	k8s.io/client-go v0.31.13
 	sigs.k8s.io/kind v0.24.0
 	sigs.k8s.io/kustomize/api v0.17.3
 	sigs.k8s.io/kustomize/kyaml v0.17.2
