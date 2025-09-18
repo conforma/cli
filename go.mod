@@ -3,17 +3,17 @@ module github.com/enterprise-contract/ec-cli
 go 1.23.6
 
 require (
-	cuelang.org/go v0.11.1
+	cuelang.org/go v0.11.2
 	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/Maldris/go-billy-afero v0.0.0-20200815120323-e9d3de59c99a
 	github.com/conforma/go-gather v1.0.2
-	github.com/enterprise-contract/enterprise-contract-controller/api v0.1.79
-	github.com/evanphx/json-patch v5.9.0+incompatible
-	github.com/gkampitakis/go-snaps v0.5.7
+	github.com/enterprise-contract/enterprise-contract-controller/api v0.1.159
+	github.com/evanphx/json-patch v5.9.11+incompatible
+	github.com/gkampitakis/go-snaps v0.5.15
 	github.com/go-git/go-git/v5 v5.13.2
-	github.com/go-logr/logr v1.4.2
+	github.com/go-logr/logr v1.4.3
 	github.com/google/go-cmp v0.7.0
-	github.com/google/go-containerregistry v0.20.2
+	github.com/google/go-containerregistry v0.20.6
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
 	github.com/in-toto/in-toto-golang v0.9.0
 	github.com/jstemmer/go-junit-report/v2 v2.1.0
@@ -26,13 +26,13 @@ require (
 	github.com/package-url/packageurl-go v0.1.3
 	github.com/qri-io/jsonpointer v0.1.1
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
-	github.com/secure-systems-lab/go-securesystemslib v0.9.0
-	github.com/sigstore/cosign/v2 v2.4.1
+	github.com/secure-systems-lab/go-securesystemslib v0.9.1
+	github.com/sigstore/cosign/v2 v2.4.3
 	github.com/sigstore/sigstore v1.8.15
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/afero v1.11.0
 	github.com/spf13/cobra v1.8.1
-	github.com/spf13/pflag v1.0.5
+	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
 	github.com/stuart-warren/yamlfmt v0.2.0
@@ -40,9 +40,9 @@ require (
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
 	golang.org/x/net v0.34.0
 	golang.org/x/sync v0.14.0
-	k8s.io/apiextensions-apiserver v0.31.4
-	k8s.io/apimachinery v0.31.6
-	k8s.io/client-go v0.31.6
+	k8s.io/apiextensions-apiserver v0.31.13
+	k8s.io/apimachinery v0.31.13
+	k8s.io/client-go v0.31.13
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/kube-openapi v0.0.0-20240903163716-9e1beecbcb38
 	oras.land/oras-go/v2 v2.5.0
@@ -50,7 +50,7 @@ require (
 )
 
 // use forked version until we can get the fixes merged see https://github.com/enterprise-contract/go-containerregistry/blob/main/hack/ec-patches.sh for a list of patches we carry
-replace github.com/google/go-containerregistry => github.com/enterprise-contract/go-containerregistry v0.20.3-0.20250120083621-7be5271048b1
+replace github.com/google/go-containerregistry => github.com/enterprise-contract/go-containerregistry v0.20.6
 
 require (
 	cel.dev/expr v0.19.1 // indirect
