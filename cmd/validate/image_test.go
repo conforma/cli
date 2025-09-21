@@ -32,7 +32,7 @@ import (
 	"testing"
 	"time"
 
-	hd "github.com/MakeNowJust/heredoc"
+	hd "github.com/MakeNowJust/heredoc/v2"
 	ociMetadata "github.com/conforma/go-gather/gather/oci"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/google/go-containerregistry/pkg/name"
