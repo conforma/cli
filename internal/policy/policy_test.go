@@ -27,7 +27,7 @@ import (
 	"testing"
 	"time"
 
-	hd "github.com/MakeNowJust/heredoc"
+	hd "github.com/MakeNowJust/heredoc/v2"
 	fileMetadata "github.com/conforma/go-gather/gather/file"
 	"github.com/conforma/go-gather/metadata"
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"

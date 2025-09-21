@@ -40,7 +40,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MakeNowJust/heredoc"
+	"github.com/MakeNowJust/heredoc/v2"
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/mock"

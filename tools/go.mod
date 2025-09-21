@@ -4,7 +4,7 @@ go 1.24.4
 
 require (
 	github.com/daixiang0/gci v0.13.5
-	github.com/golangci/golangci-lint v1.63.4
+	github.com/golangci/golangci-lint/v2 v2.5.0
 	github.com/google/addlicense v1.1.1
 	github.com/open-policy-agent/conftest v0.62.0
 	github.com/tektoncd/chains v0.22.2
