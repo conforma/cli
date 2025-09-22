@@ -20,7 +20,7 @@ import (
 	_ "embed"
 	"strings"
 
-	"github.com/santhosh-tekuri/jsonschema/v5"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 //go:embed slsa_provenance_v0.2.json
