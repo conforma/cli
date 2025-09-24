@@ -27,7 +27,6 @@ import (
 	"time"
 
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
-	"github.com/google/go-containerregistry/pkg/name"
 	ssldsse "github.com/secure-systems-lab/go-securesystemslib/dsse"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
@@ -275,14 +274,9 @@ func (c *VSAChecker) CheckExistingVSA(ctx context.Context, imageRef string, expi
 		return nil, fmt.Errorf("VSA retriever not available")
 	}
 
-	// Extract digest from image reference
-	digest, err := c.extractDigestFromImageRef(imageRef)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract digest from image reference %s: %w", imageRef, err)
-	}
-
-	// Retrieve VSA envelope for this image digest
-	envelope, err := c.retriever.RetrieveVSA(ctx, digest)
+	// Retrieve VSA envelope for this image reference
+	// Pass the original imageRef to the retriever, which can extract what it needs
+	envelope, err := c.retriever.RetrieveVSA(ctx, imageRef)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve VSA envelope: %w", err)
 	}
@@ -335,27 +329,6 @@ func (c *VSAChecker) IsValidVSA(ctx context.Context, imageRef string, expiration
 
 	// Return true if VSA exists and is not expired (validation should be skipped)
 	return result.Found && !result.Expired, nil
-}
-
-// extractDigestFromImageRef extracts the digest from an image reference
-// It accepts digest-based references (registry/image@sha256:...) and rejects tag-based references
-func (c *VSAChecker) extractDigestFromImageRef(imageRef string) (string, error) {
-	// Try to parse as digest reference first
-	digestRef, err := name.NewDigest(imageRef)
-	if err == nil {
-		// Already has a digest, extract it
-		return digestRef.DigestStr(), nil
-	}
-
-	// If parsing as digest failed, try as tag reference to validate format
-	_, err = name.NewTag(imageRef)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse image reference %s: %w", imageRef, err)
-	}
-
-	// For tag references, we cannot determine the digest without resolving it
-	// This would require network calls which are not appropriate for VSA checking
-	return "", fmt.Errorf("image reference %s is a tag reference without digest; VSA checking requires digest-based references", imageRef)
 }
 
 // IsVSAExpired checks if a VSA is expired based on the timestamp and threshold
@@ -412,6 +385,16 @@ func CreateRetrieverFromUploadFlags(vsaUpload []string) VSARetriever {
 			}
 
 			log.Debugf("Created Rekor VSA retriever: %s", rekorURL)
+			return retriever
+		case "file":
+			basePath := config.BaseURL
+			if basePath == "" {
+				// Use current directory if no path specified
+				basePath = "."
+			}
+
+			retriever := NewFileVSARetrieverWithOSFs(basePath)
+			log.Debugf("Created File VSA retriever with base path: %s", basePath)
 			return retriever
 		default:
 			log.Debugf("No VSA retriever available for backend: %s", config.Backend)

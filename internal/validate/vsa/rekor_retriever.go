@@ -27,6 +27,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/google/go-containerregistry/pkg/name"
 	ssldsse "github.com/secure-systems-lab/go-securesystemslib/dsse"
 	"github.com/sigstore/cosign/v2/cmd/cosign/cli/rekor"
 	"github.com/sigstore/rekor/pkg/generated/client"
@@ -163,6 +164,39 @@ func isValidImageDigest(digest string) bool {
 	return err == nil
 }
 
+// extractImageDigest extracts and validates an image digest from various identifier formats
+func (r *RekorVSARetriever) extractImageDigest(identifier string) (string, error) {
+	// If identifier is already a digest, validate and return it
+	if isValidImageDigest(identifier) {
+		return identifier, nil
+	}
+
+	// Try to parse as image reference with digest
+	// This handles cases like "registry.com/image@sha256:abc123..."
+	if strings.Contains(identifier, "@") {
+		// Split on @ to get the digest part
+		parts := strings.Split(identifier, "@")
+		if len(parts) == 2 {
+			digest := parts[1]
+			if isValidImageDigest(digest) {
+				return digest, nil
+			}
+		}
+	}
+
+	// Try to parse as image reference using go-containerregistry
+	// This handles cases like "registry.com/image:tag@sha256:abc123..."
+	digestRef, err := name.NewDigest(identifier)
+	if err == nil {
+		digest := digestRef.DigestStr()
+		if isValidImageDigest(digest) {
+			return digest, nil
+		}
+	}
+
+	return "", fmt.Errorf("identifier '%s' does not contain a valid image digest", identifier)
+}
+
 // classifyEntryKind determines the kind of a Rekor entry (intoto, intoto-v002, dsse, etc.)
 func (r *RekorVSARetriever) classifyEntryKind(entry models.LogEntryAnon) string {
 	// Prefer Body structure from the decoded Rekor body
@@ -239,16 +273,18 @@ func (r *RekorVSARetriever) classifyEntryKind(entry models.LogEntryAnon) string 
 	return "unknown"
 }
 
-// RetrieveVSA retrieves the latest VSA data as a DSSE envelope for a given image digest
+// RetrieveVSA retrieves the latest VSA data as a DSSE envelope for a given identifier
+// The identifier can be an image digest, image reference with digest, or other string
 // This is the main method used by validation functions to get VSA data for signature verification
-func (r *RekorVSARetriever) RetrieveVSA(ctx context.Context, imageDigest string) (*ssldsse.Envelope, error) {
-	if imageDigest == "" {
-		return nil, fmt.Errorf("image digest cannot be empty")
+func (r *RekorVSARetriever) RetrieveVSA(ctx context.Context, identifier string) (*ssldsse.Envelope, error) {
+	if identifier == "" {
+		return nil, fmt.Errorf("identifier cannot be empty")
 	}
 
-	// Validate image digest format
-	if !isValidImageDigest(imageDigest) {
-		return nil, fmt.Errorf("invalid image digest format: %s", imageDigest)
+	// Extract and validate image digest from identifier
+	imageDigest, err := r.extractImageDigest(identifier)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract image digest from identifier: %w", err)
 	}
 
 	// Create context with timeout if specified

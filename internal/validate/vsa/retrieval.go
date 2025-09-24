@@ -25,9 +25,10 @@ import (
 
 // VSARetriever defines the interface for retrieving VSA records from various sources
 type VSARetriever interface {
-	// RetrieveVSA retrieves VSA data as a DSSE envelope for a given image digest
-	// This is the main method used by validation functions to get VSA data for signature verification
-	RetrieveVSA(ctx context.Context, imageDigest string) (*ssldsse.Envelope, error)
+	// RetrieveVSA retrieves VSA data as a DSSE envelope for a given identifier
+	// The identifier can be a digest, image reference, file path, or any other string
+	// that the specific retriever implementation understands
+	RetrieveVSA(ctx context.Context, identifier string) (*ssldsse.Envelope, error)
 }
 
 // RetrievalOptions configures VSA retrieval behavior

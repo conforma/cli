@@ -512,14 +512,14 @@ func TestVSAChecker_CheckExistingVSA_ErrorCases(t *testing.T) {
 			imageRef:    "registry.example.com/test:latest",
 			expiration:  24 * time.Hour,
 			expectError: true,
-			errorMsg:    "failed to extract digest from image reference",
+			errorMsg:    "failed to retrieve VSA envelope",
 		},
 		{
 			name:        "empty image reference",
 			imageRef:    "",
 			expiration:  24 * time.Hour,
 			expectError: true,
-			errorMsg:    "failed to extract digest from image reference",
+			errorMsg:    "failed to retrieve VSA envelope",
 		},
 	}
 

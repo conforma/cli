@@ -174,7 +174,7 @@ func TestRekorVSARetriever_RetrieveVSA_EmptyDigest(t *testing.T) {
 
 	_, err := retriever.RetrieveVSA(context.Background(), "")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "image digest cannot be empty")
+	assert.Contains(t, err.Error(), "identifier cannot be empty")
 }
 
 func TestRekorVSARetriever_RetrieveVSA_NoEntries(t *testing.T) {
