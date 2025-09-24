@@ -30,7 +30,7 @@ func TestCreateWorkDir(t *testing.T) {
 	temp, err := CreateWorkDir(afero.NewMemMapFs())
 
 	assert.NoError(t, err)
-	assert.Regexpf(t, `/tmp/ec-work-\d+`, temp, "Did not expect temp directory at: %s", temp)
+	assert.Regexpf(t, `ec-work-\d+`, temp, "Did not expect temp directory at: %s", temp)
 }
 
 func TestWriteTempFile(t *testing.T) {

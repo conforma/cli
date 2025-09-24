@@ -65,10 +65,10 @@ func TestCollectAnnotationData(t *testing.T) {
 		ProcessAnnotation: true,
 	})
 
-	rules := policyRules{}
+	rules := PolicyRules{}
 	require.NoError(t, rules.collect(ast.NewAnnotationsRef(module.Annotations[0])))
 
-	assert.Equal(t, policyRules{
+	assert.Equal(t, PolicyRules{
 		"a.b.c.short": {
 			Code:              "a.b.c.short",
 			Collections:       []string{"A", "B", "C"},
@@ -92,7 +92,7 @@ func TestRuleMetadata(t *testing.T) {
 	ctx := context.TODO()
 	ctx = context.WithValue(ctx, effectiveTimeKey, effectiveTimeTest)
 
-	rules := policyRules{
+	rules := PolicyRules{
 		"warning1": rule.Info{
 			Title: "Warning1",
 		},
@@ -119,7 +119,7 @@ func TestRuleMetadata(t *testing.T) {
 	cases := []struct {
 		name   string
 		result Result
-		rules  policyRules
+		rules  PolicyRules
 		want   Result
 	}{
 		{
