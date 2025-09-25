@@ -78,7 +78,7 @@ func (ec *EquivalenceChecker) AreEquivalent(spec1, spec2 ecc.EnterpriseContractP
 		return false, fmt.Errorf("failed to normalize second policy: %w", err)
 	}
 
-	return ec.compareNormalizedPolicies(norm1, norm2), nil
+	return ec.compareNormalizedPolicies(norm1, norm2)
 }
 
 // normalizePolicy converts an EnterpriseContractPolicySpec into a normalized form
@@ -208,28 +208,46 @@ func (ec *EquivalenceChecker) normalizeBucket(sources []ecc.Source) (PolicyBucke
 	}, nil
 }
 
-// mergeRuleData merges RuleData from multiple sources, canonicalizing JSON
+// mergeRuleData merges RuleData from multiple sources in deterministic order
 func (ec *EquivalenceChecker) mergeRuleData(sources []ecc.Source) (map[string]interface{}, error) {
-	merged := make(map[string]interface{})
+	type item struct {
+		key string
+		m   map[string]interface{}
+	}
+	var items []item
 
+	// Process sources and create deterministic ordering
 	for _, source := range sources {
-		if source.RuleData != nil {
-			// Convert RuleData JSON to map[string]interface{}
-			var ruleData map[string]interface{}
-			if err := json.Unmarshal(source.RuleData.Raw, &ruleData); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal rule data: %w", err)
-			}
+		if source.RuleData == nil {
+			continue
+		}
 
-			// Convert RuleData to canonical JSON
-			canonical, err := ec.canonicalizeJSON(ruleData)
-			if err != nil {
-				return nil, fmt.Errorf("failed to canonicalize rule data: %w", err)
-			}
+		// Convert RuleData JSON to map[string]interface{}
+		var ruleData map[string]interface{}
+		if err := json.Unmarshal(source.RuleData.Raw, &ruleData); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal rule data: %w", err)
+		}
 
-			// Merge the canonical data
-			if err := ec.mergeJSON(merged, canonical); err != nil {
-				return nil, fmt.Errorf("failed to merge rule data: %w", err)
-			}
+		// Create deterministic key based on canonical JSON hash
+		canonicalBytes, err := marshalCanonical(ruleData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal canonical rule data: %w", err)
+		}
+		key := fmt.Sprintf("%x", sha256.Sum256(canonicalBytes))
+
+		items = append(items, item{key: key, m: ruleData})
+	}
+
+	// Sort by deterministic key to ensure stable merge order
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].key < items[j].key
+	})
+
+	// Merge in deterministic order
+	merged := make(map[string]interface{})
+	for _, item := range items {
+		if err := ec.mergeJSON(merged, item.m); err != nil {
+			return nil, fmt.Errorf("failed to merge rule data: %w", err)
 		}
 	}
 
@@ -238,15 +256,15 @@ func (ec *EquivalenceChecker) mergeRuleData(sources []ecc.Source) (map[string]in
 
 // canonicalizeJSON converts a JSON value to canonical form (sorted keys)
 func (ec *EquivalenceChecker) canonicalizeJSON(data interface{}) (map[string]interface{}, error) {
-	// Convert to JSON and back to ensure canonical form
-	jsonBytes, err := json.Marshal(data)
+	// Use deterministic JSON encoding and then unmarshal to get canonical structure
+	jsonBytes, err := marshalCanonical(data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal canonical JSON: %w", err)
 	}
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(jsonBytes, &result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal canonical JSON: %w", err)
 	}
 
 	return result, nil
@@ -384,10 +402,10 @@ func (ec *EquivalenceChecker) normalizeMatcher(matcher string) string {
 }
 
 // compareNormalizedPolicies compares two normalized policies for equivalence
-func (ec *EquivalenceChecker) compareNormalizedPolicies(norm1, norm2 *NormalizedPolicy) bool {
+func (ec *EquivalenceChecker) compareNormalizedPolicies(norm1, norm2 *NormalizedPolicy) (bool, error) {
 	// Must have the same number of buckets
 	if len(norm1.Buckets) != len(norm2.Buckets) {
-		return false
+		return false, nil
 	}
 
 	// Create a map of buckets from the second policy for efficient lookup
@@ -402,15 +420,19 @@ func (ec *EquivalenceChecker) compareNormalizedPolicies(norm1, norm2 *Normalized
 		key := ec.bucketKey(bucket1)
 		bucket2, exists := bucketMap[key]
 		if !exists {
-			return false
+			return false, nil
 		}
 
-		if !ec.bucketsEqual(bucket1, bucket2) {
-			return false
+		bucketsEqual, err := ec.bucketsEqual(bucket1, bucket2)
+		if err != nil {
+			return false, fmt.Errorf("failed to compare buckets: %w", err)
+		}
+		if !bucketsEqual {
+			return false, nil
 		}
 	}
 
-	return true
+	return true, nil
 }
 
 // bucketKey creates a unique key for a bucket based on policy and data URIs
@@ -421,33 +443,37 @@ func (ec *EquivalenceChecker) bucketKey(bucket PolicyBucket) string {
 }
 
 // bucketsEqual compares two buckets for equivalence
-func (ec *EquivalenceChecker) bucketsEqual(bucket1, bucket2 PolicyBucket) bool {
+func (ec *EquivalenceChecker) bucketsEqual(bucket1, bucket2 PolicyBucket) (bool, error) {
 	// Compare policy URIs
 	if !ec.stringSlicesEqual(bucket1.PolicyURIs, bucket2.PolicyURIs) {
-		return false
+		return false, nil
 	}
 
 	// Compare data URIs
 	if !ec.stringSlicesEqual(bucket1.DataURIs, bucket2.DataURIs) {
-		return false
+		return false, nil
 	}
 
 	// Compare RuleData by canonicalizing and hashing
-	if !ec.ruleDataEqual(bucket1.RuleData, bucket2.RuleData) {
-		return false
+	ruleDataEqual, err := ec.ruleDataEqual(bucket1.RuleData, bucket2.RuleData)
+	if err != nil {
+		return false, fmt.Errorf("failed to compare rule data: %w", err)
+	}
+	if !ruleDataEqual {
+		return false, nil
 	}
 
 	// Compare include matchers
 	if !ec.stringSlicesEqual(bucket1.Include, bucket2.Include) {
-		return false
+		return false, nil
 	}
 
 	// Compare exclude matchers
 	if !ec.stringSlicesEqual(bucket1.Exclude, bucket2.Exclude) {
-		return false
+		return false, nil
 	}
 
-	return true
+	return true, nil
 }
 
 // stringSlicesEqual compares two string slices for equality
@@ -466,30 +492,26 @@ func (ec *EquivalenceChecker) stringSlicesEqual(slice1, slice2 []string) bool {
 }
 
 // ruleDataEqual compares two RuleData objects for equality by canonicalizing and hashing
-func (ec *EquivalenceChecker) ruleDataEqual(data1, data2 map[string]interface{}) bool {
+func (ec *EquivalenceChecker) ruleDataEqual(data1, data2 map[string]interface{}) (bool, error) {
 	hash1, err := ec.hashRuleData(data1)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("failed to hash first rule data: %w", err)
 	}
 
 	hash2, err := ec.hashRuleData(data2)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("failed to hash second rule data: %w", err)
 	}
 
-	return hash1 == hash2
+	return hash1 == hash2, nil
 }
 
 // hashRuleData creates a hash of canonicalized RuleData
 func (ec *EquivalenceChecker) hashRuleData(data map[string]interface{}) (string, error) {
-	canonical, err := ec.canonicalizeJSON(data)
+	// Use deterministic JSON encoding with sorted keys
+	jsonBytes, err := marshalCanonical(data)
 	if err != nil {
-		return "", err
-	}
-
-	jsonBytes, err := json.Marshal(canonical)
-	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to marshal canonical JSON: %w", err)
 	}
 
 	hash := sha256.Sum256(jsonBytes)

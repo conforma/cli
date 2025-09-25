@@ -1050,3 +1050,168 @@ func TestEquivalenceChecker_ProtocolNormalization(t *testing.T) {
 		})
 	}
 }
+
+func TestDeterministicHashing(t *testing.T) {
+	// Test that equivalent data structures with different key orders produce the same hash
+	effectiveTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
+	checker := NewEquivalenceChecker(effectiveTime, nil)
+
+	// Create two equivalent maps with different key orders
+	data1 := map[string]interface{}{
+		"z": "last",
+		"a": "first",
+		"m": "middle",
+		"nested": map[string]interface{}{
+			"z": "nested_last",
+			"a": "nested_first",
+		},
+	}
+
+	data2 := map[string]interface{}{
+		"a": "first",
+		"m": "middle",
+		"z": "last",
+		"nested": map[string]interface{}{
+			"a": "nested_first",
+			"z": "nested_last",
+		},
+	}
+
+	// Both should produce the same hash
+	hash1, err := checker.hashRuleData(data1)
+	require.NoError(t, err)
+
+	hash2, err := checker.hashRuleData(data2)
+	require.NoError(t, err)
+
+	assert.Equal(t, hash1, hash2, "Equivalent data with different key orders should produce the same hash")
+
+	// Test with arrays containing maps
+	data3 := map[string]interface{}{
+		"items": []interface{}{
+			map[string]interface{}{
+				"z": "item_last",
+				"a": "item_first",
+			},
+			map[string]interface{}{
+				"a": "item2_first",
+				"z": "item2_last",
+			},
+		},
+	}
+
+	data4 := map[string]interface{}{
+		"items": []interface{}{
+			map[string]interface{}{
+				"a": "item_first",
+				"z": "item_last",
+			},
+			map[string]interface{}{
+				"z": "item2_last",
+				"a": "item2_first",
+			},
+		},
+	}
+
+	hash3, err := checker.hashRuleData(data3)
+	require.NoError(t, err)
+
+	hash4, err := checker.hashRuleData(data4)
+	require.NoError(t, err)
+
+	assert.Equal(t, hash3, hash4, "Equivalent data with different key orders in nested structures should produce the same hash")
+}
+
+func TestDeterministicMergeOrder(t *testing.T) {
+	// Test that equivalent specs with different source orders produce identical merged results
+	effectiveTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
+	checker := NewEquivalenceChecker(effectiveTime, nil)
+
+	// Create two equivalent specs with different source orders
+	spec1 := ecc.EnterpriseContractPolicySpec{
+		Sources: []ecc.Source{
+			{
+				Name: "source-a",
+				RuleData: &extv1.JSON{
+					Raw: []byte(`{"key1": "value1", "key2": "value2"}`),
+				},
+			},
+			{
+				Name: "source-b",
+				RuleData: &extv1.JSON{
+					Raw: []byte(`{"key2": "value2_override", "key3": "value3"}`),
+				},
+			},
+		},
+	}
+
+	spec2 := ecc.EnterpriseContractPolicySpec{
+		Sources: []ecc.Source{
+			{
+				Name: "source-b",
+				RuleData: &extv1.JSON{
+					Raw: []byte(`{"key2": "value2_override", "key3": "value3"}`),
+				},
+			},
+			{
+				Name: "source-a",
+				RuleData: &extv1.JSON{
+					Raw: []byte(`{"key1": "value1", "key2": "value2"}`),
+				},
+			},
+		},
+	}
+
+	// Both specs should produce identical merged results despite different source order
+	merged1, err := checker.mergeRuleData(spec1.Sources)
+	require.NoError(t, err)
+
+	merged2, err := checker.mergeRuleData(spec2.Sources)
+	require.NoError(t, err)
+
+	// The merged results should be identical
+	assert.Equal(t, merged1, merged2, "Equivalent specs with different source orders should produce identical merged results")
+
+	// Verify the expected merged content (deterministic ordering based on canonical JSON hash)
+	// The source with smaller canonical hash comes first, so its values are not overridden
+	expected := map[string]interface{}{
+		"key1": "value1",
+		"key2": "value2", // This is the value from the first source (smaller hash)
+		"key3": "value3",
+	}
+	assert.Equal(t, expected, merged1)
+	assert.Equal(t, expected, merged2)
+}
+
+func TestDeterministicMergeOrderDebug(t *testing.T) {
+	// Debug test to understand the merge behavior
+	effectiveTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
+	checker := NewEquivalenceChecker(effectiveTime, nil)
+
+	// Create test data
+	source1 := ecc.Source{
+		Name: "source-a",
+		RuleData: &extv1.JSON{
+			Raw: []byte(`{"key1": "value1", "key2": "value2"}`),
+		},
+	}
+
+	source2 := ecc.Source{
+		Name: "source-b",
+		RuleData: &extv1.JSON{
+			Raw: []byte(`{"key2": "value2_override", "key3": "value3"}`),
+		},
+	}
+
+	// Test both orders
+	merged1, err := checker.mergeRuleData([]ecc.Source{source1, source2})
+	require.NoError(t, err)
+	t.Logf("Order 1 (source-a, source-b): %+v", merged1)
+
+	merged2, err := checker.mergeRuleData([]ecc.Source{source2, source1})
+	require.NoError(t, err)
+	t.Logf("Order 2 (source-b, source-a): %+v", merged2)
+
+	// They should be identical
+	assert.Equal(t, merged1, merged2, "Different source orders should produce identical results")
+}

@@ -8,10 +8,12 @@ This tool implements a sophisticated equivalence checker that normalizes and com
 
 - **Source Normalization**: Groups sources by identical policy/data URI sets
 - **Digest Stripping**: Ignores digests in policy/data URLs for comparison
-- **RuleData Canonicalization**: Compares JSON data with sorted keys
+- **RuleData Canonicalization**: Compares JSON data with deterministic key sorting
+- **Deterministic Merging**: Merges RuleData in content-based order, not input order
 - **Volatile Config Filtering**: Considers time-based and image-based temporary configurations
 - **Matcher Normalization**: Handles `pkg.*` → `pkg` conversion and deduplication
 - **Global Configuration Merging**: Incorporates deprecated global config into all sources
+- **Comprehensive Error Handling**: Proper error propagation with descriptive context
 
 ## Usage
 
@@ -108,7 +110,7 @@ ec compare policy1.yaml policy2.yaml --effective-time "attestation"
 
 ## How Equivalence is Determined
 
-The equivalence checker performs a multi-step normalization and comparison process. Here's the detailed technical breakdown:
+The equivalence checker performs a multi-step normalization and comparison process with **deterministic behavior** to ensure consistent results. Here's the detailed technical breakdown:
 
 ### 1. Source Bucketization
 
@@ -161,7 +163,7 @@ ruleData: {"allowed_registry_prefixes": ["registry.redhat.io/", "registry.access
 ruleData: {"timeout": 30, "allowed_registry_prefixes": ["registry.access.redhat.com/", "registry.redhat.io/"]}
 ```
 
-**Canonical JSON (sorted keys, consistent formatting):**
+**Canonical JSON (deterministic key sorting at all levels):**
 ```json
 {
   "allowed_registry_prefixes": ["registry.access.redhat.com/", "registry.redhat.io/"],
@@ -169,11 +171,17 @@ ruleData: {"timeout": 30, "allowed_registry_prefixes": ["registry.access.redhat.
 }
 ```
 
+**Technical Implementation:**
+- Uses `marshalCanonical()` which recursively sorts map keys at every level
+- Ensures deterministic JSON output regardless of input key order
+- Handles nested objects, arrays, and scalar values consistently
+- Produces identical byte sequences for equivalent data structures
+
 **Result:** Both RuleData objects produce the same canonical JSON, so they're considered equivalent.
 
 #### Merging Process
 
-When multiple sources have RuleData, they are merged:
+When multiple sources have RuleData, they are merged in **deterministic order** based on the canonical JSON hash of each source's RuleData:
 
 ```yaml
 # Source 1 RuleData
@@ -182,9 +190,13 @@ When multiple sources have RuleData, they are merged:
 # Source 2 RuleData  
 {"timeout": 30, "max_size": "1GB"}
 
+# Deterministic merge order (based on canonical JSON hash)
+# Source with smaller hash is processed first
 # Merged Result
 {"max_size": "1GB", "retries": 3, "timeout": 30}
 ```
+
+**Key Point**: The merge order is **content-based**, not input order-based. This ensures that equivalent policies with different source orderings produce identical merged results.
 
 ### 3. Matcher Normalization
 
@@ -377,6 +389,42 @@ $ ec compare policy1.yaml policy2.yaml
 ❌ Policies are not equivalent
 Effective time: 2024-01-15T12:00:00Z
 ```
+
+## Error Handling
+
+The equivalence checker now provides comprehensive error handling with detailed context:
+
+### Error Propagation
+- **No Silent Failures**: All errors are properly propagated with descriptive messages
+- **Context Preservation**: Error messages include operation context (e.g., "failed to hash rule data")
+- **Error Wrapping**: Original errors are wrapped with additional context using `fmt.Errorf`
+
+### Common Error Scenarios
+```bash
+# JSON parsing errors
+❌ failed to unmarshal rule data: invalid character '}' looking for beginning of object
+
+# Canonicalization errors  
+❌ failed to marshal canonical JSON: unsupported type: chan int
+
+# Merge errors
+❌ failed to merge rule data: conflicting data types for key 'timeout'
+```
+
+## Technical Improvements
+
+### Deterministic Behavior
+The equivalence checker has been enhanced to ensure **deterministic behavior** in all operations:
+
+- **Canonical JSON Encoding**: Uses `marshalCanonical()` for deterministic JSON output with sorted keys at all levels
+- **Deterministic Merging**: RuleData sources are merged in content-based order (canonical JSON hash) rather than input order
+- **Consistent Hashing**: Equivalent data structures always produce identical hashes regardless of key order
+- **Order Independence**: Different source orderings produce identical results
+
+### Error Handling Improvements
+- **No Silent Failures**: All errors are properly propagated with descriptive context
+- **Error Wrapping**: Original errors are wrapped with operation context using `fmt.Errorf`
+- **Comprehensive Coverage**: Error handling covers JSON parsing, canonicalization, and merging operations
 
 ## Limitations
 

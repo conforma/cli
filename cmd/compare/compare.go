@@ -46,8 +46,8 @@ func init() {
 func NewCompareCmd() *cobra.Command {
 	compareCmd := &cobra.Command{
 		Use:   "compare <policy1> <policy2>",
-		Short: "Compare two Enterprise Contract Policy specs for equivalence",
-		Long: `Compare two Enterprise Contract Policy specs to determine if they would
+		Short: "Compare two Conforma Policy specs for equivalence",
+		Long: `Compare two Conforma Policy specs to determine if they would
 produce the same evaluation result for a given image at a specific time.
 
 The comparison is based on:
@@ -73,7 +73,7 @@ Examples:
 		RunE: runCompare,
 	}
 
-	compareCmd.Flags().StringVar(&effectiveTime, "effective-time", "now", "Effective time for policy evaluation (RFC3339 format, 'now', or 'attestation')")
+	compareCmd.Flags().StringVar(&effectiveTime, "effective-time", "now", "Effective time for policy evaluation (RFC3339 format, 'now')")
 	compareCmd.Flags().StringVar(&imageDigest, "image-digest", "", "Image digest for volatile config matching")
 	compareCmd.Flags().StringVar(&imageRef, "image-ref", "", "Image reference for volatile config matching")
 	compareCmd.Flags().StringVar(&imageURL, "image-url", "", "Image URL for volatile config matching")
@@ -172,11 +172,23 @@ func loadPolicySpec(policyRef string) (ecc.EnterpriseContractPolicySpec, error) 
 
 	var ecp ecc.EnterpriseContractPolicy
 	if err := yaml.Unmarshal(content, &ecp); err != nil {
+		// If parsing as EnterpriseContractPolicy fails, try as EnterpriseContractPolicySpec
 		var spec ecc.EnterpriseContractPolicySpec
 		if err := yaml.Unmarshal(content, &spec); err != nil {
 			return ecc.EnterpriseContractPolicySpec{}, fmt.Errorf("unable to parse EnterpriseContractPolicySpec: %w", err)
 		}
 		return spec, nil
 	}
+
+	// Check if this is actually a valid CRD (has required fields)
+	if ecp.APIVersion == "" || ecp.Kind == "" {
+		// This is not a valid CRD, try parsing as EnterpriseContractPolicySpec
+		var spec ecc.EnterpriseContractPolicySpec
+		if err := yaml.Unmarshal(content, &spec); err != nil {
+			return ecc.EnterpriseContractPolicySpec{}, fmt.Errorf("unable to parse EnterpriseContractPolicySpec: %w", err)
+		}
+		return spec, nil
+	}
+
 	return ecp.Spec, nil
 }

@@ -1,10 +1,10 @@
 = ec compare
 
-Compare two Enterprise Contract Policy specs for equivalence
+Compare two Conforma Policy specs for equivalence
 
 == Synopsis
 
-Compare two Enterprise Contract Policy specs to determine if they would
+Compare two Conforma Policy specs to determine if they would
 produce the same evaluation result for a given image at a specific time.
 
 The comparison is based on:
@@ -32,7 +32,7 @@ ec compare <policy1> <policy2> [flags]
 ----
 == Options
 
---effective-time:: Effective time for policy evaluation (RFC3339 format, 'now', or 'attestation') (Default: now)
+--effective-time:: Effective time for policy evaluation (RFC3339 format, 'now') (Default: now)
 -h, --help:: help for compare (Default: false)
 --image-digest:: Image digest for volatile config matching
 --image-ref:: Image reference for volatile config matching
