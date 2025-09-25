@@ -21,6 +21,7 @@ package source
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -163,6 +164,7 @@ func TestInlineDataSource(t *testing.T) {
 			// Clear download cache for each test
 			t.Cleanup(func() {
 				downloadCache = sync.Map{}
+				symlinkMutexes = sync.Map{}
 			})
 
 			s := InlineData(tt.inputData)
@@ -276,6 +278,7 @@ func TestInlineDataGetPolicy(t *testing.T) {
 			// Clear download cache for each test
 			t.Cleanup(func() {
 				downloadCache = sync.Map{}
+				symlinkMutexes = sync.Map{}
 			})
 
 			s := InlineData(tt.inputData)
@@ -539,6 +542,7 @@ func TestGetPolicyThroughCache(t *testing.T) {
 	test := func(t *testing.T, fs afero.Fs, expectedDownloads int) {
 		t.Cleanup(func() {
 			downloadCache = sync.Map{}
+			symlinkMutexes = sync.Map{}
 		})
 
 		ctx := utils.WithFS(context.Background(), fs)
@@ -604,6 +608,7 @@ func TestGetPolicyThroughCache(t *testing.T) {
 func TestDownloadCacheWorkdirMismatch(t *testing.T) {
 	t.Cleanup(func() {
 		downloadCache = sync.Map{}
+		symlinkMutexes = sync.Map{}
 	})
 	tmp := t.TempDir()
 
@@ -631,6 +636,69 @@ func TestDownloadCacheWorkdirMismatch(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, destination1, destination2)
+}
+
+// TestConcurrentSymlinkCreation reproduces the race condition where multiple
+// goroutines try to create symlinks to the same cached policy simultaneously
+func TestConcurrentSymlinkCreation(t *testing.T) {
+	t.Cleanup(func() {
+		downloadCache = sync.Map{}
+		symlinkMutexes = sync.Map{}
+	})
+
+	tmp := t.TempDir()
+
+	source := &mockPolicySource{&mock.Mock{}}
+	source.On("PolicyUrl").Return("policy-url")
+	source.On("Subdir").Return("subdir")
+
+	// Pre-cache the policy in workdir1
+	precachedDest := uniqueDestination(tmp, "subdir", source.PolicyUrl())
+	require.NoError(t, os.MkdirAll(precachedDest, 0755))
+
+	// Create a test file in the cached directory
+	testFile := filepath.Join(precachedDest, "policy.rego")
+	require.NoError(t, os.WriteFile(testFile, []byte("package test"), 0644))
+
+	downloadCache.Store("policy-url", func() (string, cacheContent) {
+		return precachedDest, cacheContent{}
+	})
+
+	// Number of concurrent workers that will trigger the race condition
+	numWorkers := 10
+	results := make(chan error, numWorkers)
+
+	// Launch multiple goroutines that try to access the policy from different workdirs
+	for i := 0; i < numWorkers; i++ {
+		go func(workerID int) {
+			workerWorkdir := filepath.Join(tmp, fmt.Sprintf("worker-%d", workerID))
+			_, _, err := getPolicyThroughCache(
+				context.Background(),
+				source,
+				workerWorkdir,
+				func(s1, s2 string) (metadata.Metadata, error) {
+					// This shouldn't be called since we're using cached data
+					t.Errorf("Download function called unexpectedly for worker %d", workerID)
+					return nil, nil
+				},
+			)
+			results <- err
+		}(i)
+	}
+
+	// Collect results from all workers
+	var errors []error
+	for i := 0; i < numWorkers; i++ {
+		if err := <-results; err != nil {
+			errors = append(errors, err)
+		}
+	}
+
+	// Before the fix, this would fail with "file exists" errors
+	// After the fix, all workers should succeed
+	if len(errors) > 0 {
+		t.Fatalf("Expected no errors from concurrent symlink creation, but got %d errors: %v", len(errors), errors)
+	}
 }
 
 func TestLogMetadata(t *testing.T) {
