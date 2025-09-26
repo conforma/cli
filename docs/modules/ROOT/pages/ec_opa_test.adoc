@@ -65,7 +65,7 @@ If used with the '--bench' option then tests will be benchmarked.
 
 Example benchmark run:
 
-	$ opa test --bench ./example/
+	$  opa test --bench ./example/
 
 The optional "gobench" output format conforms to the Go Benchmark Data Format.
 

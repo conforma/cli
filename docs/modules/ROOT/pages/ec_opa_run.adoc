@@ -4,7 +4,7 @@ Start OPA in interactive or server mode
 
 == Synopsis
 
-Start an instance of the Open Policy Agent (OPA).
+Start an instance of OPA.
 
 To run the interactive shell:
 
