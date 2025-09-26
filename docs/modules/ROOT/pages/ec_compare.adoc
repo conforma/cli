@@ -1,0 +1,59 @@
+= ec compare
+
+Compare two Conforma Policy specs for equivalence
+
+== Synopsis
+
+Compare two Conforma Policy specs to determine if they would
+produce the same evaluation result for a given image at a specific time.
+
+The comparison is based on:
+- Policy and data source URIs (treated as sets)
+- RuleData content (canonicalized JSON comparison)
+- Include/exclude matchers (normalized and deduplicated)
+- Active volatile configuration (filtered by effective time and image matching)
+- Global configuration merging
+
+Examples:
+  # Compare two policy files
+  ec compare policy1.yaml policy2.yaml
+
+  # Compare with specific effective time
+  ec compare policy1.yaml policy2.yaml --effective-time "2024-01-15T12:00:00Z"
+
+  # Compare with image information for volatile config matching
+  ec compare policy1.yaml policy2.yaml --image-digest "sha256:abc123" --image-ref "registry.redhat.io/ubi8/ubi:latest"
+
+  # Compare with JSON output
+  ec compare policy1.yaml policy2.yaml --output json
+[source,shell]
+----
+ec compare <policy1> <policy2> [flags]
+----
+== Options
+
+--effective-time:: Effective time for policy evaluation (RFC3339 format, 'now') (Default: now)
+-h, --help:: help for compare (Default: false)
+--image-digest:: Image digest for volatile config matching
+--image-ref:: Image reference for volatile config matching
+--image-url:: Image URL for volatile config matching
+--output:: Output format (text, json) (Default: text)
+
+== Options inherited from parent commands
+
+--debug:: same as verbose but also show function names and line numbers (Default: false)
+--kubeconfig:: path to the Kubernetes config file to use
+--logfile:: file to write the logging output. If not specified logging output will be written to stderr
+--quiet:: less verbose output (Default: false)
+--retry-duration:: base duration for exponential backoff calculation (Default: 1s)
+--retry-factor:: exponential backoff multiplier (Default: 2)
+--retry-jitter:: randomness factor for backoff calculation (0.0-1.0) (Default: 0.1)
+--retry-max-retry:: maximum number of retry attempts (Default: 3)
+--retry-max-wait:: maximum wait time between retries (Default: 3s)
+--timeout:: max overall execution duration (Default: 5m0s)
+--trace:: enable trace logging, set one or more comma separated values: none,all,perf,cpu,mem,opa,log (Default: none)
+--verbose:: more verbose output (Default: false)
+
+== See also
+
+ * xref:ec.adoc[ec - Conforma CLI]
