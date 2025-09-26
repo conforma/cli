@@ -78,9 +78,13 @@ type PolicyUrl struct {
 // downloadCache is a concurrent map used to cache downloaded files.
 var downloadCache sync.Map
 
+// symlinkMutexes provides per-destination synchronization for symlink creation
+var symlinkMutexes sync.Map
+
 // ClearDownloadCache clears the download cache. This is primarily used for testing.
 func ClearDownloadCache() {
 	downloadCache = sync.Map{}
+	symlinkMutexes = sync.Map{}
 }
 
 type cacheContent struct {
@@ -111,13 +115,24 @@ func getPolicyThroughCache(ctx context.Context, s PolicySource, workDir string, 
 	}
 
 	fs := utils.FS(ctx)
-	if _, err := fs.Stat(dest); err == nil {
-		return dest, c.metadata, nil
-	}
 
 	// If the destination directory is different from the source directory, we
 	// need to symlink the source directory to the destination directory.
+	// Use synchronization to prevent race conditions when multiple goroutines
+	// try to create the same symlink simultaneously.
 	if filepath.Dir(dest) != filepath.Dir(d) {
+		// Get or create a mutex for this specific destination
+		mutexValue, _ := symlinkMutexes.LoadOrStore(dest, &sync.Mutex{})
+		mutex := mutexValue.(*sync.Mutex)
+
+		mutex.Lock()
+		defer mutex.Unlock()
+
+		// Check again if the destination exists after acquiring the lock
+		if _, err := fs.Stat(dest); err == nil {
+			return dest, c.metadata, nil
+		}
+
 		base := filepath.Dir(dest)
 		if err := fs.MkdirAll(base, 0755); err != nil {
 			return "", nil, err
@@ -135,6 +150,12 @@ func getPolicyThroughCache(ctx context.Context, s PolicySource, workDir string, 
 			m, err := dl(sourceUrl, dest)
 			logMetadata(m)
 			return dest, m, err
+		}
+	} else {
+		// If dest and d are in the same directory, no symlink needed,
+		// but still check if dest exists
+		if _, err := fs.Stat(dest); err == nil {
+			return dest, c.metadata, nil
 		}
 	}
 
