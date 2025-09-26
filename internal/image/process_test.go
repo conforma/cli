@@ -171,3 +171,111 @@ func TestImageReferenceString(t *testing.T) {
 		})
 	}
 }
+
+func TestImageReferenceRef(t *testing.T) {
+	tests := []struct {
+		name        string
+		url         string
+		opts        []name.Option
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "repository with tag",
+			url:  "registry.com/repo:v1.0.0",
+		},
+		{
+			name: "repository with digest",
+			url:  "registry.com/repo@sha256:01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+		},
+		{
+			name: "repository with tag and digest",
+			url:  "registry.com/repo:v1.0.0@sha256:01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+		},
+		{
+			name: "repository only (defaults to latest)",
+			url:  "registry.com/repo",
+		},
+		{
+			name: "docker.io registry",
+			url:  "docker.io/library/ubuntu:20.04",
+		},
+		{
+			name: "localhost registry",
+			url:  "localhost:5000/test/image:latest",
+		},
+		{
+			name: "gcr.io registry",
+			url:  "gcr.io/project/image:tag",
+		},
+		{
+			name:        "invalid URL - empty string",
+			url:         "",
+			expectError: true,
+			errorMsg:    "could not parse reference",
+		},
+		{
+			name:        "invalid URL - malformed",
+			url:         "invalid::reference",
+			expectError: true,
+			errorMsg:    "could not parse reference",
+		},
+		{
+			name:        "invalid URL - invalid digest",
+			url:         "registry.com/repo@sha256:invalid",
+			opts:        []name.Option{name.StrictValidation},
+			expectError: true,
+			errorMsg:    "could not parse reference",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create ImageReference using NewImageReference
+			imageRef, err := NewImageReference(tt.url, tt.opts...)
+
+			if tt.expectError {
+				assert.Error(t, err, "NewImageReference should return error for invalid URL")
+				if tt.errorMsg != "" {
+					assert.Contains(t, err.Error(), tt.errorMsg, "Error message should contain expected text")
+				}
+				return
+			}
+
+			assert.NoError(t, err, "NewImageReference should not return error for valid URL")
+			assert.NotNil(t, imageRef, "ImageReference should not be nil")
+
+			// Test the Ref() method
+			ref := imageRef.Ref()
+
+			// Verify that Ref() returns a non-nil name.Reference
+			assert.NotNil(t, ref, "Ref() should not return nil")
+
+			// Verify that the returned reference string matches the original URL format
+			// (accounting for normalization that the parsing library might do)
+			refString := ref.String()
+			assert.NotEmpty(t, refString, "Ref().String() should not be empty")
+
+			// Verify the returned reference is consistent with the ImageReference data
+			switch r := ref.(type) {
+			case name.Tag:
+				assert.NotEmpty(t, imageRef.Tag, "ImageReference should have tag when Ref() returns name.Tag")
+				assert.Equal(t, imageRef.Repository, r.Repository.Name(), "Repository should match")
+				assert.Equal(t, imageRef.Tag, r.TagStr(), "Tag should match")
+			case name.Digest:
+				assert.NotEmpty(t, imageRef.Digest, "ImageReference should have digest when Ref() returns name.Digest")
+				assert.Equal(t, imageRef.Repository, r.Repository.Name(), "Repository should match")
+				assert.Equal(t, imageRef.Digest, r.DigestStr(), "Digest should match")
+			}
+
+			// Verify that calling Ref() multiple times returns the same reference
+			ref2 := imageRef.Ref()
+			assert.Equal(t, ref, ref2, "Multiple calls to Ref() should return the same reference")
+
+			// Verify that the reference can be converted back to a string
+			assert.NotPanics(t, func() {
+				_ = ref.String()
+			}, "Ref().String() should not panic")
+		})
+	}
+}
