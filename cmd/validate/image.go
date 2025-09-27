@@ -26,7 +26,7 @@ import (
 	"strings"
 	"time"
 
-	hd "github.com/MakeNowJust/heredoc"
+	hd "github.com/MakeNowJust/heredoc/v2"
 	"github.com/google/go-containerregistry/pkg/name"
 	app "github.com/konflux-ci/application-api/api/v1alpha1"
 	"github.com/sigstore/cosign/v2/pkg/cosign"
