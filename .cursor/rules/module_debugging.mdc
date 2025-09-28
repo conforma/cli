@@ -364,6 +364,64 @@ go get github.com/example/other@latest
 go mod edit -replace=github.com/other/mod=github.com/other/mod@v2.0.0
 ```
 
+### Issue: Multi-Module Dependency Conflicts
+**Symptoms:** 
+- Docker build fails with dependency version conflicts
+- Error shows one version in build logs but different version in local testing
+- `cannot use type X as type Y` errors in Docker builds
+- Build works locally but fails in Docker
+
+**Root Cause:** Multiple Go modules with different dependency versions. The Docker build uses a different module than the main module, causing version mismatches.
+
+**CRITICAL DIAGNOSIS STEPS:**
+```bash
+# 1. Find ALL modules in the project
+find . -name "go.mod" -type f
+
+# 2. Check dependency versions across ALL modules
+find . -name "go.mod" -exec echo "=== {} ===" \; -exec go list -m k8s.io/apimachinery {} \;
+
+# 3. Check for version inconsistencies
+find . -name "go.mod" -exec go list -m sigs.k8s.io/structured-merge-diff {} \;
+
+# 4. Test Docker build environment specifically
+docker run --rm -v $(pwd):/build -w /build golang:1.24.6 sh -c "cd /build && go list -m k8s.io/apimachinery"
+```
+
+**SYSTEMATIC SOLUTION:**
+```bash
+# Update ALL modules with the same dependency versions
+# Don't update one module at a time - update them all together
+
+# Example: Update Kubernetes dependencies across all modules
+find . -name "go.mod" -execdir go get k8s.io/apimachinery@latest \;
+find . -name "go.mod" -execdir go get k8s.io/client-go@latest \;
+find . -name "go.mod" -execdir go get k8s.io/kubectl@latest \;
+
+# Clean up all modules
+find . -name "go.mod" -execdir go mod tidy \;
+
+# Test Docker build immediately
+make image_linux_arm64
+```
+
+**PREVENTION STRATEGY:**
+- **Always check ALL modules** when fixing dependency conflicts
+- **Update related dependencies together** across all modules
+- **Test Docker build early** in the process, not at the end
+- **Use systematic commands** to update all modules at once
+
+**Common Multi-Module Patterns:**
+- `tools/` directory with its own `go.mod`
+- `acceptance/` directory with its own `go.mod`
+- `cmd/` subdirectories with their own modules
+- Any subdirectory with a `go.mod` file
+
+**Warning Signs:**
+- Error mentions a specific version (e.g., `@v0.31.0`) but local testing shows different version
+- Docker build fails but local build succeeds
+- Error occurs in a subdirectory module, not the main module
+
 ### Issue: Retracted versions
 **Symptoms:** `go: module github.com/example/mod@v1.2.3 is retracted`
 
@@ -878,6 +936,52 @@ go mod why -m github.com/example/mod
 go mod graph | sort | uniq -d
 ```
 
+### Debug Multi-Module Dependency Conflicts
+```bash
+# CRITICAL: Check ALL modules for dependency version conflicts
+# This is essential when Docker builds fail but local builds succeed
+
+# 1. Find ALL modules in the project
+echo "=== All Go modules in project ==="
+find . -name "go.mod" -type f
+
+# 2. Check specific dependency versions across ALL modules
+echo "=== Checking k8s.io/apimachinery versions ==="
+find . -name "go.mod" -exec echo "=== {} ===" \; -exec go list -m k8s.io/apimachinery {} \;
+
+echo "=== Checking sigs.k8s.io/structured-merge-diff versions ==="
+find . -name "go.mod" -exec echo "=== {} ===" \; -exec go list -m sigs.k8s.io/structured-merge-diff {} \;
+
+# 3. Check for version inconsistencies
+echo "=== Version inconsistencies ==="
+find . -name "go.mod" -exec go list -m k8s.io/apimachinery {} \; | sort -u
+find . -name "go.mod" -exec go list -m k8s.io/client-go {} \; | sort -u
+find . -name "go.mod" -exec go list -m k8s.io/kubectl {} \; | sort -u
+
+# 4. Test Docker build environment specifically
+echo "=== Testing Docker build environment ==="
+docker run --rm -v $(pwd):/build -w /build golang:1.24.6 sh -c "cd /build && go list -m k8s.io/apimachinery"
+
+# 5. Check which modules are used in Docker build
+echo "=== Checking Docker build context ==="
+grep -r "COPY.*go.mod" Dockerfile* || echo "No go.mod COPY found in Dockerfiles"
+grep -r "tools/" Dockerfile* || echo "No tools/ directory found in Dockerfiles"
+
+# 6. Systematic dependency update across all modules
+echo "=== Updating dependencies across all modules ==="
+find . -name "go.mod" -execdir go get k8s.io/apimachinery@latest \;
+find . -name "go.mod" -execdir go get k8s.io/client-go@latest \;
+find . -name "go.mod" -execdir go get k8s.io/kubectl@latest \;
+find . -name "go.mod" -execdir go mod tidy \;
+
+# 7. Verify all modules can build
+echo "=== Testing all modules build ==="
+find . -name "go.mod" -exec dirname {} \; | while read dir; do
+    echo "Testing $dir..."
+    (cd "$dir" && go build ./... 2>&1 | head -3)
+done
+```
+
 ---
 
 ## 6) Automated Fix Scripts
@@ -1182,6 +1286,91 @@ else
 fi
 
 echo "Go version standardization complete"
+```
+
+### Fix Multi-Module Dependency Conflicts
+```bash
+#!/bin/bash
+# fix_multi_module_deps.sh - Fix dependency conflicts across all modules
+
+echo "Fixing multi-module dependency conflicts..."
+
+# 1. Find all modules
+echo "=== Finding all Go modules ==="
+MODULES=$(find . -name "go.mod" -type f)
+echo "Found modules:"
+echo "$MODULES"
+
+# 2. Check current dependency versions across all modules
+echo "=== Current dependency versions ==="
+for module in $MODULES; do
+    echo "--- $(dirname "$module") ---"
+    (cd "$(dirname "$module")" && go list -m k8s.io/apimachinery 2>/dev/null || echo "Not found")
+    (cd "$(dirname "$module")" && go list -m k8s.io/client-go 2>/dev/null || echo "Not found")
+    (cd "$(dirname "$module")" && go list -m k8s.io/kubectl 2>/dev/null || echo "Not found")
+done
+
+# 3. Update dependencies across all modules systematically
+echo "=== Updating dependencies across all modules ==="
+
+# Update Kubernetes dependencies
+echo "Updating k8s.io/apimachinery..."
+find . -name "go.mod" -execdir go get k8s.io/apimachinery@latest \;
+
+echo "Updating k8s.io/client-go..."
+find . -name "go.mod" -execdir go get k8s.io/client-go@latest \;
+
+echo "Updating k8s.io/kubectl..."
+find . -name "go.mod" -execdir go get k8s.io/kubectl@latest \;
+
+# Update related dependencies
+echo "Updating k8s.io/api..."
+find . -name "go.mod" -execdir go get k8s.io/api@latest \;
+
+echo "Updating k8s.io/cli-runtime..."
+find . -name "go.mod" -execdir go get k8s.io/cli-runtime@latest \;
+
+# 4. Clean up all modules
+echo "=== Cleaning up all modules ==="
+find . -name "go.mod" -execdir go mod tidy \;
+
+# 5. Verify all modules can build
+echo "=== Verifying all modules build ==="
+FAILED_MODULES=""
+for module in $MODULES; do
+    dir=$(dirname "$module")
+    echo "Testing $dir..."
+    if ! (cd "$dir" && go build ./... 2>/dev/null); then
+        echo "❌ $dir failed to build"
+        FAILED_MODULES="$FAILED_MODULES $dir"
+    else
+        echo "✅ $dir builds successfully"
+    fi
+done
+
+# 6. Test Docker build if available
+echo "=== Testing Docker build ==="
+if command -v make >/dev/null 2>&1 && grep -q "image_linux_arm64" Makefile 2>/dev/null; then
+    echo "Testing Docker build..."
+    if make image_linux_arm64 2>/dev/null; then
+        echo "✅ Docker build successful"
+    else
+        echo "❌ Docker build failed"
+        FAILED_MODULES="$FAILED_MODULES Docker"
+    fi
+else
+    echo "No Docker build target found, skipping"
+fi
+
+# 7. Report results
+if [ -n "$FAILED_MODULES" ]; then
+    echo "❌ Some modules failed to build:$FAILED_MODULES"
+    echo "Please check the errors above and fix manually"
+    exit 1
+else
+    echo "✅ All modules build successfully"
+    echo "Multi-module dependency fix complete"
+fi
 ```
 
 ---
