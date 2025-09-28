@@ -1,0 +1,1262 @@
+# Go Module Upgrade — LLM Debug & Fix Playbook
+
+This is a **copy-pasteable** guide you can hand to an LLM (or follow yourself) to diagnose and fix Go module upgrade issues safely, especially on **Renovate PR failures**.
+
+---
+
+## 0) Safety & Scope Policy (enforced rules)
+
+### Allowed edits
+- `go.mod`, `go.sum`
+- `go.work` (workspace scaffolding)
+- Import lines in `.go` files (e.g., adding `/v2` suffixes), plus **minimal adapters** for API signature changes
+- Code-generation stubs (`tools.go`, `magefile.go`) and generated files under known directories (e.g., `internal/gen/**`)
+
+### Forbidden edits
+- CI/workflow YAMLs, deployment scripts, secrets, config outside module scope
+- Behavioral refactors or public API changes beyond minimal adapters
+
+### Change classes
+- **Tier 1 (auto-apply):** go.mod / go.sum changes, import path fixes, generator output, replace directives
+- **Tier 2 (apply but require review):** small adapters that preserve behavior (e.g., add defaultable arg), ≤ a few small call-sites
+- **Tier 3 (report only):** anything requiring nontrivial logic changes
+
+### Go version update policy
+- **ALLOWED:** Minor and patch updates only (e.g., 1.24.4 → 1.24.6, 1.24.6 → 1.24.7)
+- **FORBIDDEN:** Major version updates (e.g., 1.24.x → 1.25.x, 1.24.x → 2.0.x)
+- **REQUIRED:** Report major version requirements as Tier 3 issues requiring manual review
+
+### Proof required for any applied changes
+- `go mod verify` clean
+- `go build ./...` succeeds
+- `go vet ./...` succeeds
+- `golangci-lint run` (if present) succeeds or is unchanged
+- `make test` passes
+- `make lint-fix` runs successfully (fixes any lint errors)
+- **Acceptance tests run successfully** (simple tests and container tests)
+
+### Transparency
+- Always post a PR comment with: root cause, commands run, diff summary, classification (Tier 1/2/3), and next steps.
+
+---
+
+## 1) Acceptance Test Requirements
+
+### Acceptance Test Validation
+**CRITICAL:** All module changes must pass acceptance tests to ensure the application works correctly.
+
+**Required Test Categories:**
+- **Simple tests**: Basic functionality tests (e.g., `TestFeatures/a_warning_with_fail-on-warn`)
+- **Container tests**: Tests that use testcontainers (e.g., `TestFeatures/track.*bundle`)
+
+**Test Execution:**
+```bash
+# Run simple test (should complete in ~9 seconds)
+./hack/podman-setup/run-acceptance-tests.sh "TestFeatures/a_warning_with_fail-on-warn"
+
+# Run container test (should complete in ~10 seconds)
+./hack/podman-setup/run-acceptance-tests.sh "TestFeatures/track.*bundle" -t 5m
+
+# Run all tests with reduced parallelism (for full suite)
+./hack/podman-setup/run-acceptance-tests.sh -p 1 -t 30m
+```
+
+**Performance Expectations:**
+- **Simple tests**: ~9 seconds (no containers)
+- **Container tests**: ~10 seconds (with registry + git containers)
+- **No hanging processes** after test completion
+- **Clean container lifecycle** (proper startup and cleanup)
+
+**Troubleshooting:**
+- If tests hang, check for hanging processes: `ps aux | grep -E "(go test|kind|podman)"`
+- If container tests fail, verify testcontainers network: `podman network ls`
+- If DNS resolution fails, check `/etc/hosts` for `rekor.localhost` and `apiserver.localhost`
+
+**Setup Requirements:**
+- Podman machine with sufficient resources (4 CPUs, 8GB RAM, 500GB disk)
+- Testcontainers network: `podman network create testcontainers`
+- DNS resolution for test domains
+- Environment variables: `KIND_EXPERIMENTAL_PROVIDER=podman`, `TESTCONTAINERS_RYUK_DISABLED=true`
+
+---
+
+## 2) When to run this
+- CI failed on a **Renovate PR** that bumps Go dependencies
+- Manual dependency updates are failing
+- `go mod tidy` is producing unexpected changes
+- Import resolution errors after dependency updates
+- Version conflicts between dependencies
+- **Go version inconsistencies across multiple go.mod files**
+
+## 1.1) Go Version Consistency Requirements
+**CRITICAL:** All go.mod files in a project MUST use the same Go version.
+
+- ✅ **REQUIRED:** All go.mod files use identical Go version (e.g., all use 1.24.7)
+- ❌ **FORBIDDEN:** Mixed Go versions across go.mod files
+- ❌ **FORBIDDEN:** Inconsistent versions between main module and submodules
+
+**Common Issues:**
+- Main `go.mod` has Go 1.24.6, but `tools/go.mod` has 1.24.4
+- `acceptance/go.mod` has different version than main module
+- Workspace files (`go.work`) with version mismatches
+
+**Determining Required Go Version:**
+```bash
+# Check what Go version the dependencies require
+go list -m -f '{{.GoVersion}}' all | grep -E '^1\.[0-9]+\.[0-9]+$' | sort -V | tail -1
+
+# Use the highest required version from dependencies
+# Don't consider local system version - use what dependencies actually need
+```
+
+**Go vs Toolchain Directives:**
+- `go 1.24.7` - Specifies the **minimum** Go version required by the module
+- `toolchain go1.24.7` - Specifies the **exact** Go toolchain version to use for building
+- **CRITICAL**: When both directives exist, they MUST use the same version number
+- The `toolchain` directive is **optional** and only needed when:
+  - You need a specific Go toolchain version different from the system default
+  - You want to ensure consistent builds across different environments
+  - You're using Go toolchain management features
+- `go mod tidy` will remove the `toolchain` directive if it's not needed
+- **When standardizing versions, ensure ALL go.mod files have consistent `go` and `toolchain` directives**
+- If any go.mod file has a `toolchain` directive, ALL go.mod files should have the same `toolchain` directive
+
+**Important:** Always use the version required by dependencies, not the local system version, since we can't control what Go version people have installed.
+
+**Docker Image Version Constraint:** The Go version in go.mod MUST match the Go version in Docker images. The Docker image version is the source of truth - go.mod should be updated to match the Docker image version, not the other way around.
+
+**CRITICAL: .tool-versions File Requirement**
+When updating Go versions, the `.tool-versions` file MUST be updated to match the go.mod version. Version managers (asdf, g, gvm, etc.) read this file and will cause "Version manager version incompatible" errors if the versions don't match.
+
+**Required Update:**
+```bash
+# Update .tool-versions to match go.mod version
+GO_VERSION=$(grep "^go " go.mod | cut -d" " -f2)
+echo "golang $GO_VERSION" > .tool-versions
+```
+
+## 1.2) Docker Image Version Constraint
+**CRITICAL:** The Go version in go.mod MUST match the Go version in Docker images. The Docker image version is the source of truth.
+
+**Check Required:**
+- `Dockerfile` - Check `FROM golang:X.X.X` or `FROM registry.access.redhat.com/ubi9/go-toolset:X.X.X`
+- `Dockerfile.dist` - Check `FROM registry.access.redhat.com/ubi9/go-toolset:X.X.X`
+- Any other Docker files that specify Go versions
+
+**When Dependencies Require Newer Go Version:**
+1. **Extract the Go version from the Docker image tag**
+2. **Update all go.mod files to use the Docker image Go version**
+3. **If dependencies cannot work with the Docker image Go version, this becomes a Tier 3 issue requiring manual review**
+
+**Example:**
+```bash
+# Extract Go version from Docker image (source of truth)
+DOCKER_VERSION=$(grep -r "go-toolset:" Dockerfile* | grep -oE "1\.[0-9]+\.[0-9]+" | head -1)
+echo "Docker image Go version: $DOCKER_VERSION"
+
+# Update all go.mod files to match Docker image version
+find . -name "go.mod" -exec sed -i.bak "s/^go .*/go $DOCKER_VERSION/" {} \;
+find . -name "go.mod.bak" -delete
+
+# Verify all go.mod files now match Docker image version
+find . -name "go.mod" -exec echo "=== {} ===" \; -exec grep "^go " {} \;
+```
+
+## 1.3) Go Version Update Policy
+**CRITICAL:** Only minor and patch Go version updates are allowed.
+
+- ✅ **ALLOWED:** 1.24.4 → 1.24.6 (patch update)
+- ✅ **ALLOWED:** 1.24.6 → 1.24.7 (patch update)  
+- ⚠️ **REVIEW:** 1.24.x → 1.25.x (minor update - requires review)
+- ❌ **FORBIDDEN:** 1.24.x → 1.25.x (major update - report only)
+- ❌ **FORBIDDEN:** 1.24.x → 2.0.x (major update - report only)
+
+**If major version update is required:**
+1. **STOP** - Do not proceed with any changes
+2. **REPORT** - Create Tier 3 issue with impact analysis
+3. **ESCALATE** - Requires manual review and team coordination
+
+---
+
+## 2) Collect & attach facts (inputs for the LLM)
+
+Run these and attach the outputs to the PR (artifact or sticky comment):
+
+```bash
+# Toolchain & env relevant to modules
+go version
+go env GOPROXY GOSUMDB GONOSUMDB GOPRIVATE GOMODCACHE GOFLAGS
+
+# Outdated modules incl. retractions (quick view)
+go list -m -u -retracted all
+
+# Machine-readable: full module graph with updates
+go list -m -u -json all > mod_updates.json
+
+# Why a module is present (sample for top suspects)
+go mod why -m <module/path>
+
+# Dependency graph (head, for quick scan)
+go mod graph | head -200
+
+# Verify sums
+go mod verify || true
+
+# Reproduce errors with trace
+go build -x ./... 2>&1 | tee build.trace
+make test 2>&1 | tee test.trace
+```
+
+---
+
+## 3) Command toolbox
+
+### Inventory and versions
+```bash
+# List all modules with available updates
+go list -m -u -retracted all
+
+# Get detailed JSON info about all modules
+go list -m -u -json all
+
+# Check available versions for a specific module
+go list -m -versions github.com/example/mod
+
+# Find why a module is included
+go mod why -m github.com/example/mod
+
+# Show dependency graph
+go mod graph
+```
+
+### Reproduce/verify module state
+```bash
+# Verify module checksums
+go mod verify
+
+# Download specific version with details
+go mod download -json github.com/example/mod@v1.2.3
+
+# Clean up unused dependencies
+go mod tidy -v
+
+# Tidy with specific Go version compatibility
+go mod tidy -compat=1.22   # when upgrading toolchain changes pruning
+```
+
+### Targeted upgrades / downgrades / removals
+```bash
+# Upgrade to latest version
+go get github.com/example/mod@latest
+
+# Upgrade to specific version
+go get github.com/example/mod@v1.2.3
+
+# Upgrade patch versions only
+go get -u=patch ./...
+
+# Remove unused dependency
+go get github.com/example/unused@none
+```
+
+### Major version / import-path issues
+```bash
+# Check current module info
+go list -m -json github.com/example/mod | jq '.Path,.Version'
+
+# Codemod example for /v2:
+grep -Rl 'github.com/example/mod' --include='*.go' \
+  | xargs sed -i.bak 's|github.com/example/mod|github.com/example/mod/v2|g'
+go mod tidy -v
+```
+
+### Workspaces & local forks
+```bash
+# Initialize workspace
+go work init ./...
+
+# Add modules to workspace
+go work use ./path/to/another/module
+
+# Sync workspace
+go work sync
+
+# Test a fork or hotfix
+go mod edit -replace=github.com/example/mod=github.com/you/mod@v1.2.3-yourfix
+
+# Remove replace directive when done
+go mod edit -dropreplace=github.com/example/mod
+```
+
+### Environment/proxy/sumdb quirks
+```bash
+# Check current environment
+go env GOPROXY GOSUMDB GONOSUMDB GOPRIVATE GOMODCACHE
+
+# Private/proxy bypass
+GOPROXY=direct GOSUMDB=off go mod download
+GONOSUMDB=github.com/yourorg/* GOPRIVATE=github.com/yourorg/* go get ./...
+
+# Clean stale cache
+go clean -modcache
+```
+
+---
+
+## 4) Common Issues & Solutions
+
+### Understanding Tool Usage Patterns
+
+Before fixing tool import issues, it's important to understand the two different patterns for using tools in Go projects:
+
+#### Pattern A: Tools for Running (Most Common)
+**Use Case:** Linting, formatting, testing, and other command-line tools
+**Approach:** Use `go run -modfile tools/go.mod <tool>`
+**tools.go:** Contains imports for dependency tracking
+**Example:**
+```bash
+# Run tools using go run -modfile
+go run -modfile tools/go.mod github.com/daixiang0/gci --help
+go run -modfile tools/go.mod github.com/golangci/golangci-lint/cmd/golangci-lint run
+```
+
+#### Pattern B: Tools for Building (Rare)
+**Use Case:** Tools that are actually Go packages meant to be imported
+**Approach:** Use `go build ./tools` or import as packages
+**tools.go:** Contains only importable packages
+**Example:**
+```bash
+# Build tools as a package
+go build ./tools
+```
+
+#### How to Determine Which Pattern You're Using:
+```bash
+# Check for go run -modfile usage (Pattern A)
+grep -r "go run -modfile.*tools/go.mod" Makefile build.sh
+
+# Check if tools can be built as packages (Pattern B)
+cd tools && go build . 2>&1 | grep -q "is a program, not an importable package"
+```
+
+### Issue: Import path changes after major version bump
+**Symptoms:** `imports github.com/example/mod: module github.com/example/mod@latest found (v2.0.0+incompatible), but does not contain package github.com/example/mod`
+
+**Solution:**
+```bash
+# Update import paths to include version suffix
+find . -name "*.go" -exec sed -i 's|github.com/example/mod|github.com/example/mod/v2|g' {} \;
+go mod tidy
+```
+
+### Issue: Conflicting versions
+**Symptoms:** `go: github.com/example/mod@v1.1.0 requires github.com/other/mod@v2.0.0, but github.com/example/other@v1.0.0 requires github.com/other/mod@v1.5.0`
+
+**Solution:**
+```bash
+# Check which modules require conflicting versions
+go mod why -m github.com/other/mod
+
+# Try to resolve by upgrading the conflicting module
+go get github.com/example/other@latest
+
+# If that fails, use replace directive temporarily
+go mod edit -replace=github.com/other/mod=github.com/other/mod@v2.0.0
+```
+
+### Issue: Retracted versions
+**Symptoms:** `go: module github.com/example/mod@v1.2.3 is retracted`
+
+**Solution:**
+```bash
+# Find non-retracted versions
+go list -m -versions github.com/example/mod
+
+# Upgrade to latest non-retracted version
+go get github.com/example/mod@latest
+```
+
+### Issue: Checksum verification failures
+**Symptoms:** `go: verifying module: checksum mismatch`
+
+**Solution:**
+```bash
+# Clean module cache
+go clean -modcache
+
+# Re-download modules
+go mod download
+
+# If still failing, bypass checksum verification temporarily
+GOSUMDB=off go mod download
+```
+
+### Issue: Private module access
+**Symptoms:** `go: github.com/private/mod@v1.0.0: reading https://proxy.golang.org/github.com/private/mod/@v/v1.0.0.info: 404 Not Found`
+
+**Solution:**
+```bash
+# Configure private module access
+go env -w GOPRIVATE=github.com/private/*
+go env -w GONOSUMDB=github.com/private/*
+
+# Use direct access for private modules
+GOPROXY=direct go get github.com/private/mod@latest
+```
+
+### Issue: Tool imported as package
+**Symptoms:** `import "github.com/daixiang0/gci" is a program, not an importable package`
+
+**Root Cause:** There are two different use cases for tools in Go projects, and they require different approaches:
+
+1. **Tools meant to be run** (command-line tools) - should use `go run -modfile tools/go.mod <tool>`
+2. **Tools meant to be built as packages** - should be importable Go packages
+
+**Diagnosis:**
+```bash
+# Check if tools directory is meant to be built as a package
+cd tools && go build . 2>&1 | grep "is a program, not an importable package"
+
+# Check if tools are meant to be run (look for go run -modfile usage)
+grep -r "go run -modfile.*tools/go.mod" Makefile build.sh 2>/dev/null || echo "No go run -modfile usage found"
+```
+
+**Solution A: Tools meant to be run (most common case)**
+```bash
+# This is the CORRECT approach for tools that are meant to be run
+# Don't try to build the tools directory as a package
+# Instead, run tools using go run -modfile
+
+# Example from Makefile:
+go run -modfile tools/go.mod github.com/daixiang0/gci --help
+go run -modfile tools/go.mod github.com/golangci/golangci-lint/cmd/golangci-lint run
+go run -modfile tools/go.mod github.com/google/addlicense -c 'Copyright' -y '' -s .
+
+# The tools.go file with imports is CORRECT for this use case
+# The imports serve to track dependencies in tools/go.mod
+# They are NOT meant to be built as a package
+```
+
+**Solution B: Tools meant to be built as packages (rare case)**
+```bash
+# Only if tools are actually meant to be built as Go packages
+# Remove command-line tool imports and install them as binaries
+sed -i.bak '/_ "github.com\/daixiang0\/gci"/d' tools/tools.go
+go install github.com/daixiang0/gci@latest
+find . -name "*.go.bak" -delete
+```
+
+**Important Distinction:**
+- **Tools for running** (linting, formatting, etc.) → Use `go run -modfile tools/go.mod <tool>`
+- **Tools for building** (libraries, packages) → Use `go build ./tools` or import as packages
+
+**Example of correct tools.go for runnable tools:**
+```go
+package tools
+
+import (
+    // These imports are for dependency tracking, not for building
+    // Tools are run using: go run -modfile tools/go.mod <tool>
+    _ "github.com/daixiang0/gci"
+    _ "github.com/golangci/golangci-lint/cmd/golangci-lint"
+    _ "github.com/google/addlicense"
+    // ... etc
+)
+```
+
+**Example of correct tools.go for buildable tools:**
+```go
+package tools
+
+import (
+    // Only import packages that are actually importable
+    // Command-line tools should be installed using: go install <tool>@latest
+)
+```
+
+### Issue: Go version compatibility
+**Symptoms:** 
+- `go: module requires go >= 1.24.6 (running go 1.24.4)`
+- `Error: Golang version incompatible, saw 1.24.4, running with version: 1.24.7`
+- CI/CD version check failures
+
+**Solution:**
+```bash
+# Check current Go version
+go version
+
+# Check required Go version for modules
+go list -m -f '{{.GoVersion}}' all | sort -u
+
+# Update go.mod to specify minimum Go version
+echo "go 1.24.6" >> go.mod
+
+# Or use go mod edit to set go version
+go mod edit -go=1.24.6
+
+# Clean and rebuild with correct version
+go clean -modcache
+go mod download
+go mod tidy
+```
+
+### Issue: Major Go version requirement
+**Symptoms:**
+- `go: module requires go >= 1.25.0 (running go 1.24.x)`
+- Dependencies requiring Go 2.0.x or higher
+- Breaking changes in Go standard library
+
+**Action Required:**
+```bash
+# DO NOT PROCEED - Report as Tier 3 issue
+echo "MAJOR GO VERSION UPDATE REQUIRED"
+echo "Current: $(go version | cut -d' ' -f3)"
+echo "Required: $(go list -m -f '{{.GoVersion}}' all | sort -u | tail -1)"
+echo "This requires manual review and approval"
+echo "Classification: Tier 3 (report only)"
+```
+
+**Report Template:**
+```
+## Go Major Version Update Required
+
+**Issue:** Dependencies require Go major version update
+**Current Version:** $(go version | cut -d' ' -f3)
+**Required Version:** $(go list -m -f '{{.GoVersion}}' all | sort -u | tail -1)
+**Classification:** Tier 3 (requires manual review)
+
+**Impact:**
+- Breaking changes in Go standard library
+- Potential API changes in dependencies
+- CI/CD pipeline updates required
+- Team coordination needed
+
+**Next Steps:**
+1. Manual review of breaking changes
+2. Update CI/CD pipelines
+3. Coordinate with team
+4. Plan migration strategy
+```
+
+### Issue: CI/CD Go version mismatches
+**Symptoms:** CI shows version incompatibility errors between different Go versions
+
+**Solution:**
+```bash
+# Check what Go version is specified in various files
+grep -r "go.*1\." . --include="*.go" --include="*.mod" --include="*.yaml" --include="*.yml" --include="Dockerfile*"
+
+# Update version specifications in:
+# - go.mod (go directive)
+# - CI workflow files (.github/workflows/*.yml)
+# - Dockerfile
+# - .golangci.yml (if present)
+# - Any version check scripts
+
+# Example updates:
+# go.mod: go 1.24.6
+# .github/workflows/ci.yml: go-version: '1.24.6'
+# Dockerfile: FROM golang:1.24.6-alpine
+```
+
+### Issue: Inconsistent Go versions across go.mod files
+**Symptoms:** 
+- Multiple `go.mod` files with different Go versions
+- Workspace or multi-module projects with version mismatches
+- `go work` commands failing due to version conflicts
+- Build failures with "requires go >= X.X.X" errors
+
+**CRITICAL REQUIREMENT:** All go.mod files in a project MUST use the same Go version.
+
+**Solution:**
+```bash
+# Find all go.mod files in the project
+find . -name "go.mod" -type f
+
+# Check Go versions in all go.mod files
+find . -name "go.mod" -exec echo "=== {} ===" \; -exec grep "^go " {} \;
+
+# Determine the minimum required Go version from dependencies
+REQUIRED_VERSION=$(go list -m -f '{{.GoVersion}}' all | grep -E '^1\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+echo "Required Go version: $REQUIRED_VERSION"
+
+# Use the required version (don't consider local system version)
+TARGET_VERSION="$REQUIRED_VERSION"
+echo "Using required version: $TARGET_VERSION"
+
+# Standardize all go.mod files to the determined version
+find . -name "go.mod" -exec sed -i.bak "s/^go .*/go $TARGET_VERSION/" {} \;
+
+# Add or update toolchain directive (preserves existing or adds new)
+find . -name "go.mod" -exec sh -c '
+    if grep -q "^toolchain " "$1"; then
+        sed -i.bak "s/^toolchain .*/toolchain go$TARGET_VERSION/" "$1"
+    else
+        sed -i.bak "/^go /a\\
+toolchain go$TARGET_VERSION" "$1"
+    fi
+' _ {} \;
+
+# Clean up backup files
+find . -name "go.mod.bak" -delete
+
+# Update all modules
+find . -name "go.mod" -execdir go mod tidy \;
+
+# Update workspace if using go work
+if [ -f "go.work" ]; then
+    echo "Updating go.work file..."
+    sed -i.bak "s/go .*/go $TARGET_VERSION/" go.work
+    rm -f go.work.bak
+    go work sync
+fi
+
+# Update .tool-versions file if it exists (CRITICAL for version managers)
+if [ -f ".tool-versions" ]; then
+    echo "Updating .tool-versions file..."
+    sed -i.bak "s/golang .*/golang $TARGET_VERSION/" .tool-versions
+    rm -f .tool-versions.bak
+    echo "Updated .tool-versions to golang $TARGET_VERSION"
+fi
+
+# Verify all modules use the same Go version
+echo "Verifying all go.mod files now use Go $TARGET_VERSION:"
+find . -name "go.mod" -exec echo "=== {} ===" \; -exec grep "^go " {} \;
+
+# Check for any remaining inconsistencies
+INCONSISTENT=$(find . -name "go.mod" -exec grep "^go " {} \; | sort -u | wc -l)
+if [ "$INCONSISTENT" -gt 1 ]; then
+    echo "❌ WARNING: Still found inconsistent Go versions:"
+    find . -name "go.mod" -exec grep "^go " {} \; | sort -u
+    exit 1
+else
+    echo "✅ All go.mod files now use consistent Go version: $TARGET_VERSION"
+fi
+
+# Test all modules to ensure they work
+find . -name "go.mod" -execdir go build ./... \;
+
+echo "Go version standardization complete"
+```
+
+---
+
+## 5) Diagnostic Commands
+
+### Check module health
+```bash
+# Verify all modules
+go mod verify
+
+# Check for unused dependencies
+go mod tidy -v
+
+# List all dependencies with reasons
+go mod why -m all
+```
+
+### Debug build issues
+```bash
+# Build with verbose output
+go build -v ./...
+
+# Build with module info
+go build -x ./...
+
+# Run project-specific tests (use make test for this project)
+make test
+
+# Run acceptance tests to verify application functionality
+echo "=== Running acceptance tests ==="
+# Simple test (should complete in ~9 seconds)
+./hack/podman-setup/run-acceptance-tests.sh "TestFeatures/a_warning_with_fail-on-warn" 2>&1 | tee acceptance_simple.log
+
+# Container test (should complete in ~10 seconds)
+./hack/podman-setup/run-acceptance-tests.sh "TestFeatures/track.*bundle" -t 5m 2>&1 | tee acceptance_container.log
+
+# Fix any lint errors
+make lint-fix
+```
+
+### Debug tool import issues
+```bash
+# Check for problematic tool imports
+echo "=== Checking for tool import issues ==="
+grep -r "_ \"github.com/daixiang0/gci\"" . --include="*.go" || echo "No gci import found"
+grep -r "_ \"github.com/golangci/golangci-lint\"" . --include="*.go" || echo "No golangci-lint import found"
+
+# Check for other common tool imports that might cause issues
+echo "=== Checking for other tool imports ==="
+grep -r "_ \"github.com/" . --include="*.go" | grep -E "(cmd/|tool)" || echo "No other tool imports found"
+
+# Check if tools are meant to be run (look for go run -modfile usage)
+echo "=== Checking for go run -modfile usage ==="
+grep -r "go run -modfile.*tools/go.mod" Makefile build.sh 2>/dev/null || echo "No go run -modfile usage found"
+
+# Test building tools directory specifically
+echo "=== Testing tools directory build ==="
+cd tools && go build . 2>&1 | head -10 || echo "Tools build failed"
+cd ..
+
+# Test running tools using go run -modfile (correct approach)
+echo "=== Testing tools with go run -modfile ==="
+if [ -f "tools/go.mod" ]; then
+    echo "Testing gci tool:"
+    go run -modfile tools/go.mod github.com/daixiang0/gci --help 2>&1 | head -5 || echo "gci tool failed"
+    echo "Testing golangci-lint tool:"
+    go run -modfile tools/go.mod github.com/golangci/golangci-lint/cmd/golangci-lint --help 2>&1 | head -5 || echo "golangci-lint tool failed"
+else
+    echo "No tools/go.mod file found"
+fi
+```
+
+### Debug Go version issues
+```bash
+# Check current Go version
+go version
+
+# Check Go version requirements for all modules
+go list -m -f '{{.GoVersion}}' all | sort -u
+
+# Check go.mod Go version directive
+grep "^go " go.mod
+
+# Find all Go version specifications in project
+grep -r "go.*1\." . --include="*.go" --include="*.mod" --include="*.yaml" --include="*.yml" --include="Dockerfile*"
+
+# Check CI workflow Go versions
+find .github/workflows -name "*.yml" -exec grep -l "go-version\|golang" {} \;
+
+# Test with specific Go version (if available)
+GOROOT=/path/to/go1.24.6 /path/to/go1.24.6/bin/go build ./...
+```
+
+### Debug Go version consistency
+```bash
+# Find all go.mod files
+find . -name "go.mod" -type f
+
+# Check Go versions in all go.mod files
+find . -name "go.mod" -exec echo "=== {} ===" \; -exec grep "^go " {} \;
+
+# Check toolchain versions in all go.mod files
+find . -name "go.mod" -exec echo "=== {} ===" \; -exec grep "^toolchain " {} \;
+
+# Check for version inconsistencies
+find . -name "go.mod" -exec grep "^go " {} \; | sort -u
+
+# Check for toolchain version inconsistencies
+find . -name "go.mod" -exec grep "^toolchain " {} \; | sort -u
+
+# Check for go/toolchain version mismatches within each file
+find . -name "go.mod" -exec sh -c '
+    echo "=== $1 ==="
+    GO_VERSION=$(grep "^go " "$1" | cut -d" " -f2)
+    TOOLCHAIN_VERSION=$(grep "^toolchain " "$1" | cut -d" " -f2 | sed "s/go//")
+    if [ -n "$GO_VERSION" ] && [ -n "$TOOLCHAIN_VERSION" ]; then
+        if [ "$GO_VERSION" = "$TOOLCHAIN_VERSION" ]; then
+            echo "✅ Go and toolchain versions match: $GO_VERSION"
+        else
+            echo "❌ Go and toolchain versions mismatch: go=$GO_VERSION, toolchain=$TOOLCHAIN_VERSION"
+        fi
+    elif [ -n "$GO_VERSION" ] && [ -z "$TOOLCHAIN_VERSION" ]; then
+        echo "⚠️  Go version $GO_VERSION but no toolchain directive"
+    elif [ -z "$GO_VERSION" ]; then
+        echo "❌ No go directive found"
+    fi
+' _ {} \;
+
+# Check workspace Go version (if using go work)
+if [ -f "go.work" ]; then
+    echo "=== go.work ==="
+    grep "go " go.work
+fi
+
+# Check .tool-versions file consistency (CRITICAL for version managers)
+if [ -f ".tool-versions" ]; then
+    echo "=== .tool-versions ==="
+    TOOL_VERSIONS_VERSION=$(grep "golang" .tool-versions | cut -d" " -f2)
+    GO_MOD_VERSION=$(grep "^go " go.mod | cut -d" " -f2)
+    if [ -n "$TOOL_VERSIONS_VERSION" ] && [ -n "$GO_MOD_VERSION" ]; then
+        if [ "$TOOL_VERSIONS_VERSION" = "$GO_MOD_VERSION" ]; then
+            echo "✅ .tool-versions matches go.mod: $TOOL_VERSIONS_VERSION"
+        else
+            echo "❌ .tool-versions version mismatch: .tool-versions=$TOOL_VERSIONS_VERSION, go.mod=$GO_MOD_VERSION"
+            echo "   This will cause 'Version manager version incompatible' errors"
+        fi
+    else
+        echo "⚠️  Could not determine versions for comparison"
+    fi
+else
+    echo "No .tool-versions file found"
+fi
+
+# Verify all modules can build with same Go version
+find . -name "go.mod" -exec dirname {} \; | while read dir; do
+    echo "Testing $dir..."
+    (cd "$dir" && go build ./... 2>&1 | head -5)
+done
+```
+
+### Debug Docker image Go versions
+```bash
+# Extract Go version from Docker image (source of truth)
+echo "=== Docker image Go versions (source of truth) ==="
+DOCKER_VERSION=$(grep -r "go-toolset:" Dockerfile* | grep -oE "1\.[0-9]+\.[0-9]+" | head -1)
+echo "Docker image Go version: $DOCKER_VERSION"
+
+# Check current go.mod versions
+echo "=== Current go.mod versions ==="
+find . -name "go.mod" -exec echo "=== {} ===" \; -exec grep "^go " {} \;
+
+# Check if go.mod versions match Docker image version
+echo "=== Version consistency check ==="
+find . -name "go.mod" -exec grep "^go " {} \; | while read line; do
+    GO_MOD_VERSION=$(echo "$line" | grep -oE "1\.[0-9]+\.[0-9]+")
+    if [ "$GO_MOD_VERSION" = "$DOCKER_VERSION" ]; then
+        echo "✅ $line matches Docker version $DOCKER_VERSION"
+    else
+        echo "❌ $line does NOT match Docker version $DOCKER_VERSION"
+    fi
+done
+```
+
+### Fix Go version inconsistencies
+```bash
+# CRITICAL: All go.mod files MUST use the same Go version
+# Determine the minimum required Go version from dependencies
+REQUIRED_VERSION=$(go list -m -f '{{.GoVersion}}' all | grep -E '^1\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+echo "Required Go version: $REQUIRED_VERSION"
+
+# Use the required version (don't consider local system version)
+TARGET_VERSION="$REQUIRED_VERSION"
+echo "Using required version: $TARGET_VERSION"
+
+# Standardize all go.mod files to the determined version
+find . -name "go.mod" -exec sed -i.bak "s/^go .*/go $TARGET_VERSION/" {} \;
+
+# Add or update toolchain directive (preserves existing or adds new)
+find . -name "go.mod" -exec sh -c '
+    if grep -q "^toolchain " "$1"; then
+        sed -i.bak "s/^toolchain .*/toolchain go$TARGET_VERSION/" "$1"
+    else
+        sed -i.bak "/^go /a\\
+toolchain go$TARGET_VERSION" "$1"
+    fi
+' _ {} \;
+
+# Clean up backup files
+find . -name "go.mod.bak" -delete
+
+# Update all modules
+find . -name "go.mod" -execdir go mod tidy \;
+
+# Verify consistency
+find . -name "go.mod" -exec echo "=== {} ===" \; -exec grep "^go " {} \;
+
+# Update .tool-versions file if it exists
+if [ -f ".tool-versions" ]; then
+    echo "Updating .tool-versions file..."
+    sed -i.bak "s/golang .*/golang $TARGET_VERSION/" .tool-versions
+    rm -f .tool-versions.bak
+    echo "Updated .tool-versions to golang $TARGET_VERSION"
+fi
+
+# Test all modules
+find . -name "go.mod" -execdir go build ./... \;
+```
+
+### Analyze dependency tree
+```bash
+# Show dependency graph
+go mod graph | grep -E "(your-module|conflicting-module)"
+
+# Find all paths to a specific module
+go mod why -m github.com/example/mod
+
+# Check for duplicate dependencies
+go mod graph | sort | uniq -d
+```
+
+---
+
+## 6) Automated Fix Scripts
+
+### Fix import paths for major version bumps
+```bash
+#!/bin/bash
+# fix_imports.sh - Update import paths for major version bumps
+
+OLD_MODULE="$1"
+NEW_MODULE="$2"
+
+if [ -z "$OLD_MODULE" ] || [ -z "$NEW_MODULE" ]; then
+    echo "Usage: $0 <old-module> <new-module>"
+    echo "Example: $0 github.com/example/mod github.com/example/mod/v2"
+    exit 1
+fi
+
+echo "Updating imports from $OLD_MODULE to $NEW_MODULE"
+
+# Find and update all Go files
+find . -name "*.go" -not -path "./vendor/*" -exec sed -i.bak "s|$OLD_MODULE|$NEW_MODULE|g" {} \;
+
+# Clean up backup files
+find . -name "*.go.bak" -delete
+
+# Update go.mod
+go mod tidy
+
+echo "Import path update complete"
+```
+
+### Clean up unused dependencies
+```bash
+#!/bin/bash
+# cleanup_deps.sh - Remove unused dependencies
+
+echo "Cleaning up unused dependencies..."
+
+# Remove unused dependencies
+go mod tidy
+
+# Check for any remaining unused imports
+go mod why -m all | grep -v "main module" | while read -r line; do
+    module=$(echo "$line" | awk '{print $1}')
+    if ! go list -m "$module" >/dev/null 2>&1; then
+        echo "Removing unused module: $module"
+        go get "$module@none"
+    fi
+done
+
+echo "Cleanup complete"
+```
+
+### Fix Go version compatibility
+```bash
+#!/bin/bash
+# fix_go_version.sh - Update Go version across project files
+
+TARGET_VERSION="$1"
+
+if [ -z "$TARGET_VERSION" ]; then
+    echo "Usage: $0 <go-version>"
+    echo "Example: $0 1.24.6"
+    exit 1
+fi
+
+echo "Updating Go version to $TARGET_VERSION across project files..."
+
+# Update go.mod
+if grep -q "^go " go.mod; then
+    sed -i.bak "s/^go .*/go $TARGET_VERSION/" go.mod
+else
+    echo "go $TARGET_VERSION" >> go.mod
+fi
+
+# Update CI workflow files
+find .github/workflows -name "*.yml" -exec sed -i.bak "s/go-version:.*/go-version: '$TARGET_VERSION'/g" {} \;
+
+# Update Dockerfile
+find . -name "Dockerfile*" -exec sed -i.bak "s/FROM golang:[0-9.]*/FROM golang:$TARGET_VERSION/g" {} \;
+
+# Update .golangci.yml if present
+if [ -f ".golangci.yml" ]; then
+    sed -i.bak "s/go:.*/go: $TARGET_VERSION/" .golangci.yml
+fi
+
+# Clean up backup files
+find . -name "*.bak" -delete
+
+# Update dependencies
+go mod tidy
+
+echo "Go version update complete"
+```
+
+### Fix tool import issues
+```bash
+#!/bin/bash
+# fix_tool_imports.sh - Fix tools imported as packages
+
+echo "Fixing tool import issues..."
+
+# First, determine if tools are meant to be run or built
+echo "=== Diagnosing tool usage pattern ==="
+
+# Check if tools are meant to be run (look for go run -modfile usage)
+if grep -r "go run -modfile.*tools/go.mod" Makefile build.sh 2>/dev/null; then
+    echo "✅ Found go run -modfile usage - tools are meant to be RUN, not built"
+    echo "The tools.go file with imports is CORRECT for this use case"
+    echo "Tools should be run using: go run -modfile tools/go.mod <tool>"
+    echo "Do NOT try to build the tools directory as a package"
+    exit 0
+fi
+
+# Check if tools directory is meant to be built as a package
+if [ -d "tools" ]; then
+    echo "Testing if tools directory can be built as a package..."
+    cd tools && go build . 2>&1 | grep -q "is a program, not an importable package"
+    if [ $? -eq 0 ]; then
+        echo "❌ Tools directory cannot be built as a package"
+        echo "This suggests tools are meant to be RUN, not built"
+        echo "Check if you should be using: go run -modfile tools/go.mod <tool>"
+        cd ..
+        exit 1
+    else
+        echo "✅ Tools directory can be built as a package"
+        cd ..
+    fi
+fi
+
+# If we get here, tools are meant to be built as packages
+echo "=== Fixing tools for building as packages ==="
+
+# Find tools.go file
+TOOLS_FILE=$(find . -name "tools.go" -type f | head -1)
+
+if [ -z "$TOOLS_FILE" ]; then
+    echo "No tools.go file found"
+    exit 0
+fi
+
+echo "Found tools.go file: $TOOLS_FILE"
+
+# Create a backup
+cp "$TOOLS_FILE" "$TOOLS_FILE.bak"
+
+# List of command-line tools that should NOT be imported as packages
+# These are tools that should be installed as binaries instead
+COMMAND_LINE_TOOLS=(
+    "github.com/daixiang0/gci"
+    "github.com/golangci/golangci-lint/cmd/golangci-lint"
+    "github.com/google/addlicense"
+    "github.com/open-policy-agent/conftest"
+    "github.com/tektoncd/chains/pkg/chains"
+    "github.com/tektoncd/cli/cmd/tkn"
+    "github.com/wadey/gocovmerge"
+    "gotest.tools/gotestsum"
+    "helm.sh/helm/v3/cmd/helm"
+    "k8s.io/kubernetes/cmd/kubectl"
+    "sigs.k8s.io/kustomize/kustomize/v5"
+)
+
+echo "Removing command-line tools from imports..."
+
+# Remove command-line tools from imports
+for tool in "${COMMAND_LINE_TOOLS[@]}"; do
+    if grep -q "_ \"$tool\"" "$TOOLS_FILE"; then
+        echo "Removing import for command-line tool: $tool"
+        sed -i.tmp "/_ \"$tool\"/d" "$TOOLS_FILE"
+    fi
+done
+
+# Clean up temp files
+rm -f "$TOOLS_FILE.tmp"
+
+echo "Installing command-line tools as binaries..."
+# Install command-line tools as binaries
+go install github.com/daixiang0/gci@latest
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+go install github.com/google/addlicense@latest
+go install github.com/open-policy-agent/conftest@latest
+go install github.com/wadey/gocovmerge@latest
+go install gotest.tools/gotestsum@latest
+go install helm.sh/helm/v3/cmd/helm@latest
+
+# Test if tools directory builds now
+if [ -d "tools" ]; then
+    echo "Testing tools directory build..."
+    cd tools && go build . && echo "✅ Tools directory builds successfully" || echo "❌ Tools directory still has issues"
+    cd ..
+fi
+
+echo "Tool import fix complete"
+echo "Note: Command-line tools are now installed as binaries and available in PATH"
+echo "The tools.go file now only contains importable packages, not command-line tools"
+```
+
+### Check Go version update policy
+```bash
+#!/bin/bash
+# check_go_version_policy.sh - Validate Go version updates against policy
+
+CURRENT_VERSION=$(go version | cut -d' ' -f3 | sed 's/go//')
+REQUIRED_VERSION=$(go list -m -f '{{.GoVersion}}' all | sort -u | tail -1)
+
+echo "Current Go version: $CURRENT_VERSION"
+echo "Required Go version: $REQUIRED_VERSION"
+
+# Extract major version numbers
+CURRENT_MAJOR=$(echo "$CURRENT_VERSION" | cut -d'.' -f1)
+CURRENT_MINOR=$(echo "$CURRENT_VERSION" | cut -d'.' -f2)
+REQUIRED_MAJOR=$(echo "$REQUIRED_VERSION" | cut -d'.' -f1)
+REQUIRED_MINOR=$(echo "$REQUIRED_VERSION" | cut -d'.' -f2)
+
+# Check if major version change is required
+if [ "$CURRENT_MAJOR" != "$REQUIRED_MAJOR" ]; then
+    echo "❌ MAJOR VERSION UPDATE REQUIRED"
+    echo "Current: $CURRENT_VERSION"
+    echo "Required: $REQUIRED_VERSION"
+    echo "Classification: Tier 3 (report only)"
+    echo "Action: Manual review required"
+    exit 1
+fi
+
+# Check if minor version change is required
+if [ "$CURRENT_MINOR" != "$REQUIRED_MINOR" ]; then
+    echo "⚠️  MINOR VERSION UPDATE REQUIRED"
+    echo "Current: $CURRENT_VERSION"
+    echo "Required: $REQUIRED_VERSION"
+    echo "Classification: Tier 2 (apply but require review)"
+    echo "Action: Proceed with caution"
+    exit 2
+fi
+
+# Patch version update (allowed)
+echo "✅ PATCH VERSION UPDATE ALLOWED"
+echo "Current: $CURRENT_VERSION"
+echo "Required: $REQUIRED_VERSION"
+echo "Classification: Tier 1 (auto-apply)"
+echo "Action: Safe to proceed"
+exit 0
+```
+
+### Standardize Go versions across all go.mod files
+```bash
+#!/bin/bash
+# standardize_go_versions.sh - Ensure all go.mod files use the same Go version
+
+TARGET_VERSION="$1"
+
+if [ -z "$TARGET_VERSION" ]; then
+    echo "Usage: $0 <go-version>"
+    echo "Example: $0 1.24.6"
+    exit 1
+fi
+
+echo "Standardizing all go.mod files to Go version $TARGET_VERSION..."
+
+# Find all go.mod files
+GO_MOD_FILES=$(find . -name "go.mod" -type f)
+
+if [ -z "$GO_MOD_FILES" ]; then
+    echo "No go.mod files found"
+    exit 1
+fi
+
+echo "Found go.mod files:"
+echo "$GO_MOD_FILES"
+
+# Check current versions
+echo "Current Go versions in go.mod files:"
+find . -name "go.mod" -exec echo "=== {} ===" \; -exec grep "^go " {} \;
+
+# Update all go.mod files
+echo "Updating all go.mod files to Go $TARGET_VERSION..."
+find . -name "go.mod" -exec sed -i.bak "s/^go .*/go $TARGET_VERSION/" {} \;
+
+# Clean up backup files
+find . -name "go.mod.bak" -delete
+
+# Update workspace if using go work
+if [ -f "go.work" ]; then
+    echo "Updating go.work file..."
+    sed -i.bak "s/go .*/go $TARGET_VERSION/" go.work
+    rm -f go.work.bak
+    go work sync
+fi
+
+# Verify all modules use the same Go version
+echo "Verifying all go.mod files now use Go $TARGET_VERSION:"
+find . -name "go.mod" -exec echo "=== {} ===" \; -exec grep "^go " {} \;
+
+# Check for any remaining inconsistencies
+INCONSISTENT=$(find . -name "go.mod" -exec grep "^go " {} \; | sort -u | wc -l)
+if [ "$INCONSISTENT" -gt 1 ]; then
+    echo "❌ WARNING: Still found inconsistent Go versions:"
+    find . -name "go.mod" -exec grep "^go " {} \; | sort -u
+    exit 1
+else
+    echo "✅ All go.mod files now use consistent Go version: $TARGET_VERSION"
+fi
+
+echo "Go version standardization complete"
+```
+
+---
+
+## 7) Validation Checklist
+
+Before submitting changes, ensure:
+
+- [ ] `go mod verify` passes
+- [ ] `go build ./...` succeeds
+- [ ] `go vet ./...` passes
+- [ ] `make test` passes (project-specific test command)
+- [ ] **Acceptance tests pass** (simple test completes in ~9 seconds)
+- [ ] **Container tests pass** (container test completes in ~10 seconds)
+- [ ] **No hanging processes** after test completion
+- [ ] `make lint-fix` runs successfully (fixes any lint errors)
+- [ ] No new linting errors introduced
+- [ ] All import paths are correct
+- [ ] No unused dependencies added
+- [ ] No tool import issues (tools imported as packages)
+- [ ] Tool usage pattern correctly identified (run vs build)
+- [ ] Tools directory builds successfully (`cd tools && go build .`) OR tools run successfully (`go run -modfile tools/go.mod <tool>`)
+- [ ] Replace directives are documented if used
+- [ ] Workspace files are updated if applicable
+- [ ] Go version compatibility verified (`go version` matches requirements)
+- [ ] CI/CD Go version specifications are consistent
+- [ ] Dockerfile Go version matches go.mod
+- [ ] All version check scripts pass
+- [ ] Go version update policy validated (no major version changes)
+- [ ] Version change classification confirmed (Tier 1/2/3)
+- [ ] **All go.mod files use the same Go version (CRITICAL)**
+- [ ] **All go.mod files use the same toolchain version (CRITICAL)**
+- [ ] **Go and toolchain versions match in each go.mod file (CRITICAL)**
+- [ ] Workspace go.work file (if present) uses consistent Go version
+- [ ] No Go version inconsistencies across modules
+- [ ] Go version consistency verified: `find . -name "go.mod" -exec grep "^go " {} \; | sort -u | wc -l` returns 1
+- [ ] Toolchain version consistency verified: `find . -name "go.mod" -exec grep "^toolchain " {} \; | sort -u | wc -l` returns 1
+- [ ] **Docker image Go versions support required Go version (CRITICAL)**
+- [ ] Docker image compatibility checked: `grep -r "golang:\|go-toolset:" Dockerfile* | grep -E "1\.[0-9]+\.[0-9]+"`
+- [ ] No Docker image version conflicts with dependency requirements
+- [ ] **If Go version was updated, update .tool-versions file to match (CRITICAL)**
+- [ ] **.tool-versions Go version MUST match go.mod version (CRITICAL)**
+- [ ] **Version manager compatibility verified: .tool-versions version matches go.mod version**
+- [ ] `.tool-versions` Go version matches go.mod version: `grep "golang" .tool-versions` matches `grep "^go " go.mod`
+
+---
+
+## 8) Emergency Rollback
+
+If changes cause issues:
+
+```bash
+# Revert go.mod and go.sum
+git checkout HEAD~1 -- go.mod go.sum
+
+# Clean module cache
+go clean -modcache
+
+# Restore dependencies
+go mod download
+go mod tidy
+
+# Verify everything works
+go build ./...
+make test
+make lint-fix
+
+# Test tools directory if it exists
+if [ -d "tools" ]; then
+    cd tools && go build . && echo "✅ Tools directory builds successfully" || echo "❌ Tools directory has issues"
+    cd ..
+fi
+
+# Verify acceptance tests work
+echo "=== Verifying acceptance tests ==="
+./hack/podman-setup/run-acceptance-tests.sh "TestFeatures/a_warning_with_fail-on-warn" && echo "✅ Simple acceptance test passes" || echo "❌ Simple acceptance test fails"
+./hack/podman-setup/run-acceptance-tests.sh "TestFeatures/track.*bundle" -t 5m && echo "✅ Container acceptance test passes" || echo "❌ Container acceptance test fails"
+```
