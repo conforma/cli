@@ -7,9 +7,9 @@ require (
 	github.com/CycloneDX/cyclonedx-go v0.9.2
 	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/Maldris/go-billy-afero v0.0.0-20200815120323-e9d3de59c99a
+	github.com/conforma/crds/api v0.1.0
 	github.com/conforma/go-gather v1.0.2
 	github.com/docker/docker v28.2.2+incompatible
-	github.com/conforma/crds/api v0.1.0
 	github.com/evanphx/json-patch v5.9.0+incompatible
 	github.com/gkampitakis/go-snaps v0.5.7
 	github.com/go-git/go-git/v5 v5.13.2
@@ -60,7 +60,9 @@ require (
 )
 
 // use forked version until we can get the fixes merged see https://github.com/conforma/go-containerregistry/blob/main/hack/ec-patches.sh for a list of patches we carry
-replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry v0.20.7-0.20250703195040-6f40a3734728
+replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry v0.20.7-0.20250905142844-b167a6a723f4
+
+require github.com/go-openapi/runtime v0.28.0
 
 require (
 	cel.dev/expr v0.20.0 // indirect
@@ -202,7 +204,6 @@ require (
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/loads v0.22.0 // indirect
-	github.com/go-openapi/runtime v0.28.0 // indirect
 	github.com/go-openapi/spec v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/go-openapi/validate v0.24.0 // indirect
