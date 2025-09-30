@@ -37,25 +37,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@c6295a65d1254861815972266d5933fd6e532bdf # v2.11.1
+        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
         with:
           egress-policy: audit
           disable-telemetry: true
 
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
           # Needed in hack/derive-version.sh
           fetch-depth: 0
 
       - name: Restore Cache
-        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           key: main
           path: '**'
 
       - name: Setup Go environment
-        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: go.mod
           cache: false
@@ -86,7 +86,7 @@ jobs:
         run: make test
 
       - name: Upload unit test coverage report
-        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -94,7 +94,7 @@ jobs:
           flags: unit
 
       - name: Upload generative test coverage report
-        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -102,7 +102,7 @@ jobs:
           flags: generative
 
       - name: Upload integration test coverage report
-        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -121,16 +121,16 @@ jobs:
       #     disable-telemetry: true
 
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
       - name: Restore Cache
-        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           key: main
           path: '**'
 
       - name: Setup Go environment
-        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: go.mod
           cache: false
@@ -146,7 +146,7 @@ jobs:
         run: make acceptance
 
       - name: Upload coverage report
-        uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
         with:
           files: ./coverage-acceptance.out
           flags: acceptance
@@ -155,16 +155,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
       - name: Restore Cache
-        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           key: main
           path: '**'
 
       - name: Setup Go environment
-        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: go.mod
           cache: false
