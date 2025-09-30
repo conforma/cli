@@ -3,66 +3,66 @@ module github.com/conforma/cli
 go 1.24.4
 
 require (
-	cuelang.org/go v0.13.2
+	cuelang.org/go v0.14.1
 	github.com/CycloneDX/cyclonedx-go v0.9.2
 	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/Maldris/go-billy-afero v0.0.0-20200815120323-e9d3de59c99a
-	github.com/conforma/crds/api v0.1.0
+	github.com/conforma/crds/api v0.1.2
 	github.com/conforma/go-gather v1.0.2
 	github.com/docker/docker v28.2.2+incompatible
-	github.com/evanphx/json-patch v5.9.0+incompatible
-	github.com/gkampitakis/go-snaps v0.5.7
-	github.com/go-git/go-git/v5 v5.13.2
+	github.com/evanphx/json-patch v5.9.11+incompatible
+	github.com/gkampitakis/go-snaps v0.5.15
+	github.com/go-git/go-git/v5 v5.16.2
 	github.com/go-logr/logr v1.4.3
-	github.com/go-openapi/strfmt v0.23.0
+	github.com/go-openapi/strfmt v0.24.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-containerregistry v0.20.7
 	github.com/google/safearchive v0.0.0-20241025131057-f7ce9d7b6f9c
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
 	github.com/in-toto/in-toto-golang v0.9.0
 	github.com/jstemmer/go-junit-report/v2 v2.1.0
-	github.com/konflux-ci/application-api v0.0.0-20240812090716-e7eb2ecfb409
+	github.com/konflux-ci/application-api 5a9670bf7679
 	github.com/leanovate/gopter v0.2.11
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/open-policy-agent/conftest v0.62.0
-	github.com/open-policy-agent/opa v1.6.0
+	github.com/open-policy-agent/opa v1.9.0
 	github.com/package-url/packageurl-go v0.1.3
 	github.com/qri-io/jsonpointer v0.1.1
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
-	github.com/secure-systems-lab/go-securesystemslib v0.9.0
-	github.com/sigstore/cosign/v2 v2.4.1
-	github.com/sigstore/rekor v1.3.6
-	github.com/sigstore/sigstore v1.8.9
+	github.com/secure-systems-lab/go-securesystemslib v0.9.1
+	github.com/sigstore/cosign/v2 v2.6.0
+	github.com/sigstore/rekor v1.4.2
+	github.com/sigstore/sigstore v1.9.5
 	github.com/sirupsen/logrus v1.9.3
 	github.com/smarty/cproxy/v2 v2.1.1
 	github.com/spdx/tools-golang v0.5.5
-	github.com/spf13/afero v1.14.0
-	github.com/spf13/cobra v1.9.1
-	github.com/spf13/pflag v1.0.6
-	github.com/spf13/viper v1.20.1
-	github.com/stretchr/testify v1.10.0
+	github.com/spf13/afero v1.15.0
+	github.com/spf13/cobra v1.10.1
+	github.com/spf13/pflag v1.0.10
+	github.com/spf13/viper v1.21.0
+	github.com/stretchr/testify v1.11.1
 	github.com/stuart-warren/yamlfmt v0.2.0
 	github.com/tektoncd/pipeline v0.66.0
 	github.com/testcontainers/testcontainers-go v0.34.1-0.20241204123437-72be13940122 // using unreleased version that contains the fix in https://github.com/testcontainers/testcontainers-go/pull/2899
-	github.com/testcontainers/testcontainers-go/modules/registry v0.34.0
-	golang.org/x/benchmarks v0.0.0-20241115175113-a2b48b605b42
-	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
-	golang.org/x/net v0.43.0
-	golang.org/x/sync v0.16.0
-	k8s.io/apiextensions-apiserver v0.31.0
-	k8s.io/apimachinery v0.32.3
-	k8s.io/client-go v0.32.3
+	github.com/testcontainers/testcontainers-go/modules/registry v0.39.0
+	golang.org/x/benchmarks 042410d58a82
+	golang.org/x/exp df9299821621
+	golang.org/x/net v0.44.0
+	golang.org/x/sync v0.17.0
+	k8s.io/apiextensions-apiserver v0.34.1
+	k8s.io/apimachinery v0.34.1
+	k8s.io/client-go v0.34.1
 	k8s.io/klog/v2 v2.130.1
-	k8s.io/kube-openapi v0.0.0-20241105132330-32ad38e42d3f
+	k8s.io/kube-openapi 589584f1c912
 	oras.land/oras-go/v2 v2.6.0
-	sigs.k8s.io/yaml v1.4.0
+	sigs.k8s.io/yaml v1.6.0
 )
 
 // use forked version until we can get the fixes merged see https://github.com/conforma/go-containerregistry/blob/main/hack/ec-patches.sh for a list of patches we carry
-replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry v0.20.7-0.20250703195040-6f40a3734728
+replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry b167a6a723f4
 
-require github.com/go-openapi/runtime v0.28.0
+require github.com/go-openapi/runtime v0.29.0
 
 require (
 	cel.dev/expr v0.20.0 // indirect
