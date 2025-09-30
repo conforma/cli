@@ -1,13 +1,13 @@
 = ec opa inspect
 
-Inspect OPA bundle(s) or Rego files.
+Inspect OPA bundle(s)
 
 == Synopsis
 
-Inspect OPA bundle(s) or Rego files.
+Inspect OPA bundle(s).
 
-The 'inspect' command provides a summary of the contents in OPA bundle(s) or a single Rego file. Bundles are
-gzipped tarballs containing policies and data. The 'inspect' command reads bundle(s) and lists
+The 'inspect' command provides a summary of the contents in OPA bundle(s) or a single Rego file.
+Bundles are gzipped tarballs containing policies and data. The 'inspect' command reads bundle(s) and lists
 the following:
 
 * packages that are contributed by .rego files
@@ -23,10 +23,10 @@ Example:
     bundle.tar.gz
     $ opa inspect bundle.tar.gz
 
-You can provide exactly one OPA bundle, path to a bundle directory, or direct path to a Rego file to the 'inspect' command
-on the command-line. If you provide a path referring to a directory, the 'inspect' command will load that path as a bundle
-and summarize its structure and contents. If you provide a path referring to a Rego file, the 'inspect' command will load
-that file and summarize its structure and contents.
+You can provide exactly one OPA bundle, to a bundle directory, or direct path to a Rego file to the 'inspect'
+command on the command-line. If you provide a path referring to a directory, the 'inspect' command will load that path as
+a bundle and summarize its structure and contents.  If you provide a path referring to a Rego file, the 'inspect' command
+will load that file and summarize its structure and contents.
 
 [source,shell]
 ----
