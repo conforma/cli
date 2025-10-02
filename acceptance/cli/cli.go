@@ -394,7 +394,14 @@ func setupGitHost(ctx context.Context, vars map[string]string, environment []str
 		return environment, vars, nil
 	}
 
-	environment = append(environment, fmt.Sprintf("SSL_CERT_FILE=%s", git.CertificatePath(ctx)), "GIT_SSL_NO_VERIFY=true")
+	environment = append(environment,
+		fmt.Sprintf("SSL_CERT_FILE=%s", git.CertificatePath(ctx)),
+		"GIT_SSL_NO_VERIFY=true",
+		// Add git configuration to handle intermittent connection issues
+		"GIT_HTTP_LOW_SPEED_LIMIT=1000",
+		"GIT_HTTP_LOW_SPEED_TIME=30",
+		"GIT_HTTP_TIMEOUT=60",
+	)
 
 	vars["GITHOST"] = git.Host(ctx)
 	latestCommit := git.LatestCommit(ctx)
@@ -873,7 +880,7 @@ func compareJSON(left []byte, right []byte, isArray bool) (gojsondiff.Diff, erro
 // when launching a command.
 func theEnvironmentVarilableIsSet(ctx context.Context, parameter string) (context.Context, error) {
 	environment, ok := ctx.Value(cmdEnvVar).([]string)
-	if !ok && environment != nil {
+	if !ok {
 		return ctx, errors.New("unexpected type for environment in context during initialization")
 	}
 	environment = append(environment, parameter)

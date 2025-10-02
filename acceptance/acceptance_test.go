@@ -122,11 +122,21 @@ func TestFeatures(t *testing.T) {
 
 	ctx := setupContext(t)
 
+	// Reduce concurrency to prevent resource contention and git server overload
+	// Use max of 2 or half the CPU count to prevent overwhelming the git server
+	concurrency := runtime.NumCPU()
+	if concurrency > 2 {
+		concurrency = concurrency / 2
+	}
+	if concurrency < 1 {
+		concurrency = 1
+	}
+
 	opts := godog.Options{
 		Format:         "pretty",
 		Paths:          []string{featuresDir},
 		Randomize:      *seed,
-		Concurrency:    runtime.NumCPU(),
+		Concurrency:    concurrency,
 		TestingT:       t,
 		DefaultContext: ctx,
 		Tags:           *tags,

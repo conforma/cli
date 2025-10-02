@@ -218,6 +218,9 @@ func createGitRepository(ctx context.Context, repositoryName string, files *godo
 		return nil
 	}
 
+	// Add a small delay to prevent race conditions when multiple tests run in parallel
+	time.Sleep(100 * time.Millisecond)
+
 	// create a storage for the .git directory within repositoryDir
 	dotGit := filesystem.NewStorage(osfs.New(path.Join(repositoryDir, ".git")), cache.NewObjectLRUDefault())
 	// filesystem to hold the policy files
