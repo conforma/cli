@@ -60,7 +60,9 @@ require (
 )
 
 // use forked version until we can get the fixes merged see https://github.com/conforma/go-containerregistry/blob/main/hack/ec-patches.sh for a list of patches we carry
-replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry v0.20.7-0.20250703195040-6f40a3734728
+replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry v0.20.7-0.20250905142844-b167a6a723f4
+
+require github.com/go-openapi/runtime v0.28.0
 
 require github.com/go-openapi/runtime v0.28.0
 
