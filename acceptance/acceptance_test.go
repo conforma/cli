@@ -19,6 +19,7 @@ package acceptance
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -148,7 +149,9 @@ func TestMain(t *testing.M) {
 	v := t.Run()
 
 	// After all tests have run `go-snaps` can check for not used snapshots
-	snaps.Clean(t)
+	if _, err := snaps.Clean(t); err != nil {
+		fmt.Printf("snaps.Clean error: %v\n", err)
+	}
 
 	os.Exit(v)
 }

@@ -101,7 +101,7 @@ func SignerWithKey(ctx context.Context, keyName string) (signature.SignerVerifie
 		return nil, err
 	}
 
-	return cosign.LoadPrivateKey(key.PrivateBytes, key.Password())
+	return cosign.LoadPrivateKey(key.PrivateBytes, key.Password(), nil)
 }
 
 // PublicKeysFrom returns a map of all public keys encoded in PEM format

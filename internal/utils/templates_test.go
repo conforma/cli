@@ -119,7 +119,7 @@ func TestTemplateHelpers(t *testing.T) {
 					"sep":   ",",
 				},
 			},
-			expected:    "\x1b[32mcolor test\x1b[0m\n›indicator\n\x1b[31m✕\x1b[0mcolorIndicator\nwrapped\nstring\n   indentation test\n   indent\n   wrapped\n   test\nkey1: value1\nkey2: value2\n\ntrue\none,two,three",
+			expected:    "color test\n›indicator\n✕colorIndicator\nwrapped\nstring\n   indentation test\n   indent\n   wrapped\n   test\nkey1: value1\nkey2: value2\n\ntrue\none,two,three",
 			expectedErr: nil,
 		},
 		{
@@ -164,7 +164,7 @@ func TestTemplateHelpers(t *testing.T) {
 	for _, tt := range tests {
 		var buf bytes.Buffer
 
-		SetColorEnabled(false, true)
+		SetColorEnabled(true, false)
 		err := tmpl.ExecuteTemplate(&buf, tt.main, tt.input)
 
 		if tt.expectedErr != nil {

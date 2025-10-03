@@ -64,7 +64,7 @@ func NewSigner(keyPath string, fs afero.Fs) (*Signer, error) {
 		return nil, fmt.Errorf("read key %q: %w", keyPath, err)
 	}
 
-	signerVerifier, err := LoadPrivateKey(keyBytes, []byte(os.Getenv("COSIGN_PASSWORD")))
+	signerVerifier, err := LoadPrivateKey(keyBytes, []byte(os.Getenv("COSIGN_PASSWORD")), nil)
 	if err != nil {
 		return nil, fmt.Errorf("load private key: %w", err)
 	}

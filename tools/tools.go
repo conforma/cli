@@ -27,6 +27,5 @@ import (
 	_ "github.com/wadey/gocovmerge"
 	_ "gotest.tools/gotestsum"
 	_ "helm.sh/helm/v3/cmd/helm"
-	_ "k8s.io/kubernetes/cmd/kubectl"
 	_ "sigs.k8s.io/kustomize/kustomize/v5"
 )
