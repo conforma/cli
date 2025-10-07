@@ -49,7 +49,8 @@ ARG TARGETOS
 ARG TARGETARCH
 
 LABEL \
-  name="ec-cli" \
+  name="rhtas/ec-rhel9" \
+  cpe="cpe:/a:redhat:trusted_artifact_signer:1.1::el9" \
   description="Enterprise Contract verifies and checks supply chain artifacts to ensure they meet security and business policies." \
   io.k8s.description="Enterprise Contract verifies and checks supply chain artifacts to ensure they meet security and business policies." \
   summary="Provides the binaries for downloading the EC CLI. Also used as a Tekton task runner image for EC tasks. Red Hat build." \
