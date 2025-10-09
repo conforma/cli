@@ -40,6 +40,14 @@ type ValidationData struct {
 
 // ValidateVSAWithPolicyComparison validates a VSA by comparing its policy with the supplied policy
 func ValidateVSAWithPolicyComparison(ctx context.Context, identifier string, data *ValidationData) (*ValidationResult, error) {
+	if data == nil {
+		return nil, fmt.Errorf("validation data cannot be nil")
+	}
+
+	if data.Retriever == nil {
+		return nil, fmt.Errorf("VSA retriever cannot be nil")
+	}
+
 	// Use VSA library's VSAChecker for efficient VSA validation
 	checker := NewVSAChecker(data.Retriever)
 
