@@ -90,8 +90,8 @@ type validateVSAData struct {
 	vsaExpiration    time.Duration // VSA expiration threshold as duration
 
 	// Signature verification options
-	verifySignature bool   // Whether to verify signature
-	publicKeyPath   string // Path to public key for verification
+	ignoreSignatureVerification bool   // Whether to ignore signature verification (default: false, so signature is verified by default)
+	publicKeyPath               string // Path to public key for verification
 
 	// Output options
 	output     []string // Output formats
@@ -125,6 +125,9 @@ func NewValidateVSACmd() *cobra.Command {
 		Long: hd.Doc(`
 			Validate VSA by comparing the embedded policy against a supplied policy configuration.
 			
+			By default, VSA signature verification is enabled and requires a public key.
+			Use --ignore-signature-verification to disable signature verification.
+			
 			Supports validation of:
 			- Single VSA by identifier (image digest, file path)
 			- Multiple VSAs from application snapshot
@@ -135,7 +138,7 @@ func NewValidateVSACmd() *cobra.Command {
 			- Multiple backends with fallback
 		`),
 		// Check positional arguments
-		// Example: ec validate vsa image1@sha256:abc123 --policy policy.yaml
+		// Example: ec validate vsa image1@sha256:abc123 --policy policy.yaml --public-key key.pub
 		Args: func(cmd *cobra.Command, args []string) error {
 			// Custom argument validation using Cobra's Args field
 			if len(args) > 1 {
@@ -172,10 +175,7 @@ func addVSAFlags(cmd *cobra.Command, data *validateVSAData) {
 	cmd.Flags().StringVar(&data.images, "images", "", "Application snapshot file")
 	cmd.Flags().StringVarP(&data.policyConfig, "policy", "p", "", "Policy configuration")
 
-	// Mark required flags
-	if err := cmd.MarkFlagRequired("policy"); err != nil {
-		log.Warnf("Failed to mark policy flag as required: %v", err)
-	}
+	// Mark required flags will be done after all flags are defined
 
 	// Add flag validation annotations for better error messages
 	if err := cmd.Flags().SetAnnotation("vsa", "validation", []string{"identifier"}); err != nil {
@@ -206,8 +206,8 @@ func addVSAFlags(cmd *cobra.Command, data *validateVSAData) {
 	}
 
 	// Signature verification options
-	cmd.Flags().BoolVar(&data.verifySignature, "verify-signature", false, "Verify VSA signature using public key")
-	cmd.Flags().StringVar(&data.publicKeyPath, "public-key", "", "Path to public key for signature verification")
+	cmd.Flags().BoolVar(&data.ignoreSignatureVerification, "ignore-signature-verification", false, "Ignore VSA signature verification (signature verification is enabled by default)")
+	cmd.Flags().StringVar(&data.publicKeyPath, "public-key", "", "Path to public key for signature verification (required by default)")
 	if err := cmd.Flags().SetAnnotation("public-key", "validation", []string{"file"}); err != nil {
 		log.Warnf("Failed to set annotation for public-key flag: %v", err)
 	}
@@ -223,6 +223,13 @@ func addVSAFlags(cmd *cobra.Command, data *validateVSAData) {
 	// Output formatting options
 	cmd.Flags().BoolVar(&data.noColor, "no-color", false, "Disable color when using text output even when the current terminal supports it")
 	cmd.Flags().BoolVar(&data.forceColor, "color", false, "Enable color when using text output even when the current terminal does not support it")
+
+	// Mark required flags after all flags are defined
+	if err := cmd.MarkFlagRequired("policy"); err != nil {
+		log.Warnf("Failed to mark policy flag as required: %v", err)
+	}
+	// Note: public-key is conditionally required based on --ignore-signature-verification flag
+	// This is handled in validateVSAInput function
 }
 
 // runValidateVSA is the main command execution function
@@ -277,8 +284,9 @@ func validateVSAInput(data *validateVSAData, args []string) error {
 	}
 
 	// Validate signature verification flags
-	if data.verifySignature && data.publicKeyPath == "" {
-		return fmt.Errorf("--public-key is required when --verify-signature is enabled")
+	// By default, signature verification is enabled, so public-key is required unless --ignore-signature-verification is set
+	if !data.ignoreSignatureVerification && data.publicKeyPath == "" {
+		return fmt.Errorf("--public-key is required for signature verification (use --ignore-signature-verification to disable signature verification)")
 	}
 
 	return nil
@@ -626,8 +634,8 @@ func validateVSAWithPolicyComparison(ctx context.Context, identifier string, dat
 		ctx,
 		identifier,
 		data.vsaExpiration,
-		data.verifySignature, // Whether to verify signature
-		data.publicKeyPath,   // Public key path (if signature verification requested)
+		!data.ignoreSignatureVerification, // Whether to verify signature (inverse of ignore flag)
+		data.publicKeyPath,                // Public key path (if signature verification requested)
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check existing VSA: %w", err)
@@ -635,16 +643,18 @@ func validateVSAWithPolicyComparison(ctx context.Context, identifier string, dat
 
 	if !result.Found {
 		return &ValidationResult{
-			Passed:  false,
-			Message: "No VSA found for the specified identifier",
+			Passed:            false,
+			Message:           "No VSA found for the specified identifier",
+			SignatureVerified: result.SignatureVerified,
 		}, nil
 	}
 
 	if result.Expired {
 		days := int(math.Ceil(time.Since(result.Timestamp).Hours() / 24))
 		return &ValidationResult{
-			Passed:  false,
-			Message: fmt.Sprintf("VSA expired %d day(s) ago", days),
+			Passed:            false,
+			Message:           fmt.Sprintf("VSA expired %d day(s) ago", days),
+			SignatureVerified: result.SignatureVerified,
 		}, nil
 	}
 
@@ -655,8 +665,9 @@ func validateVSAWithPolicyComparison(ctx context.Context, identifier string, dat
 	vsaPolicy, err := extractPolicyFromVSA(result.VSA)
 	if err != nil {
 		return &ValidationResult{
-			Passed:  false,
-			Message: err.Error(),
+			Passed:            false,
+			Message:           err.Error(),
+			SignatureVerified: result.SignatureVerified,
 		}, nil
 	}
 
@@ -666,8 +677,9 @@ func validateVSAWithPolicyComparison(ctx context.Context, identifier string, dat
 		effectiveTime, err := parseEffectiveTime(data.effectiveTime)
 		if err != nil {
 			return &ValidationResult{
-				Passed:  false,
-				Message: fmt.Sprintf("invalid effective time: %v", err),
+				Passed:            false,
+				Message:           fmt.Sprintf("invalid effective time: %v", err),
+				SignatureVerified: result.SignatureVerified,
 			}, nil
 		}
 
@@ -681,15 +693,17 @@ func validateVSAWithPolicyComparison(ctx context.Context, identifier string, dat
 		equivalent, differences, err := compareVSAPolicyWithDetails(vsaPolicy, data.policySpec, effectiveTime, imageInfo)
 		if err != nil {
 			return &ValidationResult{
-				Passed:  false,
-				Message: fmt.Sprintf("policy comparison failed: %v", err),
+				Passed:            false,
+				Message:           fmt.Sprintf("policy comparison failed: %v", err),
+				SignatureVerified: result.SignatureVerified,
 			}, nil
 		}
 
 		if !equivalent {
 			return &ValidationResult{
-				Passed:  false,
-				Message: formatPolicyDifferences(differences),
+				Passed:            false,
+				Message:           formatPolicyDifferences(differences),
+				SignatureVerified: result.SignatureVerified,
 			}, nil
 		}
 	}
@@ -802,7 +816,7 @@ func validateSingleVSA(ctx context.Context, data *validateVSAData, args []string
 		}
 		if result.SignatureVerified {
 			fmt.Println("   🔐 Signature verified")
-		} else if data.verifySignature {
+		} else if !data.ignoreSignatureVerification {
 			fmt.Println("   ⚠️  Signature verification requested but not performed")
 		}
 	} else {
@@ -899,7 +913,17 @@ func validateSnapshotVSAs(ctx context.Context, data *validateVSAData) error {
 			fmt.Printf("  ❌ Failed: %v\n", result.Error)
 		} else if result.Result != nil && result.Result.Passed {
 			fmt.Printf("  ✅ Passed: %s\n", result.Result.Message)
+			if result.Result.SignatureVerified {
+				fmt.Println("   🔐 Signature verified")
+			} else if !data.ignoreSignatureVerification {
+				fmt.Println("   ⚠️  Signature verification requested but not performed")
+			}
 		} else if result.Result != nil && !result.Result.Passed {
+			if result.Result.SignatureVerified {
+				fmt.Println("  🔐 Signature verified")
+			} else if !data.ignoreSignatureVerification {
+				fmt.Println("  ⚠️  Signature verification requested but not performed")
+			}
 			fmt.Printf("  ❌ Failed: %s\n", result.Result.Message)
 		}
 	}
