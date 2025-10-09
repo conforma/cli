@@ -18,6 +18,7 @@ package vsa
 
 import (
 	"context"
+	"crypto"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -28,6 +29,8 @@ import (
 
 	ecapi "github.com/conforma/crds/api/v1alpha1"
 	ssldsse "github.com/secure-systems-lab/go-securesystemslib/dsse"
+	"github.com/sigstore/sigstore/pkg/signature"
+	sigd "github.com/sigstore/sigstore/pkg/signature/dsse"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 
@@ -323,10 +326,12 @@ func (w *Writer) WritePredicate(predicate *Predicate) (string, error) {
 
 // VSALookupResult represents the result of looking up an existing VSA
 type VSALookupResult struct {
-	Found     bool
-	Expired   bool
-	VSA       *Predicate
-	Timestamp time.Time
+	Found             bool
+	Expired           bool
+	VSA               *Predicate
+	Timestamp         time.Time
+	Envelope          *ssldsse.Envelope // Store the envelope for signature verification
+	SignatureVerified bool              // Whether signature verification was performed and succeeded
 }
 
 // VSAChecker handles checking for existing VSAs using any VSARetriever
@@ -341,7 +346,57 @@ func NewVSAChecker(retriever VSARetriever) *VSAChecker {
 	}
 }
 
+// InTotoStatement represents an in-toto statement structure
+type InTotoStatement struct {
+	Type          string      `json:"_type"`
+	PredicateType string      `json:"predicateType"`
+	Subject       []Subject   `json:"subject"`
+	Predicate     interface{} `json:"predicate"`
+}
+
+// Subject represents a subject in an in-toto statement
+type Subject struct {
+	Name   string            `json:"name"`
+	Digest map[string]string `json:"digest"`
+}
+
+// ParseVSAContent parses VSA content from a DSSE envelope and returns a Predicate
+// The function handles different payload formats:
+// 1. In-toto Statement wrapped in DSSE envelope
+// 2. Raw Predicate directly in DSSE payload
+func ParseVSAContent(envelope *ssldsse.Envelope) (*Predicate, error) {
+	// Decode the base64-encoded payload
+	payloadBytes, err := base64.StdEncoding.DecodeString(envelope.Payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode DSSE payload: %w", err)
+	}
+
+	var predicate Predicate
+
+	// Try to parse the payload as an in-toto statement first
+	var statement InTotoStatement
+	if err := json.Unmarshal(payloadBytes, &statement); err == nil && statement.PredicateType != "" {
+		// It's an in-toto statement, extract the predicate
+		predicateBytes, err := json.Marshal(statement.Predicate)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal predicate: %w", err)
+		}
+
+		if err := json.Unmarshal(predicateBytes, &predicate); err != nil {
+			return nil, fmt.Errorf("failed to parse VSA predicate from in-toto statement: %w", err)
+		}
+	} else {
+		// The payload is directly the predicate
+		if err := json.Unmarshal(payloadBytes, &predicate); err != nil {
+			return nil, fmt.Errorf("failed to parse VSA predicate from DSSE payload: %w", err)
+		}
+	}
+
+	return &predicate, nil
+}
+
 // extractPredicateFromEnvelope extracts the VSA predicate from a DSSE envelope
+// This is a legacy function that only handles direct predicate extraction
 func extractPredicateFromEnvelope(envelope *ssldsse.Envelope) (*Predicate, error) {
 	// Check if payload is already decoded or needs base64 decoding
 	var payloadBytes []byte
@@ -380,8 +435,8 @@ func extractPredicateFromEnvelope(envelope *ssldsse.Envelope) (*Predicate, error
 	return &predicate, nil
 }
 
-// CheckExistingVSA looks up existing VSAs for an image and determines if they're valid/expired
-func (c *VSAChecker) CheckExistingVSA(ctx context.Context, imageRef string, expirationThreshold time.Duration) (*VSALookupResult, error) {
+// CheckExistingVSAWithVerification looks up existing VSAs for an image and performs all checks including optional signature verification
+func (c *VSAChecker) CheckExistingVSAWithVerification(ctx context.Context, imageRef string, expirationThreshold time.Duration, verifySignature bool, publicKeyPath string) (*VSALookupResult, error) {
 	result := &VSALookupResult{
 		Found:   false,
 		Expired: false,
@@ -394,8 +449,7 @@ func (c *VSAChecker) CheckExistingVSA(ctx context.Context, imageRef string, expi
 		return nil, fmt.Errorf("VSA retriever not available")
 	}
 
-	// Retrieve VSA envelope for this image reference
-	// Pass the original imageRef to the retriever, which can extract what it needs
+	// 1. SINGLE VSA RETRIEVAL
 	envelope, err := c.retriever.RetrieveVSA(ctx, imageRef)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve VSA envelope: %w", err)
@@ -406,13 +460,30 @@ func (c *VSAChecker) CheckExistingVSA(ctx context.Context, imageRef string, expi
 		return result, nil
 	}
 
-	// Extract predicate from the envelope
-	predicate, err := extractPredicateFromEnvelope(envelope)
+	// Store envelope for potential signature verification
+	result.Envelope = envelope
+
+	// 2. OPTIONAL signature verification (if requested) - MUST happen before payload extraction
+	if verifySignature {
+		if publicKeyPath == "" {
+			return nil, fmt.Errorf("public key path required for signature verification")
+		}
+
+		if err := verifyVSASignatureFromEnvelope(envelope, publicKeyPath); err != nil {
+			return nil, fmt.Errorf("VSA signature verification failed: %w", err)
+		}
+
+		result.SignatureVerified = true
+		log.Debugf("VSA signature verification successful for image %s", imageRef)
+	}
+
+	// 3. Extract predicate from the envelope (after signature verification)
+	predicate, err := ParseVSAContent(envelope)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract predicate from VSA envelope: %w", err)
 	}
 
-	// Parse timestamp from predicate
+	// 4. Parse timestamp and check expiration
 	recordTime, err := time.Parse(time.RFC3339, predicate.Timestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse VSA timestamp: %w", err)
@@ -428,10 +499,17 @@ func (c *VSAChecker) CheckExistingVSA(ctx context.Context, imageRef string, expi
 		"vsa_timestamp":        recordTime,
 		"expiration_threshold": expirationThreshold,
 		"expired":              result.Expired,
+		"signature_verified":   verifySignature,
 		"verifier":             predicate.Verifier,
-	}).Debug("Found VSA envelope")
+	}).Debug("VSA validation completed")
 
 	return result, nil
+}
+
+// CheckExistingVSA looks up existing VSAs for an image and determines if they're valid/expired
+// This method is kept for backward compatibility
+func (c *VSAChecker) CheckExistingVSA(ctx context.Context, imageRef string, expirationThreshold time.Duration) (*VSALookupResult, error) {
+	return c.CheckExistingVSAWithVerification(ctx, imageRef, expirationThreshold, false, "")
 }
 
 // IsValidVSA checks if a VSA exists and is not expired for the given image
@@ -518,6 +596,60 @@ func CreateRetrieverFromUploadFlags(vsaUpload []string) VSARetriever {
 		default:
 			log.Debugf("No VSA retriever available for backend: %s", config.Backend)
 		}
+	}
+
+	return nil
+}
+
+// verifyVSASignatureFromEnvelope verifies the signature of a DSSE envelope
+func verifyVSASignatureFromEnvelope(envelope *ssldsse.Envelope, publicKeyPath string) error {
+	// Debug: Log envelope details
+	log.Debugf("DSSE Envelope details:")
+	log.Debugf("  PayloadType: %s", envelope.PayloadType)
+	log.Debugf("  Payload length: %d", len(envelope.Payload))
+	log.Debugf("  Signatures count: %d", len(envelope.Signatures))
+
+	// Check if payload is base64 encoded
+	if len(envelope.Payload) > 0 {
+		// Try to decode to see if it's base64
+		if _, err := base64.StdEncoding.DecodeString(envelope.Payload); err != nil {
+			log.Debugf("Payload is not base64 encoded, treating as raw")
+		} else {
+			log.Debugf("Payload is base64 encoded")
+		}
+	}
+
+	// Load the verifier from the public key file
+	verifier, err := signature.LoadVerifierFromPEMFile(publicKeyPath, crypto.SHA256)
+	if err != nil {
+		return fmt.Errorf("failed to load verifier from public key file: %w", err)
+	}
+
+	// Get the public key
+	pub, err := verifier.PublicKey()
+	if err != nil {
+		return fmt.Errorf("failed to get public key: %w", err)
+	}
+
+	// Create DSSE envelope verifier using go-securesystemslib
+	ev, err := ssldsse.NewEnvelopeVerifier(&sigd.VerifierAdapter{
+		SignatureVerifier: verifier,
+		Pub:               pub,
+		PubKeyID:          "default", // Match the KeyID we set in the signature
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create envelope verifier: %w", err)
+	}
+
+	// Verify the signature
+	ctx := context.Background()
+	acceptedSignatures, err := ev.Verify(ctx, envelope)
+	if err != nil {
+		return fmt.Errorf("signature verification failed: %w", err)
+	}
+
+	if len(acceptedSignatures) == 0 {
+		return fmt.Errorf("signature verification failed: no signatures were accepted")
 	}
 
 	return nil

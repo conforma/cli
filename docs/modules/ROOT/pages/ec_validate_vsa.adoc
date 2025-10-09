@@ -29,7 +29,9 @@ ec validate vsa <vsa-identifier> [flags]
 --output:: Output formats (Default: [])
 -o, --output-file:: Output file
 -p, --policy:: Policy configuration
+--public-key:: Path to public key for signature verification
 --strict:: Exit with non-zero code if validation fails (Default: true)
+--verify-signature:: Verify VSA signature using public key (Default: false)
 -v, --vsa:: VSA identifier (image digest, file path)
 --vsa-expiration:: VSA expiration threshold (e.g., 24h, 7d, 1w, 1m) (Default: 168h)
 --vsa-retrieval:: VSA retrieval backends (rekor@, file@) (Default: [])

@@ -366,17 +366,60 @@ func (r *RekorVSARetriever) buildDSSEEnvelopeFromIntotoV002(entry models.LogEntr
 		return nil, fmt.Errorf("envelope does not contain payloadType")
 	}
 
-	// Prefer payload from content.envelope.payload when present; fallback to Attestation.Data
+	// Prefer Attestation.Data (needs base64-encoding); fallback to content.envelope.payload
 	var payloadB64 string
 
-	// First, try to get payload from content.envelope.payload
-	if payload, ok := envelopeData["payload"].(string); ok && payload != "" {
-		payloadB64 = payload
-	} else if entry.Attestation != nil && entry.Attestation.Data != nil {
-		// Fallback to Attestation.Data (already base64-encoded)
-		payloadB64 = string(entry.Attestation.Data)
+	// First, try to get payload from Attestation.Data (needs to be base64-encoded)
+	if entry.Attestation != nil && entry.Attestation.Data != nil {
+		log.Debugf("Using payload from Attestation.Data (length: %d)", len(entry.Attestation.Data))
+		// Preview first 100 characters to see what we're dealing with
+		previewLen := 100
+		if len(entry.Attestation.Data) < previewLen {
+			previewLen = len(entry.Attestation.Data)
+		}
+		log.Debugf("Attestation.Data preview (first %d chars): %s", previewLen, string(entry.Attestation.Data[:previewLen]))
+		// Attestation.Data contains raw JSON, need to base64-encode it
+		payloadB64 = base64.StdEncoding.EncodeToString(entry.Attestation.Data)
+		log.Debugf("Base64-encoded payload length: %d", len(payloadB64))
+	} else if payload, ok := envelopeData["payload"].(string); ok && payload != "" {
+		// Fallback to content.envelope.payload
+		log.Debugf("Using payload from envelope.payload (length: %d)", len(payload))
+		// Check if the payload is already base64-encoded
+		if _, err := base64.StdEncoding.DecodeString(payload); err == nil {
+			// Already base64-encoded
+			payloadB64 = payload
+		} else {
+			// Not base64-encoded, encode it
+			payloadB64 = base64.StdEncoding.EncodeToString([]byte(payload))
+		}
 	} else {
-		return nil, fmt.Errorf("no payload found in envelope or attestation data")
+		return nil, fmt.Errorf("no payload found in attestation data or envelope")
+	}
+
+	// Debug: Try to decode the payload to see if it's valid base64
+	if _, err := base64.StdEncoding.DecodeString(payloadB64); err != nil {
+		log.Debugf("Payload is not valid base64: %v", err)
+		previewLen := 100
+		if len(payloadB64) < previewLen {
+			previewLen = len(payloadB64)
+		}
+		log.Debugf("Payload preview (first %d chars): %s", previewLen, payloadB64[:previewLen])
+
+		// Try URL encoding as well
+		if _, err := base64.URLEncoding.DecodeString(payloadB64); err != nil {
+			log.Debugf("Payload is also not valid URL base64: %v", err)
+		} else {
+			log.Debugf("Payload is valid URL base64")
+		}
+	} else {
+		log.Debugf("Payload is valid base64")
+		// Decode and preview the decoded content
+		decoded, _ := base64.StdEncoding.DecodeString(payloadB64)
+		previewLen := 100
+		if len(decoded) < previewLen {
+			previewLen = len(decoded)
+		}
+		log.Debugf("Decoded payload preview (first %d chars): %s", previewLen, string(decoded[:previewLen]))
 	}
 
 	// Extract and convert signatures
@@ -400,7 +443,31 @@ func (r *RekorVSARetriever) buildDSSEEnvelopeFromIntotoV002(entry models.LogEntr
 
 		// Extract sig field (required) - only support standard field
 		if sigHex, ok := sigMap["sig"].(string); ok {
-			sig.Sig = sigHex
+			// The signature in the in-toto entry is double-base64-encoded
+			// We need to decode it twice to get the actual ASN.1 DER signature
+			// Then re-encode it once for the DSSE library
+
+			// First decode
+			firstDecode, err := base64.StdEncoding.DecodeString(sigHex)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode signature %d: %w", i, err)
+			}
+
+			// Second decode (the first decode result is base64-encoded)
+			decodedString := string(firstDecode)
+			paddingNeeded := (4 - len(decodedString)%4) % 4
+			paddedString := decodedString
+			for j := 0; j < paddingNeeded; j++ {
+				paddedString += "="
+			}
+
+			actualSignature, err := base64.StdEncoding.DecodeString(paddedString)
+			if err != nil {
+				return nil, fmt.Errorf("failed to double-decode signature %d: %w", i, err)
+			}
+
+			// Re-encode once for the DSSE library
+			sig.Sig = base64.StdEncoding.EncodeToString(actualSignature)
 		} else {
 			return nil, fmt.Errorf("signature %d missing required 'sig' field", i)
 		}
@@ -408,6 +475,10 @@ func (r *RekorVSARetriever) buildDSSEEnvelopeFromIntotoV002(entry models.LogEntr
 		// Extract keyid field (optional)
 		if keyid, ok := sigMap["keyid"].(string); ok {
 			sig.KeyID = keyid
+		} else {
+			// If no KeyID is provided, set a default one to help with verification
+			// This might help the DSSE library match the signature to the public key
+			sig.KeyID = "default"
 		}
 
 		signatures = append(signatures, sig)

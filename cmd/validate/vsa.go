@@ -46,8 +46,9 @@ import (
 
 // ValidationResult represents the result of VSA validation
 type ValidationResult struct {
-	Passed  bool   `json:"passed"`
-	Message string `json:"message,omitempty"`
+	Passed            bool   `json:"passed"`
+	Message           string `json:"message,omitempty"`
+	SignatureVerified bool   `json:"signature_verified,omitempty"`
 }
 
 // IdentifierType represents the type of VSA identifier
@@ -87,6 +88,10 @@ type validateVSAData struct {
 	// VSA options
 	vsaExpirationStr string        // VSA expiration threshold as string
 	vsaExpiration    time.Duration // VSA expiration threshold as duration
+
+	// Signature verification options
+	verifySignature bool   // Whether to verify signature
+	publicKeyPath   string // Path to public key for verification
 
 	// Output options
 	output     []string // Output formats
@@ -200,6 +205,13 @@ func addVSAFlags(cmd *cobra.Command, data *validateVSAData) {
 		log.Warnf("Failed to set annotation for vsa-expiration flag: %v", err)
 	}
 
+	// Signature verification options
+	cmd.Flags().BoolVar(&data.verifySignature, "verify-signature", false, "Verify VSA signature using public key")
+	cmd.Flags().StringVar(&data.publicKeyPath, "public-key", "", "Path to public key for signature verification")
+	if err := cmd.Flags().SetAnnotation("public-key", "validation", []string{"file"}); err != nil {
+		log.Warnf("Failed to set annotation for public-key flag: %v", err)
+	}
+
 	// Output options
 	cmd.Flags().StringSliceVar(&data.output, "output", []string{}, "Output formats")
 	cmd.Flags().StringVarP(&data.outputFile, "output-file", "o", "", "Output file")
@@ -262,6 +274,11 @@ func validateVSAInput(data *validateVSAData, args []string) error {
 	// Validate VSA expiration format early
 	if err := parseVSAExpiration(data); err != nil {
 		return fmt.Errorf("invalid --vsa-expiration: %w", err)
+	}
+
+	// Validate signature verification flags
+	if data.verifySignature && data.publicKeyPath == "" {
+		return fmt.Errorf("--public-key is required when --verify-signature is enabled")
 	}
 
 	return nil
@@ -604,8 +621,14 @@ func validateVSAWithPolicyComparison(ctx context.Context, identifier string, dat
 	// Use VSA library's VSAChecker for efficient VSA validation
 	checker := vsa.NewVSAChecker(data.retriever)
 
-	// Check existing VSA using library's CheckExistingVSA method
-	result, err := checker.CheckExistingVSA(ctx, identifier, data.vsaExpiration)
+	// SINGLE VSA RETRIEVAL with optional signature verification
+	result, err := checker.CheckExistingVSAWithVerification(
+		ctx,
+		identifier,
+		data.vsaExpiration,
+		data.verifySignature, // Whether to verify signature
+		data.publicKeyPath,   // Public key path (if signature verification requested)
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check existing VSA: %w", err)
 	}
@@ -624,6 +647,9 @@ func validateVSAWithPolicyComparison(ctx context.Context, identifier string, dat
 			Message: fmt.Sprintf("VSA expired %d day(s) ago", days),
 		}, nil
 	}
+
+	// If signature verification was requested and failed, the error would have been returned above
+	// If signature verification was requested and succeeded, we continue with policy comparison
 
 	// Extract policy from VSA predicate
 	vsaPolicy, err := extractPolicyFromVSA(result.VSA)
@@ -670,8 +696,9 @@ func validateVSAWithPolicyComparison(ctx context.Context, identifier string, dat
 
 	// Return success result
 	return &ValidationResult{
-		Passed:  true,
-		Message: "Policy matches",
+		Passed:            true,
+		Message:           "Policy matches",
+		SignatureVerified: result.SignatureVerified,
 	}, nil
 }
 
@@ -772,6 +799,11 @@ func validateSingleVSA(ctx context.Context, data *validateVSAData, args []string
 		fmt.Println("✅ VSA validation passed")
 		if result.Message != "" {
 			fmt.Printf("   %s\n", result.Message)
+		}
+		if result.SignatureVerified {
+			fmt.Println("   🔐 Signature verified")
+		} else if data.verifySignature {
+			fmt.Println("   ⚠️  Signature verification requested but not performed")
 		}
 	} else {
 		fmt.Println("❌ VSA validation failed")
