@@ -372,12 +372,6 @@ func (r *RekorVSARetriever) buildDSSEEnvelopeFromIntotoV002(entry models.LogEntr
 	// First, try to get payload from Attestation.Data (needs to be base64-encoded)
 	if entry.Attestation != nil && entry.Attestation.Data != nil {
 		log.Debugf("Using payload from Attestation.Data (length: %d)", len(entry.Attestation.Data))
-		// Preview first 100 characters to see what we're dealing with
-		previewLen := 100
-		if len(entry.Attestation.Data) < previewLen {
-			previewLen = len(entry.Attestation.Data)
-		}
-		log.Debugf("Attestation.Data preview (first %d chars): %s", previewLen, string(entry.Attestation.Data[:previewLen]))
 		// Attestation.Data contains raw JSON, need to base64-encode it
 		payloadB64 = base64.StdEncoding.EncodeToString(entry.Attestation.Data)
 		log.Debugf("Base64-encoded payload length: %d", len(payloadB64))
@@ -443,31 +437,34 @@ func (r *RekorVSARetriever) buildDSSEEnvelopeFromIntotoV002(entry models.LogEntr
 
 		// Extract sig field (required) - only support standard field
 		if sigHex, ok := sigMap["sig"].(string); ok {
-			// The signature in the in-toto entry is double-base64-encoded
-			// We need to decode it twice to get the actual ASN.1 DER signature
-			// Then re-encode it once for the DSSE library
-
-			// First decode
+			// Handle both single and double encoding to be robust
+			// Try single decode first
 			firstDecode, err := base64.StdEncoding.DecodeString(sigHex)
 			if err != nil {
 				return nil, fmt.Errorf("failed to decode signature %d: %w", i, err)
 			}
 
-			// Second decode (the first decode result is base64-encoded)
+			// Check if the result is still base64-encoded (indicating double encoding)
+			// TODO: This is a hack to get the signature from the in-toto entry
+			// For some reason it's double encoded and it doesn't work to not encode when storing
 			decodedString := string(firstDecode)
-			paddingNeeded := (4 - len(decodedString)%4) % 4
-			paddedString := decodedString
-			for j := 0; j < paddingNeeded; j++ {
-				paddedString += "="
-			}
+			if isBase64String(decodedString) {
+				// Double-encoded: decode again
+				paddingNeeded := (4 - len(decodedString)%4) % 4
+				paddedString := decodedString
+				for j := 0; j < paddingNeeded; j++ {
+					paddedString += "="
+				}
 
-			actualSignature, err := base64.StdEncoding.DecodeString(paddedString)
-			if err != nil {
-				return nil, fmt.Errorf("failed to double-decode signature %d: %w", i, err)
+				actualSignature, err := base64.StdEncoding.DecodeString(paddedString)
+				if err != nil {
+					return nil, fmt.Errorf("failed to double-decode signature %d: %w", i, err)
+				}
+				sig.Sig = base64.StdEncoding.EncodeToString(actualSignature)
+			} else {
+				// Single-encoded: use as-is
+				sig.Sig = base64.StdEncoding.EncodeToString(firstDecode)
 			}
-
-			// Re-encode once for the DSSE library
-			sig.Sig = base64.StdEncoding.EncodeToString(actualSignature)
 		} else {
 			return nil, fmt.Errorf("signature %d missing required 'sig' field", i)
 		}
@@ -746,4 +743,10 @@ func (rc *rekorClient) GetLogEntryByUUID(ctx context.Context, uuid string) (*mod
 	}
 
 	return nil, fmt.Errorf("log entry not found for UUID: %s", uuid)
+}
+
+// isBase64String checks if a string is valid base64
+func isBase64String(s string) bool {
+	_, err := base64.StdEncoding.DecodeString(s)
+	return err == nil
 }
