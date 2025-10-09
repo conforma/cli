@@ -6,6 +6,9 @@ Validate VSA (Verification Summary Attestation)
 
 Validate VSA by comparing the embedded policy against a supplied policy configuration.
 
+By default, VSA signature verification is enabled and requires a public key.
+Use --ignore-signature-verification to disable signature verification.
+
 Supports validation of:
 - Single VSA by identifier (image digest, file path)
 - Multiple VSAs from application snapshot
@@ -24,11 +27,13 @@ ec validate vsa <vsa-identifier> [flags]
 --color:: Enable color when using text output even when the current terminal does not support it (Default: false)
 --effective-time:: Effective time for comparison (Default: now)
 -h, --help:: help for vsa (Default: false)
+--ignore-signature-verification:: Ignore VSA signature verification (signature verification is enabled by default) (Default: false)
 --images:: Application snapshot file
 --no-color:: Disable color when using text output even when the current terminal supports it (Default: false)
 --output:: Output formats (Default: [])
 -o, --output-file:: Output file
 -p, --policy:: Policy configuration
+--public-key:: Path to public key for signature verification (required by default)
 --strict:: Exit with non-zero code if validation fails (Default: true)
 -v, --vsa:: VSA identifier (image digest, file path)
 --vsa-expiration:: VSA expiration threshold (e.g., 24h, 7d, 1w, 1m) (Default: 168h)

@@ -258,12 +258,14 @@ func TestRekorVSARetriever_RetrieveVSA(t *testing.T) {
 	vsaStatement := `{"_type":"https://in-toto.io/Statement/v0.1","subject":[{"name":"test-image","digest":{"sha256":"abc123def456"}}],"predicateType":"https://conforma.dev/verification_summary/v1","predicate":{"test":"data"}}`
 
 	// Create in-toto 0.0.2 entry body
+	// The signature needs to be double-base64 encoded for the implementation
+	doubleEncodedSig := base64.StdEncoding.EncodeToString([]byte(base64.StdEncoding.EncodeToString([]byte("test"))))
 	intotoV002Body := `{
 		"spec": {
 			"content": {
 				"envelope": {
 					"payloadType": "application/vnd.in-toto+json",
-					"signatures": [{"sig": "dGVzdA==", "keyid": "test-key-id"}]
+					"signatures": [{"sig": "` + doubleEncodedSig + `", "keyid": "test-key-id"}]
 				}
 			}
 		}
@@ -276,7 +278,7 @@ func TestRekorVSARetriever_RetrieveVSA(t *testing.T) {
 				LogID:    &[]string{"intoto-v002-uuid"}[0],
 				Body:     base64.StdEncoding.EncodeToString([]byte(intotoV002Body)),
 				Attestation: &models.LogEntryAnonAttestation{
-					Data: strfmt.Base64(base64.StdEncoding.EncodeToString([]byte(vsaStatement))),
+					Data: strfmt.Base64([]byte(vsaStatement)), // Raw JSON, not base64 encoded
 				},
 			},
 		},
