@@ -758,3 +758,468 @@ func TestWriterErrorHandling(t *testing.T) {
 		assert.Contains(t, err.Error(), "failed to marshal VSA predicate")
 	})
 }
+
+// TestDetectIdentifierType tests the DetectIdentifierType function
+func TestDetectIdentifierType(t *testing.T) {
+	tests := []struct {
+		name       string
+		identifier string
+		expected   IdentifierType
+	}{
+		{
+			name:       "image digest sha256",
+			identifier: "sha256:abc123def456789",
+			expected:   IdentifierImageDigest,
+		},
+		{
+			name:       "image digest sha512",
+			identifier: "sha512:abc123def456789",
+			expected:   IdentifierImageDigest,
+		},
+		{
+			name:       "image reference with tag",
+			identifier: "nginx:latest",
+			expected:   IdentifierImageReference,
+		},
+		{
+			name:       "image reference with registry",
+			identifier: "registry.io/namespace/repo:tag",
+			expected:   IdentifierImageReference,
+		},
+		{
+			name:       "absolute file path",
+			identifier: "/path/to/file.json",
+			expected:   IdentifierImageReference, // name.ParseReference accepts this as valid
+		},
+		{
+			name:       "relative file path",
+			identifier: "./file.json",
+			expected:   IdentifierImageReference, // name.ParseReference accepts this as valid
+		},
+		{
+			name:       "relative file path with parent",
+			identifier: "../file.json",
+			expected:   IdentifierImageReference, // name.ParseReference accepts this as valid
+		},
+		{
+			name:       "file with extension",
+			identifier: "file.json",
+			expected:   IdentifierImageReference, // name.ParseReference accepts this as valid
+		},
+		{
+			name:       "file with path separators",
+			identifier: "path/to/file",
+			expected:   IdentifierImageReference, // name.ParseReference accepts this as valid
+		},
+		{
+			name:       "simple image name",
+			identifier: "nginx",
+			expected:   IdentifierImageReference,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := DetectIdentifierType(tt.identifier)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestIsImageReference tests the IsImageReference function
+func TestIsImageReference(t *testing.T) {
+	tests := []struct {
+		name       string
+		identifier string
+		expected   bool
+	}{
+		{
+			name:       "docker hub reference",
+			identifier: "nginx:latest",
+			expected:   true,
+		},
+		{
+			name:       "registry reference",
+			identifier: "registry.io/namespace/repo:tag",
+			expected:   true,
+		},
+		{
+			name:       "reference with digest",
+			identifier: "registry.io/namespace/repo:sha256-abc123",
+			expected:   true,
+		},
+		{
+			name:       "quay reference",
+			identifier: "quay.io/redhat/ubi8:latest",
+			expected:   true,
+		},
+		{
+			name:       "image digest only",
+			identifier: "sha256:abc123def456789",
+			expected:   false,
+		},
+		{
+			name:       "file path",
+			identifier: "/path/to/file.json",
+			expected:   false,
+		},
+		{
+			name:       "relative file path",
+			identifier: "./file.json",
+			expected:   false,
+		},
+		{
+			name:       "file with extension",
+			identifier: "file.json",
+			expected:   false,
+		},
+		{
+			name:       "invalid reference",
+			identifier: "invalid:",
+			expected:   false,
+		},
+		{
+			name:       "invalid digest format",
+			identifier: "sha128:abc123",
+			expected:   false,
+		},
+		{
+			name:       "single word with colon but no value",
+			identifier: "invalid:",
+			expected:   false,
+		},
+		{
+			name:       "valid docker hub reference",
+			identifier: "nginx:latest",
+			expected:   true,
+		},
+		{
+			name:       "valid registry reference with port",
+			identifier: "registry.io:5000/namespace/repo:tag",
+			expected:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsImageReference(tt.identifier)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestIsValidVSAIdentifier tests the IsValidVSAIdentifier function
+func TestIsValidVSAIdentifier(t *testing.T) {
+	tests := []struct {
+		name       string
+		identifier string
+		expected   bool
+	}{
+		{
+			name:       "valid file path",
+			identifier: "/path/to/vsa.json",
+			expected:   true,
+		},
+		{
+			name:       "valid image digest",
+			identifier: "sha256:abc123def456789",
+			expected:   true,
+		},
+		{
+			name:       "valid image reference",
+			identifier: "registry.io/repo:tag",
+			expected:   true,
+		},
+		{
+			name:       "empty identifier",
+			identifier: "",
+			expected:   false,
+		},
+		{
+			name:       "file path with spaces",
+			identifier: "file with spaces.json",
+			expected:   true,
+		},
+		{
+			name:       "image reference with spaces",
+			identifier: "nginx with spaces:latest",
+			expected:   false,
+		},
+		{
+			name:       "invalid digest format",
+			identifier: "sha128:abc123",
+			expected:   true, // name.ParseReference accepts this as valid
+		},
+		{
+			name:       "invalid image reference",
+			identifier: "invalid:",
+			expected:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsValidVSAIdentifier(tt.identifier)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestParseVSAExpirationDuration tests the ParseVSAExpirationDuration function
+func TestParseVSAExpirationDuration(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration string
+		expected time.Duration
+		hasError bool
+	}{
+		{
+			name:     "hours",
+			duration: "24h",
+			expected: 24 * time.Hour,
+			hasError: false,
+		},
+		{
+			name:     "days",
+			duration: "7d",
+			expected: 7 * 24 * time.Hour,
+			hasError: false,
+		},
+		{
+			name:     "weeks",
+			duration: "2w",
+			expected: 2 * 7 * 24 * time.Hour,
+			hasError: false,
+		},
+		{
+			name:     "months",
+			duration: "1mo",
+			expected: 30 * 24 * time.Hour,
+			hasError: false,
+		},
+		{
+			name:     "standard Go duration",
+			duration: "168h",
+			expected: 168 * time.Hour,
+			hasError: false,
+		},
+		{
+			name:     "invalid format",
+			duration: "invalid",
+			expected: 0,
+			hasError: true,
+		},
+		{
+			name:     "empty duration",
+			duration: "",
+			expected: 0,
+			hasError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ParseVSAExpirationDuration(tt.duration)
+			if tt.hasError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}
+
+// TestConvertYAMLToJSON tests the ConvertYAMLToJSON function
+func TestConvertYAMLToJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		expected interface{}
+	}{
+		{
+			name:     "map with interface{} keys",
+			input:    map[interface{}]interface{}{"key": "value"},
+			expected: map[string]interface{}{"key": "value"},
+		},
+		{
+			name:     "slice of interfaces",
+			input:    []interface{}{"item1", "item2"},
+			expected: []interface{}{"item1", "item2"},
+		},
+		{
+			name:     "nested map",
+			input:    map[interface{}]interface{}{"nested": map[interface{}]interface{}{"key": "value"}},
+			expected: map[string]interface{}{"nested": map[string]interface{}{"key": "value"}},
+		},
+		{
+			name:     "primitive value",
+			input:    "simple string",
+			expected: "simple string",
+		},
+		{
+			name:     "number",
+			input:    42,
+			expected: 42,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ConvertYAMLToJSON(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestIsImageDigest tests the isImageDigest function
+func TestIsImageDigest(t *testing.T) {
+	tests := []struct {
+		name       string
+		identifier string
+		expected   bool
+	}{
+		{
+			name:       "valid sha256 digest",
+			identifier: "sha256:abc123def456789",
+			expected:   true,
+		},
+		{
+			name:       "valid sha512 digest",
+			identifier: "sha512:abc123def456789",
+			expected:   true,
+		},
+		{
+			name:       "invalid digest format",
+			identifier: "sha128:abc123",
+			expected:   false,
+		},
+		{
+			name:       "image reference",
+			identifier: "nginx:latest",
+			expected:   false,
+		},
+		{
+			name:       "file path",
+			identifier: "/path/to/file",
+			expected:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isImageDigest(tt.identifier)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestIsFilePath tests the isFilePath function
+func TestIsFilePath(t *testing.T) {
+	tests := []struct {
+		name       string
+		identifier string
+		expected   bool
+	}{
+		{
+			name:       "absolute path",
+			identifier: "/path/to/file",
+			expected:   true,
+		},
+		{
+			name:       "relative path with dot",
+			identifier: "./file",
+			expected:   true,
+		},
+		{
+			name:       "relative path with parent",
+			identifier: "../file",
+			expected:   true,
+		},
+		{
+			name:       "file with extension",
+			identifier: "file.json",
+			expected:   true,
+		},
+		{
+			name:       "path with separators",
+			identifier: "path/to/file",
+			expected:   true,
+		},
+		{
+			name:       "image reference with colon",
+			identifier: "nginx:latest",
+			expected:   false,
+		},
+		{
+			name:       "image reference with at",
+			identifier: "nginx@sha256:abc123",
+			expected:   false,
+		},
+		{
+			name:       "simple name without extension",
+			identifier: "nginx",
+			expected:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isFilePath(tt.identifier)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestExtractDigestFromImageRef tests the ExtractDigestFromImageRef function
+func TestExtractDigestFromImageRef(t *testing.T) {
+	tests := []struct {
+		name        string
+		imageRef    string
+		expected    string
+		expectError bool
+	}{
+		{
+			name:        "tag reference",
+			imageRef:    "registry.io/image:latest",
+			expected:    "registry.io/image:latest",
+			expectError: false,
+		},
+		{
+			name:        "docker hub tag",
+			imageRef:    "nginx:1.21",
+			expected:    "nginx:1.21",
+			expectError: false,
+		},
+		{
+			name:        "quay reference",
+			imageRef:    "quay.io/namespace/repo:tag",
+			expected:    "quay.io/namespace/repo:tag",
+			expectError: false,
+		},
+		{
+			name:        "invalid reference",
+			imageRef:    "invalid:reference:with:colons",
+			expected:    "",
+			expectError: true,
+		},
+		{
+			name:        "empty reference",
+			imageRef:    "",
+			expected:    "",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ExtractDigestFromImageRef(tt.imageRef)
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}

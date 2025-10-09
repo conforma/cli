@@ -63,145 +63,58 @@ func TestDetectIdentifierType(t *testing.T) {
 	tests := []struct {
 		name       string
 		identifier string
-		expected   IdentifierType
+		expected   vsa.IdentifierType
 	}{
 		{
 			name:       "file path absolute",
 			identifier: "/path/to/vsa.json",
-			expected:   IdentifierImageReference, // name.ParseReference accepts this as valid
+			expected:   vsa.IdentifierImageReference, // name.ParseReference accepts this as valid
 		},
 		{
 			name:       "file path relative",
 			identifier: "./vsa.json",
-			expected:   IdentifierImageReference, // name.ParseReference accepts this as valid
+			expected:   vsa.IdentifierImageReference, // name.ParseReference accepts this as valid
 		},
 		{
 			name:       "file path with extension",
 			identifier: "vsa.json",
-			expected:   IdentifierImageReference, // name.ParseReference accepts this as valid
+			expected:   vsa.IdentifierImageReference, // name.ParseReference accepts this as valid
 		},
 		{
 			name:       "image digest sha256",
 			identifier: "sha256:abc123def456789",
-			expected:   IdentifierImageDigest,
+			expected:   vsa.IdentifierImageDigest,
 		},
 		{
 			name:       "image digest sha512",
 			identifier: "sha512:abc123def456789",
-			expected:   IdentifierImageDigest,
+			expected:   vsa.IdentifierImageDigest,
 		},
 		{
 			name:       "image reference with tag",
 			identifier: "registry.io/repo:tag",
-			expected:   IdentifierImageReference,
+			expected:   vsa.IdentifierImageReference,
 		},
 		{
 			name:       "image reference with digest",
 			identifier: "registry.io/repo:sha256-abc123",
-			expected:   IdentifierImageReference,
+			expected:   vsa.IdentifierImageReference,
 		},
 		{
 			name:       "docker hub reference",
 			identifier: "nginx:latest",
-			expected:   IdentifierImageReference,
+			expected:   vsa.IdentifierImageReference,
 		},
 		{
 			name:       "quay reference",
 			identifier: "quay.io/redhat/ubi8:latest",
-			expected:   IdentifierImageReference,
+			expected:   vsa.IdentifierImageReference,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := detectIdentifierType(tt.identifier)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestIsFilePath(t *testing.T) {
-	tests := []struct {
-		name       string
-		identifier string
-		expected   bool
-	}{
-		{
-			name:       "absolute path",
-			identifier: "/path/to/file.json",
-			expected:   true,
-		},
-		{
-			name:       "relative path",
-			identifier: "./file.json",
-			expected:   true,
-		},
-		{
-			name:       "path with separators",
-			identifier: "path/to/file",
-			expected:   true,
-		},
-		{
-			name:       "file with extension",
-			identifier: "file.json",
-			expected:   true,
-		},
-		{
-			name:       "image digest",
-			identifier: "sha256:abc123",
-			expected:   false,
-		},
-		{
-			name:       "image reference",
-			identifier: "registry.io/repo:tag",
-			expected:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isFilePath(tt.identifier)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestIsImageDigest(t *testing.T) {
-	tests := []struct {
-		name       string
-		identifier string
-		expected   bool
-	}{
-		{
-			name:       "sha256 digest",
-			identifier: "sha256:abc123def456789",
-			expected:   true,
-		},
-		{
-			name:       "sha512 digest",
-			identifier: "sha512:abc123def456789",
-			expected:   true,
-		},
-		{
-			name:       "invalid digest format",
-			identifier: "sha128:abc123",
-			expected:   false,
-		},
-		{
-			name:       "image reference",
-			identifier: "registry.io/repo:tag",
-			expected:   false,
-		},
-		{
-			name:       "file path",
-			identifier: "/path/to/file.json",
-			expected:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isImageDigest(tt.identifier)
+			result := vsa.DetectIdentifierType(tt.identifier)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -252,7 +165,7 @@ func TestIsImageReference(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isImageReference(tt.identifier)
+			result := vsa.IsImageReference(tt.identifier)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -308,7 +221,7 @@ func TestIsValidVSAIdentifier(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isValidVSAIdentifier(tt.identifier)
+			result := vsa.IsValidVSAIdentifier(tt.identifier)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -367,7 +280,7 @@ func TestParseVSAExpirationDuration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseVSAExpirationDuration(tt.duration)
+			result, err := vsa.ParseVSAExpirationDuration(tt.duration)
 			if tt.hasError {
 				assert.Error(t, err)
 			} else {
@@ -437,7 +350,7 @@ func TestExtractPolicyFromVSA(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := extractPolicyFromVSA(tt.predicate)
+			result, err := vsa.ExtractPolicyFromVSA(tt.predicate)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -464,9 +377,10 @@ func TestValidateVSAInput(t *testing.T) {
 		{
 			name: "valid with vsa identifier in args",
 			data: &validateVSAData{
-				vsaIdentifier:    "",
-				images:           "",
-				vsaExpirationStr: "24h",
+				vsaIdentifier:               "",
+				images:                      "",
+				vsaExpirationStr:            "24h",
+				ignoreSignatureVerification: true,
 			},
 			args:        []string{"sha256:abc123"},
 			expectError: false,
@@ -474,9 +388,10 @@ func TestValidateVSAInput(t *testing.T) {
 		{
 			name: "valid with vsa flag set",
 			data: &validateVSAData{
-				vsaIdentifier:    "sha256:abc123",
-				images:           "",
-				vsaExpirationStr: "24h",
+				vsaIdentifier:               "sha256:abc123",
+				images:                      "",
+				vsaExpirationStr:            "24h",
+				ignoreSignatureVerification: true,
 			},
 			args:        []string{},
 			expectError: false,
@@ -484,9 +399,10 @@ func TestValidateVSAInput(t *testing.T) {
 		{
 			name: "valid with images flag set",
 			data: &validateVSAData{
-				vsaIdentifier:    "",
-				images:           "snapshot.json",
-				vsaExpirationStr: "24h",
+				vsaIdentifier:               "",
+				images:                      "snapshot.json",
+				vsaExpirationStr:            "24h",
+				ignoreSignatureVerification: true,
 			},
 			args:        []string{},
 			expectError: false,
@@ -494,9 +410,10 @@ func TestValidateVSAInput(t *testing.T) {
 		{
 			name: "error when neither vsa nor images provided",
 			data: &validateVSAData{
-				vsaIdentifier:    "",
-				images:           "",
-				vsaExpirationStr: "24h",
+				vsaIdentifier:               "",
+				images:                      "",
+				vsaExpirationStr:            "24h",
+				ignoreSignatureVerification: true,
 			},
 			args:        []string{},
 			expectError: true,
@@ -505,9 +422,10 @@ func TestValidateVSAInput(t *testing.T) {
 		{
 			name: "error when both vsa and images provided",
 			data: &validateVSAData{
-				vsaIdentifier:    "sha256:abc123",
-				images:           "snapshot.json",
-				vsaExpirationStr: "24h",
+				vsaIdentifier:               "sha256:abc123",
+				images:                      "snapshot.json",
+				vsaExpirationStr:            "24h",
+				ignoreSignatureVerification: true,
 			},
 			args:        []string{},
 			expectError: true,
@@ -516,9 +434,10 @@ func TestValidateVSAInput(t *testing.T) {
 		{
 			name: "error with invalid vsa expiration",
 			data: &validateVSAData{
-				vsaIdentifier:    "sha256:abc123",
-				images:           "",
-				vsaExpirationStr: "invalid",
+				vsaIdentifier:               "sha256:abc123",
+				images:                      "",
+				vsaExpirationStr:            "invalid",
+				ignoreSignatureVerification: true,
 			},
 			args:        []string{},
 			expectError: true,
@@ -582,7 +501,7 @@ func TestParseEffectiveTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseEffectiveTime(tt.input)
+			result, err := vsa.ParseEffectiveTime(tt.input)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -627,7 +546,7 @@ func TestExtractImageDigest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractImageDigest(tt.input)
+			result := vsa.ExtractImageDigest(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -669,7 +588,7 @@ func TestConvertYAMLToJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := convertYAMLToJSON(tt.input)
+			result := vsa.ConvertYAMLToJSON(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

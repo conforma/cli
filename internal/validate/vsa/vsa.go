@@ -24,10 +24,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	ecapi "github.com/conforma/crds/api/v1alpha1"
+	"github.com/google/go-containerregistry/pkg/name"
 	ssldsse "github.com/secure-systems-lab/go-securesystemslib/dsse"
 	"github.com/sigstore/sigstore/pkg/signature"
 	sigd "github.com/sigstore/sigstore/pkg/signature/dsse"
@@ -71,6 +74,33 @@ type Predicate struct {
 	Verifier     string                             `json:"verifier"`
 	Summary      VSASummary                         `json:"summary"`
 	PublicKey    string                             `json:"publicKey"`
+}
+
+// ValidationResult represents the result of VSA validation
+type ValidationResult struct {
+	Passed            bool   `json:"passed"`
+	Message           string `json:"message,omitempty"`
+	SignatureVerified bool   `json:"signature_verified,omitempty"`
+}
+
+// IdentifierType represents the type of VSA identifier
+type IdentifierType int
+
+const (
+	// IdentifierFile represents a local file path (absolute, relative, or files with extensions)
+	IdentifierFile IdentifierType = iota
+	// IdentifierImageDigest represents a container image digest (e.g., sha256:abc123...)
+	IdentifierImageDigest
+	// IdentifierImageReference represents a container image reference (e.g., nginx:latest, registry.io/repo:tag)
+	IdentifierImageReference
+)
+
+// ComponentResult represents the validation result for a snapshot component
+type ComponentResult struct {
+	ComponentName string
+	ImageRef      string
+	Result        *ValidationResult
+	Error         error
 }
 
 // Generator handles VSA predicate generation
@@ -395,46 +425,6 @@ func ParseVSAContent(envelope *ssldsse.Envelope) (*Predicate, error) {
 	return &predicate, nil
 }
 
-// extractPredicateFromEnvelope extracts the VSA predicate from a DSSE envelope
-// This is a legacy function that only handles direct predicate extraction
-func extractPredicateFromEnvelope(envelope *ssldsse.Envelope) (*Predicate, error) {
-	// Check if payload is already decoded or needs base64 decoding
-	var payloadBytes []byte
-	var err error
-
-	// Try to decode as base64 first
-	payloadBytes, err = base64.StdEncoding.DecodeString(envelope.Payload)
-	if err != nil {
-		// If base64 decoding fails, treat as raw JSON string
-		payloadBytes = []byte(envelope.Payload)
-	}
-
-	// Parse the payload as JSON to extract the predicate
-	var payload map[string]interface{}
-	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
-		return nil, fmt.Errorf("failed to parse envelope payload: %w", err)
-	}
-
-	// Extract the predicate from the payload
-	predicateData, ok := payload["predicate"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("envelope payload does not contain predicate")
-	}
-
-	// Convert to Predicate struct
-	predicateBytes, err := json.Marshal(predicateData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal predicate data: %w", err)
-	}
-
-	var predicate Predicate
-	if err := json.Unmarshal(predicateBytes, &predicate); err != nil {
-		return nil, fmt.Errorf("failed to parse predicate: %w", err)
-	}
-
-	return &predicate, nil
-}
-
 // CheckExistingVSAWithVerification looks up existing VSAs for an image and performs all checks including optional signature verification
 func (c *VSAChecker) CheckExistingVSAWithVerification(ctx context.Context, imageRef string, expirationThreshold time.Duration, verifySignature bool, publicKeyPath string) (*VSALookupResult, error) {
 	result := &VSALookupResult{
@@ -653,4 +643,237 @@ func verifyVSASignatureFromEnvelope(envelope *ssldsse.Envelope, publicKeyPath st
 	}
 
 	return nil
+}
+
+// isImageDigest checks if the identifier is an image digest
+func isImageDigest(identifier string) bool {
+	// Image digests typically start with sha256: or sha512:
+	digestRegex := regexp.MustCompile(`^sha(256|512):[a-f0-9]+$`)
+	return digestRegex.MatchString(identifier)
+}
+
+// isFilePath checks if the identifier is a file path
+func isFilePath(identifier string) bool {
+	// If it contains @ or :, it's likely an image reference, not a file
+	if strings.Contains(identifier, "@") || strings.Contains(identifier, ":") {
+		return false
+	}
+
+	// Check if it's an absolute path
+	if filepath.IsAbs(identifier) {
+		return true
+	}
+
+	// Check if it's a relative path (./ or ../)
+	if strings.HasPrefix(identifier, "./") || strings.HasPrefix(identifier, "../") {
+		return true
+	}
+
+	// Check if it's a relative path that exists
+	if _, err := os.Stat(identifier); err == nil {
+		return true
+	}
+
+	// Check if it looks like a file path (contains path separators)
+	if strings.Contains(identifier, "/") || strings.Contains(identifier, "\\") {
+		return true
+	}
+
+	// Check if it has a file extension
+	if filepath.Ext(identifier) != "" {
+		return true
+	}
+
+	// If it doesn't look like a file path and doesn't contain special characters,
+	// it might be a simple filename, but we need to be more careful
+	return false
+}
+
+// DetectIdentifierType detects the type of VSA identifier
+func DetectIdentifierType(identifier string) IdentifierType {
+	if isImageDigest(identifier) {
+		return IdentifierImageDigest
+	}
+
+	// Try image reference parse first; it's authoritative for registries
+	if _, err := name.ParseReference(identifier); err == nil {
+		return IdentifierImageReference
+	}
+
+	// Check if it's a file path using the dedicated function
+	if isFilePath(identifier) {
+		return IdentifierFile
+	}
+
+	// last resort: keep as reference so users can pass bare names like "nginx:latest"
+	if _, err := name.ParseReference("docker.io/library/" + identifier); err == nil {
+		return IdentifierImageReference
+	}
+	return IdentifierFile
+}
+
+// IsImageReference checks if the identifier is an image reference
+func IsImageReference(identifier string) bool {
+	// First check if it's an image digest (more specific)
+	if DetectIdentifierType(identifier) == IdentifierImageDigest {
+		return false
+	}
+
+	// First check if it's clearly not an image reference
+	if filepath.IsAbs(identifier) || strings.HasPrefix(identifier, "./") || strings.HasPrefix(identifier, "../") {
+		return false
+	}
+
+	// Check if it has a file extension (likely a file, not an image)
+	if filepath.Ext(identifier) != "" {
+		return false
+	}
+
+	// Check if it looks like a digest (starts with sha)
+	if strings.HasPrefix(identifier, "sha") {
+		return false
+	}
+
+	// Try to parse as a container registry reference
+	_, err := name.ParseReference(identifier)
+	if err != nil {
+		return false
+	}
+
+	// Additional validation: make sure it's not just a single word with a colon
+	// (like "invalid:" or "sha128:abc123") but allow Docker Hub references
+	if !strings.Contains(identifier, "/") && strings.Contains(identifier, ":") {
+		// Check if it starts with "sha" (invalid digest format)
+		if strings.HasPrefix(identifier, "sha") {
+			return false
+		}
+		// Check if it's just a single word with colon (like "invalid:")
+		parts := strings.Split(identifier, ":")
+		if len(parts) == 2 && len(parts[0]) > 0 && len(parts[1]) > 0 {
+			// This could be a valid Docker Hub reference like "nginx:latest"
+			return true
+		}
+		// Single word with colon but no value after colon is invalid
+		return false
+	}
+
+	// Additional validation: reject identifiers that look like digests but aren't valid
+	// This catches cases like "sha128:abc123" that pass ParseReference but aren't valid
+	if strings.HasPrefix(identifier, "sha") && strings.Contains(identifier, ":") {
+		// Check if it's a valid digest format
+		if DetectIdentifierType(identifier) != IdentifierImageDigest {
+			return false
+		}
+	}
+
+	return true
+}
+
+// IsValidVSAIdentifier validates VSA identifier format
+func IsValidVSAIdentifier(identifier string) bool {
+	// Basic validation for VSA identifier
+	if len(identifier) == 0 {
+		return false
+	}
+
+	// Check if it's a valid identifier type
+	identifierType := DetectIdentifierType(identifier)
+	switch identifierType {
+	case IdentifierFile:
+		// For file paths, check if it exists or looks like a valid path
+		// Note: File paths with spaces are valid in many file systems
+		if filepath.IsAbs(identifier) || strings.HasPrefix(identifier, "./") || strings.HasPrefix(identifier, "../") {
+			return true
+		}
+		if _, err := os.Stat(identifier); err == nil {
+			return true
+		}
+		// heuristics: has path sep or ext → likely a file
+		return strings.ContainsAny(identifier, "/\\") || filepath.Ext(identifier) != ""
+	case IdentifierImageDigest:
+		// For image digests, validate the format
+		return DetectIdentifierType(identifier) == IdentifierImageDigest
+	case IdentifierImageReference:
+		// For image references, validate using go-containerregistry
+		// This will automatically reject identifiers with spaces
+		_, err := name.ParseReference(identifier)
+		return err == nil
+	default:
+		// If we can't determine the type, it's invalid
+		return false
+	}
+}
+
+// ParseVSAExpirationDuration parses a duration string with support for h, d, w, m suffixes
+func ParseVSAExpirationDuration(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	switch {
+	case strings.HasSuffix(s, "mo"): // non-standard but unambiguous
+		n, err := strconv.ParseFloat(strings.TrimSuffix(s, "mo"), 64)
+		if err != nil {
+			return 0, fmt.Errorf("invalid months: %w", err)
+		}
+		return time.Duration(n*30*24) * time.Hour, nil
+	case strings.HasSuffix(s, "d"):
+		n, err := strconv.ParseFloat(strings.TrimSuffix(s, "d"), 64)
+		if err != nil {
+			return 0, err
+		}
+		return time.Duration(n*24) * time.Hour, nil
+	case strings.HasSuffix(s, "w"):
+		n, err := strconv.ParseFloat(strings.TrimSuffix(s, "w"), 64)
+		if err != nil {
+			return 0, err
+		}
+		return time.Duration(n*7*24) * time.Hour, nil
+	default:
+		return time.ParseDuration(s) // supports h, m, s, etc.
+	}
+}
+
+// ConvertYAMLToJSON converts YAML interface{} types to proper types for JSON marshaling
+func ConvertYAMLToJSON(data interface{}) interface{} {
+	switch v := data.(type) {
+	case map[interface{}]interface{}:
+		result := make(map[string]interface{})
+		for k, val := range v {
+			if strKey, ok := k.(string); ok {
+				result[strKey] = ConvertYAMLToJSON(val)
+			}
+		}
+		return result
+	case []interface{}:
+		result := make([]interface{}, len(v))
+		for i, val := range v {
+			result[i] = ConvertYAMLToJSON(val)
+		}
+		return result
+	case map[string]interface{}:
+		result := make(map[string]interface{})
+		for k, val := range v {
+			result[k] = ConvertYAMLToJSON(val)
+		}
+		return result
+	default:
+		return v
+	}
+}
+
+// ExtractDigestFromImageRef extracts the digest from an image reference
+func ExtractDigestFromImageRef(imageRef string) (string, error) {
+	// Parse the image reference
+	ref, err := name.ParseReference(imageRef)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse image reference %s: %w", imageRef, err)
+	}
+
+	// Check if it's already a digest reference
+	if digestRef, ok := ref.(name.Digest); ok {
+		return digestRef.DigestStr(), nil
+	}
+
+	// For tag references, we need to resolve to digest
+	// For now, return the image reference as-is and let the retriever handle it
+	// In a full implementation, this would resolve the tag to a digest
+	return imageRef, nil
 }

@@ -18,58 +18,21 @@ package validate
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
-	"os"
-	"path/filepath"
-	"regexp"
 	"sort"
-	"strconv"
-	"strings"
 	"time"
 
 	hd "github.com/MakeNowJust/heredoc"
 	ecapi "github.com/conforma/crds/api/v1alpha1"
-	"github.com/google/go-containerregistry/pkg/name"
 	app "github.com/konflux-ci/application-api/api/v1alpha1"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 
 	"github.com/conforma/cli/internal/applicationsnapshot"
-	"github.com/conforma/cli/internal/policy/equivalence"
 	validate_utils "github.com/conforma/cli/internal/validate"
 	"github.com/conforma/cli/internal/validate/vsa"
 )
-
-// ValidationResult represents the result of VSA validation
-type ValidationResult struct {
-	Passed            bool   `json:"passed"`
-	Message           string `json:"message,omitempty"`
-	SignatureVerified bool   `json:"signature_verified,omitempty"`
-}
-
-// IdentifierType represents the type of VSA identifier
-type IdentifierType int
-
-const (
-	// IdentifierFile represents a local file path (absolute, relative, or files with extensions)
-	IdentifierFile IdentifierType = iota
-	// IdentifierImageDigest represents a container image digest (e.g., sha256:abc123...)
-	IdentifierImageDigest
-	// IdentifierImageReference represents a container image reference (e.g., nginx:latest, registry.io/repo:tag)
-	IdentifierImageReference
-)
-
-// ComponentResult represents the validation result for a snapshot component
-type ComponentResult struct {
-	ComponentName string
-	ImageRef      string
-	Result        *ValidationResult
-	Error         error
-}
 
 // validateVSAData holds the command data
 type validateVSAData struct {
@@ -148,7 +111,7 @@ func NewValidateVSACmd() *cobra.Command {
 			// Validate VSA identifier format if provided
 			if len(args) == 1 {
 				identifier := args[0]
-				if !isValidVSAIdentifier(identifier) {
+				if !vsa.IsValidVSAIdentifier(identifier) {
 					return fmt.Errorf("invalid VSA identifier format: %s", identifier)
 				}
 			}
@@ -247,9 +210,11 @@ func runValidateVSA(cmd *cobra.Command, data *validateVSAData, args []string) er
 	}
 
 	// Create VSA retriever
-	if err := createVSARetriever(data); err != nil {
+	retriever, err := vsa.CreateVSARetriever(data.vsaRetrieval, data.vsaIdentifier, data.images)
+	if err != nil {
 		return err
 	}
+	data.retriever = retriever
 
 	// Process validation
 	// Images is a snapshot
@@ -292,200 +257,14 @@ func validateVSAInput(data *validateVSAData, args []string) error {
 	return nil
 }
 
-// detectIdentifierType detects the type of VSA identifier
-func detectIdentifierType(identifier string) IdentifierType {
-	if isImageDigest(identifier) {
-		return IdentifierImageDigest
-	}
-
-	// Try image reference parse first; it's authoritative for registries
-	if _, err := name.ParseReference(identifier); err == nil {
-		return IdentifierImageReference
-	}
-
-	// Check if it's a file path using the dedicated function
-	if isFilePath(identifier) {
-		return IdentifierFile
-	}
-
-	// last resort: keep as reference so users can pass bare names like "nginx:latest"
-	if _, err := name.ParseReference("docker.io/library/" + identifier); err == nil {
-		return IdentifierImageReference
-	}
-	return IdentifierFile
-}
-
-// isFilePath checks if the identifier is a file path
-func isFilePath(identifier string) bool {
-	// If it contains @ or :, it's likely an image reference, not a file
-	if strings.Contains(identifier, "@") || strings.Contains(identifier, ":") {
-		return false
-	}
-
-	// Check if it's an absolute path
-	if filepath.IsAbs(identifier) {
-		return true
-	}
-
-	// Check if it's a relative path (./ or ../)
-	if strings.HasPrefix(identifier, "./") || strings.HasPrefix(identifier, "../") {
-		return true
-	}
-
-	// Check if it's a relative path that exists
-	if _, err := os.Stat(identifier); err == nil {
-		return true
-	}
-
-	// Check if it looks like a file path (contains path separators)
-	if strings.Contains(identifier, "/") || strings.Contains(identifier, "\\") {
-		return true
-	}
-
-	// Check if it has a file extension
-	if filepath.Ext(identifier) != "" {
-		return true
-	}
-
-	// If it doesn't look like a file path and doesn't contain special characters,
-	// it might be a simple filename, but we need to be more careful
-	return false
-}
-
-// isImageDigest checks if the identifier is an image digest
-func isImageDigest(identifier string) bool {
-	// Image digests typically start with sha256: or sha512:
-	digestRegex := regexp.MustCompile(`^sha(256|512):[a-f0-9]+$`)
-	return digestRegex.MatchString(identifier)
-}
-
-// isImageReference checks if the identifier is an image reference
-func isImageReference(identifier string) bool {
-	// First check if it's an image digest (more specific)
-	if isImageDigest(identifier) {
-		return false
-	}
-
-	// First check if it's clearly not an image reference
-	if filepath.IsAbs(identifier) || strings.HasPrefix(identifier, "./") || strings.HasPrefix(identifier, "../") {
-		return false
-	}
-
-	// Check if it has a file extension (likely a file, not an image)
-	if filepath.Ext(identifier) != "" {
-		return false
-	}
-
-	// Check if it looks like a digest (starts with sha)
-	if strings.HasPrefix(identifier, "sha") {
-		return false
-	}
-
-	// Try to parse as a container registry reference
-	_, err := name.ParseReference(identifier)
-	if err != nil {
-		return false
-	}
-
-	// Additional validation: make sure it's not just a single word with a colon
-	// (like "invalid:" or "sha128:abc123") but allow Docker Hub references
-	if !strings.Contains(identifier, "/") && strings.Contains(identifier, ":") {
-		// Check if it starts with "sha" (invalid digest format)
-		if strings.HasPrefix(identifier, "sha") {
-			return false
-		}
-		// Check if it's just a single word with colon (like "invalid:")
-		parts := strings.Split(identifier, ":")
-		if len(parts) == 2 && len(parts[0]) > 0 && len(parts[1]) > 0 {
-			// This could be a valid Docker Hub reference like "nginx:latest"
-			return true
-		}
-		// Single word with colon but no value after colon is invalid
-		return false
-	}
-
-	// Additional validation: reject identifiers that look like digests but aren't valid
-	// This catches cases like "sha128:abc123" that pass ParseReference but aren't valid
-	if strings.HasPrefix(identifier, "sha") && strings.Contains(identifier, ":") {
-		// Check if it's a valid digest format
-		if !isImageDigest(identifier) {
-			return false
-		}
-	}
-
-	return true
-}
-
-// isValidVSAIdentifier validates VSA identifier format
-func isValidVSAIdentifier(identifier string) bool {
-	// Basic validation for VSA identifier
-	if len(identifier) == 0 {
-		return false
-	}
-
-	// Check if it's a valid identifier type
-	identifierType := detectIdentifierType(identifier)
-	switch identifierType {
-	case IdentifierFile:
-		// For file paths, check if it exists or looks like a valid path
-		// Note: File paths with spaces are valid in many file systems
-		if filepath.IsAbs(identifier) || strings.HasPrefix(identifier, "./") || strings.HasPrefix(identifier, "../") {
-			return true
-		}
-		if _, err := os.Stat(identifier); err == nil {
-			return true
-		}
-		// heuristics: has path sep or ext → likely a file
-		return strings.ContainsAny(identifier, "/\\") || filepath.Ext(identifier) != ""
-	case IdentifierImageDigest:
-		// For image digests, validate the format
-		return isImageDigest(identifier)
-	case IdentifierImageReference:
-		// For image references, validate using go-containerregistry
-		// This will automatically reject identifiers with spaces
-		_, err := name.ParseReference(identifier)
-		return err == nil
-	default:
-		// If we can't determine the type, it's invalid
-		return false
-	}
-}
-
 // parseVSAExpiration parses the VSA expiration string into a duration
 func parseVSAExpiration(data *validateVSAData) error {
-	expiration, err := parseVSAExpirationDuration(data.vsaExpirationStr)
+	expiration, err := vsa.ParseVSAExpirationDuration(data.vsaExpirationStr)
 	if err != nil {
 		return fmt.Errorf("invalid VSA expiration: %w", err)
 	}
 	data.vsaExpiration = expiration
 	return nil
-}
-
-// parseVSAExpirationDuration parses a duration string with support for h, d, w, m suffixes
-func parseVSAExpirationDuration(s string) (time.Duration, error) {
-	s = strings.TrimSpace(s)
-	switch {
-	case strings.HasSuffix(s, "mo"): // non-standard but unambiguous
-		n, err := strconv.ParseFloat(strings.TrimSuffix(s, "mo"), 64)
-		if err != nil {
-			return 0, fmt.Errorf("invalid months: %w", err)
-		}
-		return time.Duration(n*30*24) * time.Hour, nil
-	case strings.HasSuffix(s, "d"):
-		n, err := strconv.ParseFloat(strings.TrimSuffix(s, "d"), 64)
-		if err != nil {
-			return 0, err
-		}
-		return time.Duration(n*24) * time.Hour, nil
-	case strings.HasSuffix(s, "w"):
-		n, err := strconv.ParseFloat(strings.TrimSuffix(s, "w"), 64)
-		if err != nil {
-			return 0, err
-		}
-		return time.Duration(n*7*24) * time.Hour, nil
-	default:
-		return time.ParseDuration(s) // supports h, m, s, etc.
-	}
 }
 
 // loadPolicyConfig loads the policy configuration from multiple sources
@@ -497,7 +276,7 @@ func loadPolicyConfig(ctx context.Context, data *validateVSAData) error {
 	}
 
 	// Parse the policy configuration string into EnterpriseContractPolicySpec
-	policySpec, err := parsePolicySpec(policyConfig)
+	policySpec, err := vsa.ParsePolicySpec(policyConfig)
 	if err != nil {
 		return fmt.Errorf("failed to parse policy: %w", err)
 	}
@@ -506,291 +285,6 @@ func loadPolicyConfig(ctx context.Context, data *validateVSAData) error {
 	data.policySpec = policySpec
 
 	return nil
-}
-
-// convertYAMLToJSON converts YAML interface{} types to proper types for JSON marshaling
-func convertYAMLToJSON(data interface{}) interface{} {
-	switch v := data.(type) {
-	case map[interface{}]interface{}:
-		result := make(map[string]interface{})
-		for k, val := range v {
-			if strKey, ok := k.(string); ok {
-				result[strKey] = convertYAMLToJSON(val)
-			}
-		}
-		return result
-	case []interface{}:
-		result := make([]interface{}, len(v))
-		for i, val := range v {
-			result[i] = convertYAMLToJSON(val)
-		}
-		return result
-	case map[string]interface{}:
-		result := make(map[string]interface{})
-		for k, val := range v {
-			result[k] = convertYAMLToJSON(val)
-		}
-		return result
-	default:
-		return v
-	}
-}
-
-// parsePolicySpec parses a policy configuration string to extract the EnterpriseContractPolicySpec
-func parsePolicySpec(policyConfig string) (ecapi.EnterpriseContractPolicySpec, error) {
-	content := []byte(policyConfig)
-
-	// Convert YAML to JSON first to handle ruleData field mapping correctly
-	var yamlData map[string]interface{}
-	if err := yaml.Unmarshal(content, &yamlData); err != nil {
-		return ecapi.EnterpriseContractPolicySpec{}, fmt.Errorf("failed to parse YAML: %w", err)
-	}
-
-	// Convert interface{} types to proper types for JSON marshaling
-	jsonData := convertYAMLToJSON(yamlData)
-
-	// Convert to JSON bytes
-	jsonBytes, err := json.Marshal(jsonData)
-	if err != nil {
-		return ecapi.EnterpriseContractPolicySpec{}, fmt.Errorf("failed to convert YAML to JSON: %w", err)
-	}
-
-	// Now parse as JSON which should handle ruleData field mapping correctly
-	var ecp ecapi.EnterpriseContractPolicy
-	if err := json.Unmarshal(jsonBytes, &ecp); err == nil && ecp.APIVersion != "" {
-		// Check if this is actually a valid CRD (has required fields)
-		if ecp.APIVersion == "" || ecp.Kind == "" {
-			// This is not a valid CRD, try parsing as EnterpriseContractPolicySpec
-			var spec ecapi.EnterpriseContractPolicySpec
-			if err := json.Unmarshal(jsonBytes, &spec); err != nil {
-				return ecapi.EnterpriseContractPolicySpec{}, fmt.Errorf("unable to parse EnterpriseContractPolicySpec: %w", err)
-			}
-			return spec, nil
-		}
-		return ecp.Spec, nil
-	}
-
-	// If parsing as EnterpriseContractPolicy fails, try as EnterpriseContractPolicySpec
-	var spec ecapi.EnterpriseContractPolicySpec
-	if err := json.Unmarshal(jsonBytes, &spec); err != nil {
-		return ecapi.EnterpriseContractPolicySpec{}, fmt.Errorf("unable to parse EnterpriseContractPolicySpec: %w", err)
-	}
-	return spec, nil
-}
-
-// createVSARetriever creates the VSA retriever based on flags and identifier type
-func createVSARetriever(data *validateVSAData) error {
-	// If explicit retrieval backends are specified, use VSA library
-	if len(data.vsaRetrieval) > 0 {
-		retriever := vsa.CreateRetrieverFromUploadFlags(data.vsaRetrieval)
-		if retriever == nil {
-			return fmt.Errorf("no valid retriever found from flags: %v", data.vsaRetrieval)
-		}
-		data.retriever = retriever
-		return nil
-	}
-
-	// Auto-detect retriever based on identifier type
-	if data.vsaIdentifier != "" {
-		identifierType := detectIdentifierType(data.vsaIdentifier)
-		switch identifierType {
-		case IdentifierFile:
-			data.retriever = vsa.NewFileVSARetrieverWithOSFs(".")
-		case IdentifierImageDigest, IdentifierImageReference:
-			// Use VSA library to create Rekor retriever for image-based identifiers
-			retriever := vsa.CreateRetrieverFromUploadFlags([]string{"rekor"})
-			if retriever == nil {
-				return fmt.Errorf("failed to create Rekor retriever")
-			}
-			data.retriever = retriever
-		default:
-			return fmt.Errorf("unsupported identifier type for VSA: %s", data.vsaIdentifier)
-		}
-		return nil
-	}
-
-	// For snapshot validation, always use Rekor retriever
-	if data.images != "" {
-		retriever := vsa.CreateRetrieverFromUploadFlags([]string{"rekor"})
-		if retriever == nil {
-			return fmt.Errorf("failed to create Rekor retriever")
-		}
-		data.retriever = retriever
-		return nil
-	}
-
-	// Default to file retriever for backward compatibility
-	data.retriever = vsa.NewFileVSARetrieverWithOSFs(".")
-	return nil
-}
-
-// validateVSAWithPolicyComparison validates a VSA by comparing its policy with the supplied policy
-func validateVSAWithPolicyComparison(ctx context.Context, identifier string, data *validateVSAData) (*ValidationResult, error) {
-	// Use VSA library's VSAChecker for efficient VSA validation
-	checker := vsa.NewVSAChecker(data.retriever)
-
-	// SINGLE VSA RETRIEVAL with optional signature verification
-	result, err := checker.CheckExistingVSAWithVerification(
-		ctx,
-		identifier,
-		data.vsaExpiration,
-		!data.ignoreSignatureVerification, // Whether to verify signature (inverse of ignore flag)
-		data.publicKeyPath,                // Public key path (if signature verification requested)
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check existing VSA: %w", err)
-	}
-
-	if !result.Found {
-		return &ValidationResult{
-			Passed:            false,
-			Message:           "No VSA found for the specified identifier",
-			SignatureVerified: result.SignatureVerified,
-		}, nil
-	}
-
-	if result.Expired {
-		days := int(math.Ceil(time.Since(result.Timestamp).Hours() / 24))
-		return &ValidationResult{
-			Passed:            false,
-			Message:           fmt.Sprintf("VSA expired %d day(s) ago", days),
-			SignatureVerified: result.SignatureVerified,
-		}, nil
-	}
-
-	// If signature verification was requested and failed, the error would have been returned above
-	// If signature verification was requested and succeeded, we continue with policy comparison
-
-	// Extract policy from VSA predicate
-	vsaPolicy, err := extractPolicyFromVSA(result.VSA)
-	if err != nil {
-		return &ValidationResult{
-			Passed:            false,
-			Message:           err.Error(),
-			SignatureVerified: result.SignatureVerified,
-		}, nil
-	}
-
-	// Compare policies if supplied policy is provided
-	if len(data.policySpec.Sources) > 0 {
-		// Parse effective time
-		effectiveTime, err := parseEffectiveTime(data.effectiveTime)
-		if err != nil {
-			return &ValidationResult{
-				Passed:            false,
-				Message:           fmt.Sprintf("invalid effective time: %v", err),
-				SignatureVerified: result.SignatureVerified,
-			}, nil
-		}
-
-		// Create image info for volatile config matching
-		imageInfo := &equivalence.ImageInfo{
-			Digest: extractImageDigest(identifier),
-			Ref:    identifier,
-		}
-
-		// Compare policies with detailed error reporting
-		equivalent, differences, err := compareVSAPolicyWithDetails(vsaPolicy, data.policySpec, effectiveTime, imageInfo)
-		if err != nil {
-			return &ValidationResult{
-				Passed:            false,
-				Message:           fmt.Sprintf("policy comparison failed: %v", err),
-				SignatureVerified: result.SignatureVerified,
-			}, nil
-		}
-
-		if !equivalent {
-			return &ValidationResult{
-				Passed:            false,
-				Message:           formatPolicyDifferences(differences),
-				SignatureVerified: result.SignatureVerified,
-			}, nil
-		}
-	}
-
-	// Return success result
-	return &ValidationResult{
-		Passed:            true,
-		Message:           "Policy matches",
-		SignatureVerified: result.SignatureVerified,
-	}, nil
-}
-
-// extractPolicyFromVSA extracts the policy from VSA predicate
-func extractPolicyFromVSA(predicate *vsa.Predicate) (ecapi.EnterpriseContractPolicySpec, error) {
-	// Check if predicate has a Policy field
-	if predicate == nil {
-		return ecapi.EnterpriseContractPolicySpec{}, fmt.Errorf("VSA predicate is nil")
-	}
-
-	// Check if policy has any sources
-	if len(predicate.Policy.Sources) == 0 {
-		log.Debugf("VSA predicate policy sources: %+v", predicate.Policy.Sources)
-		return ecapi.EnterpriseContractPolicySpec{}, fmt.Errorf("VSA predicate does not contain policy sources")
-	}
-
-	log.Debugf("VSA predicate contains policy with %d sources", len(predicate.Policy.Sources))
-	return predicate.Policy, nil
-}
-
-// compareVSAPolicyWithDetails compares VSA policy with supplied policy and returns detailed differences
-func compareVSAPolicyWithDetails(vsaPolicy ecapi.EnterpriseContractPolicySpec, suppliedPolicy ecapi.EnterpriseContractPolicySpec, effectiveTime time.Time, imageInfo *equivalence.ImageInfo) (bool, []equivalence.PolicyDifference, error) {
-	checker := equivalence.NewEquivalenceChecker(effectiveTime, imageInfo)
-
-	equivalent, differences, err := checker.AreEquivalentWithDifferences(vsaPolicy, suppliedPolicy)
-	if err != nil {
-		return false, nil, fmt.Errorf("policy comparison failed: %w", err)
-	}
-
-	return equivalent, differences, nil
-}
-
-// formatPolicyDifferences formats policy differences using unified diff format
-func formatPolicyDifferences(differences []equivalence.PolicyDifference) string {
-	if len(differences) == 0 {
-		return "VSA policy does not match supplied policy (no specific differences identified)"
-	}
-
-	// Count different types of changes for the header
-	added, removed, changed := 0, 0, 0
-	for _, diff := range differences {
-		switch diff.Kind {
-		case equivalence.DiffAdded:
-			added++
-		case equivalence.DiffRemoved:
-			removed++
-		case equivalence.DiffChanged:
-			changed++
-		}
-	}
-
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("❌ Policy mismatch detected — %d added, %d removed, %d changed; %d differences\n",
-		added, removed, changed, len(differences)))
-
-	// Generate unified diff output
-	checker := &equivalence.EquivalenceChecker{}
-	unifiedDiff := checker.GenerateUnifiedDiffOutputWithLabels(differences, "VSA Policy", "Release Policy")
-	sb.WriteString(unifiedDiff)
-
-	return sb.String()
-}
-
-// parseEffectiveTime parses the effective time string
-func parseEffectiveTime(effectiveTime string) (time.Time, error) {
-	switch effectiveTime {
-	case "now":
-		return time.Now().UTC(), nil
-	default:
-		return time.Parse(time.RFC3339, effectiveTime)
-	}
-}
-
-// extractImageDigest extracts image digest from identifier
-func extractImageDigest(identifier string) string {
-	// For now, return the identifier as-is
-	// TODO: Implement proper digest extraction logic
-	return identifier
 }
 
 // validateSingleVSA validates a single VSA
@@ -804,7 +298,15 @@ func validateSingleVSA(ctx context.Context, data *validateVSAData, args []string
 	fmt.Printf("Policy: %s\n", data.policyConfig)
 
 	// Validate VSA with policy comparison
-	result, err := validateVSAWithPolicyComparison(ctx, identifier, data)
+	validationData := &vsa.ValidationData{
+		Retriever:                   data.retriever,
+		VSAExpiration:               data.vsaExpiration,
+		IgnoreSignatureVerification: data.ignoreSignatureVerification,
+		PublicKeyPath:               data.publicKeyPath,
+		PolicySpec:                  data.policySpec,
+		EffectiveTime:               data.effectiveTime,
+	}
+	result, err := vsa.ValidateVSAWithPolicyComparison(ctx, identifier, validationData)
 	if err != nil {
 		return fmt.Errorf("VSA validation failed: %w", err)
 	}
@@ -833,7 +335,7 @@ func validateSingleVSA(ctx context.Context, data *validateVSAData, args []string
 }
 
 // worker processes components from the jobs channel and sends results to the results channel
-func worker(jobs <-chan app.SnapshotComponent, results chan<- ComponentResult, ctx context.Context, data *validateVSAData) {
+func worker(jobs <-chan app.SnapshotComponent, results chan<- vsa.ComponentResult, ctx context.Context, data *validateVSAData) {
 	for component := range jobs {
 		result := processSnapshotComponent(ctx, component, data)
 		results <- result
@@ -865,7 +367,7 @@ func validateSnapshotVSAs(ctx context.Context, data *validateVSAData) error {
 
 	// Create channels for parallel processing
 	jobs := make(chan app.SnapshotComponent, numComponents)
-	results := make(chan ComponentResult, numComponents)
+	results := make(chan vsa.ComponentResult, numComponents)
 
 	// Start workers
 	for i := 0; i < numWorkers; i++ {
@@ -879,7 +381,7 @@ func validateSnapshotVSAs(ctx context.Context, data *validateVSAData) error {
 	close(jobs)
 
 	// Collect results
-	var allResults []ComponentResult
+	var allResults []vsa.ComponentResult
 	var allErrors error
 	var successCount, failureCount int
 
@@ -949,11 +451,11 @@ func validateSnapshotVSAs(ctx context.Context, data *validateVSAData) error {
 }
 
 // processSnapshotComponent processes a single snapshot component
-func processSnapshotComponent(ctx context.Context, component app.SnapshotComponent, data *validateVSAData) ComponentResult {
+func processSnapshotComponent(ctx context.Context, component app.SnapshotComponent, data *validateVSAData) vsa.ComponentResult {
 	// Extract digest from ContainerImage
-	digest, err := extractDigestFromImageRef(component.ContainerImage)
+	digest, err := vsa.ExtractDigestFromImageRef(component.ContainerImage)
 	if err != nil {
-		return ComponentResult{
+		return vsa.ComponentResult{
 			ComponentName: component.Name,
 			ImageRef:      component.ContainerImage,
 			Error:         fmt.Errorf("failed to extract digest: %w", err),
@@ -961,38 +463,27 @@ func processSnapshotComponent(ctx context.Context, component app.SnapshotCompone
 	}
 
 	// Validate VSA with policy comparison
-	result, err := validateVSAWithPolicyComparison(ctx, digest, data)
+	validationData := &vsa.ValidationData{
+		Retriever:                   data.retriever,
+		VSAExpiration:               data.vsaExpiration,
+		IgnoreSignatureVerification: data.ignoreSignatureVerification,
+		PublicKeyPath:               data.publicKeyPath,
+		PolicySpec:                  data.policySpec,
+		EffectiveTime:               data.effectiveTime,
+	}
+	result, err := vsa.ValidateVSAWithPolicyComparison(ctx, digest, validationData)
 	if err != nil {
-		return ComponentResult{
+		return vsa.ComponentResult{
 			ComponentName: component.Name,
 			ImageRef:      component.ContainerImage,
 			Error:         fmt.Errorf("VSA validation failed: %w", err),
 		}
 	}
 
-	return ComponentResult{
+	return vsa.ComponentResult{
 		ComponentName: component.Name,
 		ImageRef:      component.ContainerImage,
 		Result:        result,
 		Error:         nil,
 	}
-}
-
-// extractDigestFromImageRef extracts the digest from an image reference
-func extractDigestFromImageRef(imageRef string) (string, error) {
-	// Parse the image reference
-	ref, err := name.ParseReference(imageRef)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse image reference %s: %w", imageRef, err)
-	}
-
-	// Check if it's already a digest reference
-	if digestRef, ok := ref.(name.Digest); ok {
-		return digestRef.DigestStr(), nil
-	}
-
-	// For tag references, we need to resolve to digest
-	// For now, return the image reference as-is and let the retriever handle it
-	// In a full implementation, this would resolve the tag to a digest
-	return imageRef, nil
 }
