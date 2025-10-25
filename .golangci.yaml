@@ -19,25 +19,85 @@ run:
     - generative
     - integration
     - unit
+  timeout: 10m
+  # keep tests in scope so U1000 etc. see usage across test files
+  tests: true
+
 linters:
   enable:
+    # you already had:
     - gci
-    - goimports
     - gosec
     - misspell
+    # prefer gci for import grouping; disable goimports to avoid fights
+    # - goimports
+
+    # 🔒 Correctness / clarity
+    - govet
+    - errcheck
+    - revive
+    - gosimple
+
+    # 🧹 Duplicates / unused / complexity — the big three
+    - dupl           # duplicate code blocks
+    - gocyclo        # cyclomatic complexity
+    - goconst        # repeated literals → consts
+    - unparam        # unused parameters
+    - ineffassign    # assigned values never used
+    - nestif         # deep nesting signal
+
+  disable:
+    # Keep staticcheck out of golangci-lint since you run it separately in Makefile
+    - staticcheck
+    # If you really want goimports as a check, remove it from here *and*
+    # run it in formatting automation; otherwise it can fight gci.
+    - goimports
+
 linters-settings:
   gci:
-    sections:
-      - standard
-      - default
-      - prefix(github.com/conforma/cli)
+    sections: [standard, default, prefix(github.com/conforma/cli)]
+
+  gocyclo:
+    min-complexity: 12         # matches the Makefile’s target
+
+  dupl:
+    threshold: 60              # raise if too noisy; lower to be stricter
+
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+
+  revive:
+    severity: warning
+    rules:
+      - name: exported                # docs for exported symbols
+      - name: indent-error-flow
+      - name: early-return
+      - name: unexported-return
+      - name: error-naming
+
+  misspell:
+    locale: US
+
+  gosec:
+    # Reduce noise in tests, snapshots, and generated code
+    excludes:
+      - G304   # filepath provided by tainted input (often false-positive in tests)
+    severity: medium
+    config:
+      exclude-generated: true
 
 issues:
   exclude-rules:
-    # Some function in acceptance, e.g. ImageReferenceInStubRegistry, take a string parameter which
-    # is used in call to a string format call, e.g. fmt.Sprintf(...). Golinter started complaining
-    # starting on version v1.60. Since these are acceptance tests, there isn't a lot of harm in
-    # allowing this.
-    - path: acceptance
+    # Keep your existing printf exception for acceptance tests
+    - path: ^acceptance/
       linters: [govet]
       text: "printf: non-constant format string in call"
+
+  # Optional: ignore long lines etc. in snapshots or testdata
+  exclude:
+    - "^// Code generated .* DO NOT EDIT\\.$"
+
+  # Fail on any linter error (default is fine, just being explicit)
+  max-issues-per-linter: 0
+  max-same-issues: 0
