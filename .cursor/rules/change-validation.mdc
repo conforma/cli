@@ -1,0 +1,306 @@
+---
+alwaysApply: true
+---
+
+# Change Validation Rule
+
+## Intent
+Every code change must be validated using the project's sanity checks to ensure code quality, maintainability, and consistency. This rule ensures that all changes meet the project's standards before completion.
+
+## Enforcement
+- **MANDATORY**: Run sanity checks after every code change
+- **BLOCKING**: Do not consider a change complete until sanity checks pass
+- **COMPREHENSIVE**: Use appropriate sanity check level based on change scope
+
+## Workflow
+
+### 1. After Every Code Change
+```bash
+# For single file changes
+make sanity-file FILES="./path/to/changed/file.go" -f make/postconditions.mk
+
+# For multiple files or packages
+make sanity -f make/postconditions.mk
+
+# For major refactoring (includes unused function detection)
+make sanity-plus FILE="./path/to/changed/file.go" -f make/postconditions.mk
+```
+
+### 2. Before Committing
+```bash
+# Get detailed analysis
+make sanity-summary -f make/postconditions.mk
+
+# Run full test suite for significant changes
+make test
+```
+
+### 3. For File-Specific Changes
+```bash
+# Quick validation for specific files
+make sanity-file FILES="./cmd/validate/image.go ./internal/validate/vsa/" -f make/postconditions.mk
+
+# Detailed analysis for specific files
+make sanity-file-summary FILES="./cmd/validate/image.go" -f make/postconditions.mk
+```
+
+## Change Types and Required Checks
+
+### Single File Changes
+- **Required**: `make sanity-file FILES="..." -f make/postconditions.mk`
+- **Optional**: `make sanity-file-summary FILES="..." -f make/postconditions.mk`
+
+### Multiple File Changes
+- **Required**: `make sanity -f make/postconditions.mk`
+- **Optional**: `make sanity-summary -f make/postconditions.mk`
+
+### Major Refactoring
+- **Required**: `make sanity-plus FILE="..." -f make/postconditions.mk`
+- **Required**: `make test` (for significant changes)
+
+### New Features or Bug Fixes
+- **Required**: `make sanity -f make/postconditions.mk`
+- **Required**: `make test` (if tests exist)
+- **Optional**: `make sanity-summary -f make/postconditions.mk`
+
+## Quality Gates
+
+### Must Pass
+- All `golangci-lint` checks (dupl, gocyclo, goconst, unparam, ineffassign, nestif)
+- No new linting errors introduced
+- Existing functionality preserved (tests pass)
+
+### Should Pass
+- Cyclomatic complexity below threshold (12)
+- No duplicate code (dupl)
+- No unused parameters (unparam)
+- No ineffectual assignments (ineffassign)
+- No nested if statements (nestif)
+
+### Nice to Have
+- No string constants that should be extracted (goconst)
+- No stuttering type/function names (revive)
+- No spelling errors (misspell)
+
+## Error Handling
+
+### If Sanity Checks Fail
+1. **Analyze the errors** using `make sanity-summary -f make/postconditions.mk`
+2. **Fix the issues** one by one, running sanity checks after each fix
+3. **Use file-specific checks** for targeted fixes: `make sanity-file FILES="..." -f make/postconditions.mk`
+4. **Verify the fix** with another sanity check
+
+### If Tests Fail
+1. **Run specific tests** to isolate the issue: `go test ./path/to/package -v`
+2. **Check for breaking changes** in your modifications
+3. **Fix the issues** and re-run tests
+4. **Re-run sanity checks** after fixing tests
+
+## Examples
+
+### Example 1: Fixing a Single File
+```bash
+# Make your changes to cmd/validate/image.go
+# Then validate:
+make sanity-file FILES="./cmd/validate/image.go" -f make/postconditions.mk
+
+# If issues found, get details:
+make sanity-file-summary FILES="./cmd/validate/image.go" -f make/postconditions.mk
+
+# Fix issues and re-validate
+make sanity-file FILES="./cmd/validate/image.go" -f make/postconditions.mk
+```
+
+### Example 2: Major Refactoring
+```bash
+# Make significant changes
+# Then validate with unused function detection:
+make sanity-plus FILE="./cmd/validate/image.go" -f make/postconditions.mk
+
+# Run tests to ensure functionality:
+make test
+
+# Get comprehensive analysis:
+make sanity-summary -f make/postconditions.mk
+```
+
+### Example 3: Multiple File Changes
+```bash
+# Make changes across multiple files
+# Then validate:
+make sanity -f make/postconditions.mk
+
+# If issues found, get details:
+make sanity-summary -f make/postconditions.mk
+
+# Fix issues and re-validate
+make sanity -f make/postconditions.mk
+```
+
+## Success Criteria
+
+A change is considered complete when:
+- [ ] All sanity checks pass (`make sanity` or `make sanity-file`)
+- [ ] No new linting errors introduced
+- [ ] Existing tests still pass (`make test`)
+- [ ] Code follows project standards (complexity, duplication, etc.)
+- [ ] Change is properly documented (if significant)
+
+## Notes
+
+- **Benchmark files are excluded** from sanity checks by default
+- **Use file-specific checks** for faster feedback during development
+- **Use `sanity-plus`** for major refactoring to detect unused functions
+- **Always run tests** after significant changes to ensure functionality
+- **Use `sanity-summary`** for detailed analysis before committing
+# Change Validation Rule
+
+## Intent
+Every code change must be validated using the project's sanity checks to ensure code quality, maintainability, and consistency. This rule ensures that all changes meet the project's standards before completion.
+
+## Enforcement
+- **MANDATORY**: Run sanity checks after every code change
+- **BLOCKING**: Do not consider a change complete until sanity checks pass
+- **COMPREHENSIVE**: Use appropriate sanity check level based on change scope
+
+## Workflow
+
+### 1. After Every Code Change
+```bash
+# For single file changes
+make sanity-file FILES="./path/to/changed/file.go" -f make/postconditions.mk
+
+# For multiple files or packages
+make sanity -f make/postconditions.mk
+
+# For major refactoring (includes unused function detection)
+make sanity-plus FILE="./path/to/changed/file.go" -f make/postconditions.mk
+```
+
+### 2. Before Committing
+```bash
+# Get detailed analysis
+make sanity-summary -f make/postconditions.mk
+
+# Run full test suite for significant changes
+make test
+```
+
+### 3. For File-Specific Changes
+```bash
+# Quick validation for specific files
+make sanity-file FILES="./cmd/validate/image.go ./internal/validate/vsa/" -f make/postconditions.mk
+
+# Detailed analysis for specific files
+make sanity-file-summary FILES="./cmd/validate/image.go" -f make/postconditions.mk
+```
+
+## Change Types and Required Checks
+
+### Single File Changes
+- **Required**: `make sanity-file FILES="..." -f make/postconditions.mk`
+- **Optional**: `make sanity-file-summary FILES="..." -f make/postconditions.mk`
+
+### Multiple File Changes
+- **Required**: `make sanity -f make/postconditions.mk`
+- **Optional**: `make sanity-summary -f make/postconditions.mk`
+
+### Major Refactoring
+- **Required**: `make sanity-plus FILE="..." -f make/postconditions.mk`
+- **Required**: `make test` (for significant changes)
+
+### New Features or Bug Fixes
+- **Required**: `make sanity -f make/postconditions.mk`
+- **Required**: `make test` (if tests exist)
+- **Optional**: `make sanity-summary -f make/postconditions.mk`
+
+## Quality Gates
+
+### Must Pass
+- All `golangci-lint` checks (dupl, gocyclo, goconst, unparam, ineffassign, nestif)
+- No new linting errors introduced
+- Existing functionality preserved (tests pass)
+
+### Should Pass
+- Cyclomatic complexity below threshold (12)
+- No duplicate code (dupl)
+- No unused parameters (unparam)
+- No ineffectual assignments (ineffassign)
+- No nested if statements (nestif)
+
+### Nice to Have
+- No string constants that should be extracted (goconst)
+- No stuttering type/function names (revive)
+- No spelling errors (misspell)
+
+## Error Handling
+
+### If Sanity Checks Fail
+1. **Analyze the errors** using `make sanity-summary -f make/postconditions.mk`
+2. **Fix the issues** one by one, running sanity checks after each fix
+3. **Use file-specific checks** for targeted fixes: `make sanity-file FILES="..." -f make/postconditions.mk`
+4. **Verify the fix** with another sanity check
+
+### If Tests Fail
+1. **Run specific tests** to isolate the issue: `go test ./path/to/package -v`
+2. **Check for breaking changes** in your modifications
+3. **Fix the issues** and re-run tests
+4. **Re-run sanity checks** after fixing tests
+
+## Examples
+
+### Example 1: Fixing a Single File
+```bash
+# Make your changes to cmd/validate/image.go
+# Then validate:
+make sanity-file FILES="./cmd/validate/image.go" -f make/postconditions.mk
+
+# If issues found, get details:
+make sanity-file-summary FILES="./cmd/validate/image.go" -f make/postconditions.mk
+
+# Fix issues and re-validate
+make sanity-file FILES="./cmd/validate/image.go" -f make/postconditions.mk
+```
+
+### Example 2: Major Refactoring
+```bash
+# Make significant changes
+# Then validate with unused function detection:
+make sanity-plus FILE="./cmd/validate/image.go" -f make/postconditions.mk
+
+# Run tests to ensure functionality:
+make test
+
+# Get comprehensive analysis:
+make sanity-summary -f make/postconditions.mk
+```
+
+### Example 3: Multiple File Changes
+```bash
+# Make changes across multiple files
+# Then validate:
+make sanity -f make/postconditions.mk
+
+# If issues found, get details:
+make sanity-summary -f make/postconditions.mk
+
+# Fix issues and re-validate
+make sanity -f make/postconditions.mk
+```
+
+## Success Criteria
+
+A change is considered complete when:
+- [ ] All sanity checks pass (`make sanity` or `make sanity-file`)
+- [ ] No new linting errors introduced
+- [ ] Existing tests still pass (`make test`)
+- [ ] Code follows project standards (complexity, duplication, etc.)
+- [ ] Change is properly documented (if significant)
+
+## Notes
+
+- **Benchmark files are excluded** from sanity checks by default
+- **Use file-specific checks** for faster feedback during development
+- **Use `sanity-plus`** for major refactoring to detect unused functions
+- **Always run tests** after significant changes to ensure functionality
+- **Use `sanity-summary`** for detailed analysis before committing
