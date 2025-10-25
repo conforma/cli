@@ -68,6 +68,19 @@ sanity: ## Quick gates: duplicates, complexity, unused, constants
 	  --timeout=5m
 	@echo "Reminder: enforce gocyclo min-complexity in .golangci.yml (target $(GOCYCLO_MAX))"
 
+.PHONY: sanity-file
+sanity-file: ## Quick gates for specific files (usage: make sanity-file FILES="./cmd/validate/image.go ./internal/validate/vsa/")
+	@test -n "$(FILES)" || { echo "Usage: make sanity-file FILES='./path/to/file.go ./path/to/package/'"; exit 1; }
+	@$(GOLANGCI) run \
+	  -E dupl -E gocyclo -E goconst -E unparam -E ineffassign -E nestif \
+	  --max-issues-per-linter=0 --max-same-issues=0 \
+	  --issues-exit-code=1 \
+	  --sort-results \
+	  --out-format=colored-line-number \
+	  --timeout=5m \
+	  $(FILES)
+	@echo "Reminder: enforce gocyclo min-complexity in .golangci.yml (target $(GOCYCLO_MAX))"
+
 .PHONY: deep-sanity
 deep-sanity: staticcheck lint ## staticcheck + full golangci run
 
@@ -127,8 +140,31 @@ sanity-json: ## Run sanity linters and write JSON to $(SANITY_JSON)
 	  > $(SANITY_JSON)
 	@echo "Wrote $(SANITY_JSON)"
 
+.PHONY: sanity-file-json
+sanity-file-json: ## Run sanity linters on specific files and write JSON to $(SANITY_JSON) (usage: make sanity-file-json FILES="./cmd/validate/image.go")
+	@test -n "$(FILES)" || { echo "Usage: make sanity-file-json FILES='./path/to/file.go ./path/to/package/'"; exit 1; }
+	@$(GOLANGCI) run \
+	  -E dupl -E gocyclo -E goconst -E unparam -E ineffassign -E nestif \
+	  --out-format json \
+	  --max-issues-per-linter=0 --max-same-issues=0 \
+	  --issues-exit-code=0 \
+	  $(FILES) > $(SANITY_JSON)
+	@echo "Wrote $(SANITY_JSON)"
+
 .PHONY: sanity-summary
 sanity-summary: sanity-json ## Summarize sanity issues (grouped & worst offenders)
+	@command -v jq >/dev/null || { echo "jq is required"; exit 1; }
+	@echo "== Issues by linter =="; \
+	jq -r '.Issues | group_by(.FromLinter) | map({linter: .[0].FromLinter, count: length}) | sort_by(-.count) | (["linter","count"], (.[] | [ .linter, (.count|tostring) ]) ) | @tsv' $(SANITY_JSON) | column -t
+	@echo; echo "== Top files by issue count (top 10) =="; \
+	jq -r '.Issues | group_by(.Pos.Filename) | map({file: .[0].Pos.Filename, count: length}) | sort_by(-.count)[0:10] | (["file","count"], (.[] | [ .file, (.count|tostring) ])) | @tsv' $(SANITY_JSON) | column -t
+	@echo; echo "== Worst cyclomatic complexity (top 10) =="; \
+	jq -r '.Issues | map(select(.FromLinter=="gocyclo")) | map({file: .Pos.Filename, line: .Pos.Line, text: .Text, n: ( .Text | capture("(?<n>[0-9]+)"; "m")? | .n // "0") | tonumber}) | sort_by(-.n)[0:10] | (["complexity","file:line","message"], (.[] | [ ( .n|tostring ), ( .file + ":" + (.line|tostring) ), .text ])) | @tsv' $(SANITY_JSON) | column -t
+	@echo; echo "== Duplicate code (dupl) hot-spots (top 10) =="; \
+	jq -r '.Issues | map(select(.FromLinter=="dupl")) | group_by(.Pos.Filename) | map({file: .[0].Pos.Filename, count: length}) | sort_by(-.count)[0:10] | (["file","dupl_issues"], (.[] | [ .file, (.count|tostring) ])) | @tsv' $(SANITY_JSON) | column -t
+
+.PHONY: sanity-file-summary
+sanity-file-summary: sanity-file-json ## Summarize sanity issues for specific files (usage: make sanity-file-summary FILES="./cmd/validate/image.go")
 	@command -v jq >/dev/null || { echo "jq is required"; exit 1; }
 	@echo "== Issues by linter =="; \
 	jq -r '.Issues | group_by(.FromLinter) | map({linter: .[0].FromLinter, count: length}) | sort_by(-.count) | (["linter","count"], (.[] | [ .linter, (.count|tostring) ]) ) | @tsv' $(SANITY_JSON) | column -t
