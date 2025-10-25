@@ -82,11 +82,11 @@ nestif: ## nestif (nested if statements)
 
 .PHONY: dupl
 dupl: ## dupl (duplicate code detection)
-	@$(GO_RUN_TOOLS) github.com/mibk/dupl/cmd/dupl .
+	@$(GO_RUN_TOOLS) github.com/mibk/dupl .
 
 .PHONY: goconst
-goconst: ## goconst (repeated string/number literals)
-	@$(GO_RUN_TOOLS) github.com/jgautheron/goconst/cmd/goconst ./...
+goconst: ## goconst (repeated string/number literals) - using golangci-lint
+	@$(GO_RUN_TOOLS) github.com/golangci/golangci-lint/cmd/golangci-lint run --disable-all --enable=goconst ./...
 
 .PHONY: misspell
 misspell: ## misspell (spelling checker; errors only)
