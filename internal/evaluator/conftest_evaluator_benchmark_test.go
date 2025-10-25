@@ -37,9 +37,8 @@ import (
 	"github.com/conforma/cli/internal/policy/source"
 )
 
-func BenchmarkConftestEvaluatorEvaluate(b *testing.B) {
-	ctx := context.Background()
-
+// setupBenchmarkEvaluator creates a common evaluator setup for benchmarks
+func setupBenchmarkEvaluator(ctx context.Context) (Evaluator, error) {
 	// Create policy source
 	policySource := &source.PolicyUrl{
 		Url:  "file://testdata/policies",
@@ -59,15 +58,16 @@ func BenchmarkConftestEvaluatorEvaluate(b *testing.B) {
 	})
 
 	// Create evaluator
-	evaluator, err := NewConftestEvaluator(ctx, []source.PolicySource{policySource}, configProvider, ecc.Source{})
+	return NewConftestEvaluator(ctx, []source.PolicySource{policySource}, configProvider, ecc.Source{})
+}
+
+// runBenchmarkTest runs a benchmark test with the given target
+func runBenchmarkTest(b *testing.B, target EvaluationTarget) {
+	ctx := context.Background()
+
+	evaluator, err := setupBenchmarkEvaluator(ctx)
 	require.NoError(b, err)
 	defer evaluator.Destroy()
-
-	// Create test target
-	target := EvaluationTarget{
-		Inputs: []string{"testdata/input.json"},
-		Target: "benchmark",
-	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -76,41 +76,18 @@ func BenchmarkConftestEvaluatorEvaluate(b *testing.B) {
 	}
 }
 
-func BenchmarkConftestEvaluatorWithLargeInput(b *testing.B) {
-	ctx := context.Background()
-
-	// Create policy source
-	policySource := &source.PolicyUrl{
-		Url:  "file://testdata/policies",
-		Kind: source.PolicyKind,
+func BenchmarkConftestEvaluatorEvaluate(b *testing.B) {
+	target := EvaluationTarget{
+		Inputs: []string{"testdata/input.json"},
+		Target: "benchmark",
 	}
+	runBenchmarkTest(b, target)
+}
 
-	// Create config provider
-	configProvider := &mockConfigProvider{}
-	configProvider.On("EffectiveTime").Return(time.Now())
-	configProvider.On("SigstoreOpts").Return(policy.SigstoreOpts{}, nil)
-	configProvider.On("Spec").Return(ecc.EnterpriseContractPolicySpec{
-		Sources: []ecc.Source{
-			{
-				Policy: []string{"file://testdata/policies"},
-			},
-		},
-	})
-
-	// Create evaluator
-	evaluator, err := NewConftestEvaluator(ctx, []source.PolicySource{policySource}, configProvider, ecc.Source{})
-	require.NoError(b, err)
-	defer evaluator.Destroy()
-
-	// Create test target with multiple inputs
+func BenchmarkConftestEvaluatorWithLargeInput(b *testing.B) {
 	target := EvaluationTarget{
 		Inputs: []string{"testdata/large-input.json"},
 		Target: "benchmark-large",
 	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := evaluator.Evaluate(ctx, target)
-		require.NoError(b, err)
-	}
+	runBenchmarkTest(b, target)
 }

@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -33,12 +32,10 @@ import (
 	conftest "github.com/open-policy-agent/conftest/policy"
 	"github.com/open-policy-agent/conftest/runner"
 	"github.com/open-policy-agent/opa/v1/ast"
-	"github.com/open-policy-agent/opa/v1/storage"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	"github.com/conforma/cli/internal/opa"
 	"github.com/conforma/cli/internal/opa/rule"
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/policy/source"
@@ -58,14 +55,23 @@ const (
 // a result reported as failure, warning or skipped. Dependencies are declared
 // by setting the metadata via metadataDependsOn.
 func trim(results *[]Outcome) {
-	// holds codes for all failures, warnings or skipped rules, as a map to ease
-	// the lookup, any rule that depends on a reported code will be removed from
-	// the results
+	reported := collectReportedCodes(*results)
+
+	for i, checks := range *results {
+		(*results)[i].Failures = addExclusionNotes(trimOutput(checks.Failures, reported))
+		(*results)[i].Warnings = trimOutput(checks.Warnings, reported)
+		(*results)[i].Skipped = trimOutput(checks.Skipped, reported)
+		(*results)[i].Successes = trimOutput(checks.Successes, reported)
+	}
+}
+
+// collectReportedCodes collects all reported rule codes from failures, warnings, and skipped results
+func collectReportedCodes(results []Outcome) map[string]bool {
 	reported := map[string]bool{}
 
-	for _, checks := range *results {
-		for _, results := range [][]Result{checks.Failures, checks.Warnings, checks.Skipped} {
-			for _, result := range results {
+	for _, checks := range results {
+		for _, resultList := range [][]Result{checks.Failures, checks.Warnings, checks.Skipped} {
+			for _, result := range resultList {
 				if code, ok := result.Metadata[metadataCode].(string); ok {
 					reported[code] = true
 				}
@@ -73,58 +79,59 @@ func trim(results *[]Outcome) {
 		}
 	}
 
-	// helper function inlined for ecapsulation, removes any results that depend
-	// on a reported rule, by code
-	trimOutput := func(what []Result) []Result {
-		if what == nil {
-			// nil might get passed in, while this would not cause an issue, the
-			// function would return empty array and that would needlessly
-			// change the output
-			return nil
-		}
+	return reported
+}
 
-		// holds leftover results, i.e. the ones that do not depend on a rule
-		// reported as failure, warning or skipped
-		trimmed := make([]Result, 0, len(what))
-		for _, result := range what {
-			if dependency, ok := result.Metadata[metadataDependsOn].([]string); ok {
-				for _, d := range dependency {
-					if !reported[d] {
-						trimmed = append(trimmed, result)
-					}
-				}
-			} else {
-				trimmed = append(trimmed, result)
-			}
-		}
-
-		return trimmed
+// trimOutput removes results that depend on reported rules
+func trimOutput(what []Result, reported map[string]bool) []Result {
+	if what == nil {
+		return nil
 	}
 
-	addNote := func(results []Result) []Result {
-		for i := range results {
-			description, ok := results[i].Metadata[metadataDescription].(string)
-			if !ok {
-				continue
-			}
+	trimmed := make([]Result, 0, len(what))
+	for _, result := range what {
+		if shouldKeepResult(result, reported) {
+			trimmed = append(trimmed, result)
+		}
+	}
 
-			code, ok := results[i].Metadata[metadataCode].(string)
-			if !ok {
-				continue
-			}
+	return trimmed
+}
 
-			results[i].Metadata[metadataDescription] = fmt.Sprintf("%s. To exclude this rule add %s to the `exclude` section of the policy configuration.", strings.TrimSuffix(description, "."), excludeDirectives(code, results[i].Metadata[metadataTerm]))
+// shouldKeepResult determines if a result should be kept based on its dependencies
+func shouldKeepResult(result Result, reported map[string]bool) bool {
+	dependency, ok := result.Metadata[metadataDependsOn].([]string)
+	if !ok {
+		return true // No dependencies, keep the result
+	}
+
+	// Keep if any dependency is not reported
+	for _, d := range dependency {
+		if !reported[d] {
+			return true
+		}
+	}
+
+	return false // All dependencies are reported, remove the result
+}
+
+// addExclusionNotes adds exclusion notes to failure results
+func addExclusionNotes(results []Result) []Result {
+	for i := range results {
+		description, ok := results[i].Metadata[metadataDescription].(string)
+		if !ok {
+			continue
 		}
 
-		return results
+		code, ok := results[i].Metadata[metadataCode].(string)
+		if !ok {
+			continue
+		}
+
+		results[i].Metadata[metadataDescription] = fmt.Sprintf("%s. To exclude this rule add %s to the `exclude` section of the policy configuration.", strings.TrimSuffix(description, "."), excludeDirectives(code, results[i].Metadata[metadataTerm]))
 	}
 
-	for i, checks := range *results {
-		(*results)[i].Failures = addNote(trimOutput(checks.Failures))
-		(*results)[i].Warnings = trimOutput(checks.Warnings)
-		(*results)[i].Skipped = trimOutput(checks.Skipped)
-		(*results)[i].Successes = trimOutput(checks.Successes)
-	}
+	return results
 }
 
 // Used above to suggest what to exclude to skip a certain violation.
@@ -182,8 +189,10 @@ const (
 )
 
 const (
-	severityWarning = "warning"
-	severityFailure = "failure"
+	severityWarning   = "warning"
+	severityFailure   = "failure"
+	severityException = "exception"
+	severitySkipped   = "skipped"
 )
 
 // ConfigProvider is a subset of the policy.Policy interface. Its purpose is to codify which parts
@@ -218,27 +227,27 @@ type conftestRunner struct {
 func (r conftestRunner) Run(ctx context.Context, fileList []string) (result []Outcome, err error) {
 	r.Trace = tracing.FromContext(ctx).Enabled(tracing.Opa)
 
-	var conftestResult []output.CheckResult
-	conftestResult, err = r.TestRunner.Run(ctx, fileList)
+	conftestResult, err := r.TestRunner.Run(ctx, fileList)
 	if err != nil {
 		return
 	}
 
+	result = r.processConftestResults(conftestResult)
+
+	// Validate engine data access
+	if err := r.validateEngineData(ctx); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// processConftestResults converts conftest results to our Outcome format
+func (r conftestRunner) processConftestResults(conftestResult []output.CheckResult) []Outcome {
+	var result []Outcome
+
 	for _, res := range conftestResult {
-		if log.IsLevelEnabled(log.TraceLevel) {
-			for _, q := range res.Queries {
-				for _, t := range q.Traces {
-					log.Tracef("[%s] %s", q.Query, t)
-				}
-			}
-		}
-		if log.IsLevelEnabled(log.DebugLevel) {
-			for _, q := range res.Queries {
-				for _, o := range q.Outputs {
-					log.Debugf("[%s] %s", q.Query, o)
-				}
-			}
-		}
+		r.logConftestResult(res)
 
 		result = append(result, Outcome{
 			FileName:  res.FileName,
@@ -253,70 +262,82 @@ func (r conftestRunner) Run(ctx context.Context, fileList []string) (result []Ou
 		})
 	}
 
+	return result
+}
+
+// logConftestResult logs trace and debug information for a conftest result
+func (r conftestRunner) logConftestResult(res output.CheckResult) {
+	if log.IsLevelEnabled(log.TraceLevel) {
+		for _, q := range res.Queries {
+			for _, t := range q.Traces {
+				log.Tracef("[%s] %s", q.Query, t)
+			}
+		}
+	}
+
+	if log.IsLevelEnabled(log.DebugLevel) {
+		for _, q := range res.Queries {
+			for _, o := range q.Outputs {
+				log.Debugf("[%s] %s", q.Query, o)
+			}
+		}
+	}
+}
+
+// validateEngineData validates that we can access the policy engine data
+func (r conftestRunner) validateEngineData(ctx context.Context) error {
 	// we can't reference the engine from the test runner or from the results so
 	// we need to recreate it, this needs to remain the same as in
 	// runner.TestRunner's Run function
-	var engine *conftest.Engine
 	capabilities, err := conftest.LoadCapabilities(r.Capabilities)
 	if err != nil {
-		return
+		return err
 	}
+
 	compilerOptions := conftest.CompilerOptions{
 		Strict:       r.Strict,
 		RegoVersion:  r.RegoVersion,
 		Capabilities: capabilities,
 	}
-	engine, err = conftest.LoadWithData(r.Policy, r.Data, compilerOptions)
+
+	engine, err := conftest.LoadWithData(r.Policy, r.Data, compilerOptions)
 	if err != nil {
-		return
+		return err
 	}
 
 	store := engine.Store()
-
-	var txn storage.Transaction
-	txn, err = store.NewTransaction(ctx)
+	txn, err := store.NewTransaction(ctx)
 	if err != nil {
-		return
+		return err
 	}
 
 	ids := []string{} // everything
-
 	d, err := store.Read(ctx, txn, ids)
 	if err != nil {
-		return
+		return err
 	}
 
 	if _, ok := d.(map[string]any); !ok {
-		err = fmt.Errorf("could not retrieve data from the policy engine: Data is: %v", d)
+		return fmt.Errorf("could not retrieve data from the policy engine: Data is: %v", d)
 	}
 
-	return
+	return nil
 }
 
 // NewConftestEvaluator returns initialized conftestEvaluator implementing
 // Evaluator interface
 func NewConftestEvaluator(ctx context.Context, policySources []source.PolicySource, p ConfigProvider, source ecc.Source) (Evaluator, error) {
-	return NewConftestEvaluatorWithNamespace(ctx, policySources, p, source, []string{})
+	return BuildWithNamespace(ctx, policySources, p, source, []string{})
 }
 
 // NewConftestEvaluatorWithPostEvaluationFilter returns initialized conftestEvaluator with a custom post-evaluation filter
 func NewConftestEvaluatorWithPostEvaluationFilter(ctx context.Context, policySources []source.PolicySource, p ConfigProvider, source ecc.Source, postEvaluationFilter PostEvaluationFilter) (Evaluator, error) {
-	evaluator, err := NewConftestEvaluatorWithNamespace(ctx, policySources, p, source, []string{})
-	if err != nil {
-		return nil, err
-	}
-
-	// Set the post-evaluation filter
-	if conftestEval, ok := evaluator.(*conftestEvaluator); ok {
-		conftestEval.postEvaluationFilter = postEvaluationFilter
-	}
-
-	return evaluator, nil
+	return BuildWithPostEvaluationFilter(ctx, policySources, p, source, postEvaluationFilter)
 }
 
 // NewConftestEvaluatorWithFilterType returns initialized conftestEvaluator with a specific filter type
 func NewConftestEvaluatorWithFilterType(ctx context.Context, policySources []source.PolicySource, p ConfigProvider, source ecc.Source, filterType string) (Evaluator, error) {
-	return NewConftestEvaluatorWithNamespaceAndFilterType(ctx, policySources, p, source, []string{}, filterType)
+	return BuildWithFilterType(ctx, policySources, p, source, filterType)
 }
 
 // NewConftestEvaluatorWithNamespaceAndFilterType returns initialized conftestEvaluator with namespace and filter type
@@ -333,52 +354,13 @@ func NewConftestEvaluatorWithNamespaceAndFilterType(
 		defer r.End()
 	}
 
-	fs := utils.FS(ctx)
-	c := conftestEvaluator{
-		policySources: policySources,
-		outputFormat:  "json",
-		policy:        p,
-		fs:            fs,
-		namespace:     namespace,
-		source:        source,
-	}
-
-	// Initialize the policy resolver based on filter type
-	switch filterType {
-	case "ec-policy":
-		c.policyResolver = NewECPolicyResolver(source, p)
-	case "include-exclude":
-		fallthrough
-	default:
-		c.policyResolver = NewIncludeExcludePolicyResolver(source, p)
-	}
-
-	// Extract include/exclude criteria from the policy resolver to maintain backward compatibility
-	// for the legacy isResultIncluded method
-	c.include = c.policyResolver.Includes()
-	c.exclude = c.policyResolver.Excludes()
-
-	dir, err := utils.CreateWorkDir(fs)
-	if err != nil {
-		log.Debug("Failed to create work dir!")
-		return nil, err
-	}
-	c.workDir = dir
-	c.policyDir = filepath.Join(c.workDir, "policy")
-	c.dataDir = filepath.Join(c.workDir, "data")
-
-	if err := c.createDataDirectory(ctx); err != nil {
-		return nil, err
-	}
-
-	log.Debugf("Created work dir %s", dir)
-
-	if err := c.createCapabilitiesFile(ctx); err != nil {
-		return nil, err
-	}
-
-	log.Debug("Conftest test runner created")
-	return c, nil
+	return NewBuilder(ctx).
+		WithPolicySources(policySources).
+		WithPolicy(p).
+		WithSource(source).
+		WithNamespace(namespace).
+		WithFilterType(filterType).
+		Build()
 }
 
 // set the policy namespace
@@ -397,11 +379,6 @@ func (c conftestEvaluator) Destroy() {
 func (c conftestEvaluator) CapabilitiesPath() string {
 	return path.Join(c.workDir, "capabilities.json")
 }
-
-type policyRules map[string]rule.Info
-
-// Add a new type to track non-annotated rules separately
-type nonAnnotatedRules map[string]bool
 
 func (r *policyRules) collect(a *ast.AnnotationsRef) error {
 	if a.Annotations == nil {
@@ -427,204 +404,100 @@ func (r *policyRules) collect(a *ast.AnnotationsRef) error {
 }
 
 func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget) ([]Outcome, error) {
-	var results []Outcome
-
 	if trace.IsEnabled() {
 		region := trace.StartRegion(ctx, "ec:conftest-evaluate")
 		defer region.End()
 	}
 
-	// hold all rule annotations from all policy sources
-	// NOTE: emphasis on _all rules from all sources_; meaning that if two rules
-	// exist with the same code in two separate sources the collected rule
-	// information is not deterministic
-	rules := policyRules{}
-	// Track non-annotated rules separately for filtering purposes only
-	nonAnnotatedRules := nonAnnotatedRules{}
-	// Download all sources
-	for _, s := range c.policySources {
-		dir, err := s.GetPolicy(ctx, c.workDir, false)
-		if err != nil {
-			log.Debugf("Unable to download source from %s!", s.PolicyUrl())
-			// TODO do we want to download other policies instead of erroring out?
-			return nil, err
-		}
-		annotations := []*ast.AnnotationsRef{}
-		fs := utils.FS(ctx)
-		// We only want to inspect the directory of policy subdirs, not config or data subdirs.
-		if s.Subdir() == "policy" {
-			annotations, err = opa.InspectDir(fs, dir)
-			if err != nil {
-				errMsg := err
-				if err.Error() == "no rego files found in policy subdirectory" {
-					// Let's try to give some more robust messaging to the user.
-					policyURL, err := url.Parse(s.PolicyUrl())
-					if err != nil {
-						return nil, errMsg
-					}
-					// Do we have a prefix at the end of the URL path?
-					// If not, this means we aren't trying to access a specific file.
-					// TODO: Determine if we want to check for a .git suffix as well?
-					pos := strings.LastIndex(policyURL.Path, ".")
-					if pos == -1 {
-						// Are we accessing a GitHub or GitLab URL? If so, are we beginning with 'https' or 'http'?
-						if (policyURL.Host == "github.com" || policyURL.Host == "gitlab.com") && (policyURL.Scheme == "https" || policyURL.Scheme == "http") {
-							log.Debug("Git Hub or GitLab, http transport, and no file extension, this could be a problem.")
-							errMsg = fmt.Errorf("%s.\nYou've specified a %s URL with an %s:// scheme.\nDid you mean: %s instead?", errMsg, policyURL.Hostname(), policyURL.Scheme, fmt.Sprint(policyURL.Host+policyURL.RequestURI()))
-						}
-					}
-				}
-				return nil, errMsg
-			}
-		}
-
-		// Collect ALL rules for filtering purposes - both with and without annotations
-		// This ensures that rules without metadata (like fail_with_data.rego) are properly included
-		for _, a := range annotations {
-			if a.Annotations != nil {
-				// Rules with annotations - collect full metadata
-				if err := rules.collect(a); err != nil {
-					return nil, err
-				}
-			} else {
-				// Rules without annotations - track for filtering only, not for success computation
-				ruleRef := a.GetRule()
-				if ruleRef != nil {
-					// Extract package name from the rule path
-					packageName := ""
-					if len(a.Path) > 1 {
-						// Path format is typically ["data", "package", "rule"]
-						// We want the package part (index 1)
-						if len(a.Path) >= 2 {
-							packageName = strings.ReplaceAll(a.Path[1].String(), `"`, "")
-						}
-					}
-
-					// Try to extract code from rule body first, fallback to rule name
-					code := extractCodeFromRuleBody(ruleRef)
-
-					// If no code found in body, use rule name
-					if code == "" {
-						shortName := ruleRef.Head.Name.String()
-						code = fmt.Sprintf("%s.%s", packageName, shortName)
-					}
-
-					// Debug: Print non-annotated rule processing
-					log.Debugf("Non-annotated rule: packageName=%s, code=%s", packageName, code)
-
-					// Track for filtering but don't add to rules map for success computation
-					nonAnnotatedRules[code] = true
-				}
-			}
-		}
+	// Step 1: Collect rules from all policy sources
+	ruleCollector := NewPolicyRuleCollector(c.fs)
+	collectResult := ruleCollector.CollectRulesFromSources(ctx, c.policySources, c.workDir)
+	if collectResult.Error != nil {
+		return nil, collectResult.Error
 	}
 
-	// Prepare all rules for policy resolution (both annotated and non-annotated)
-	// Combine annotated and non-annotated rules for filtering
-	allRules := make(policyRules)
-	for code, rule := range rules {
-		allRules[code] = rule
-	}
-	// Add non-annotated rules as minimal rule.Info for filtering
-	for code := range nonAnnotatedRules {
-		parts := strings.Split(code, ".")
-		if len(parts) >= 2 {
-			packageName := parts[len(parts)-2]
-			shortName := parts[len(parts)-1]
-			allRules[code] = rule.Info{
-				Code:      code,
-				Package:   packageName,
-				ShortName: shortName,
-			}
-		}
-	}
+	// Step 2: Resolve namespaces
+	namespaceManager := NewNamespaceManager(c.policyResolver, c.namespace)
+	namespaceResolution := namespaceManager.ResolveNamespaces(ctx, collectResult.AllRules, target.Target)
 
-	var filteredNamespaces []string
-	if c.policyResolver != nil {
-		// IMPLEMENTATION: Option A - Unified Policy Resolution
-		// Use the same PolicyResolver for both pre-evaluation and post-evaluation filtering
-		// This ensures consistent logic and eliminates duplication
-		policyResolution := c.policyResolver.ResolvePolicy(allRules, target.Target)
-
-		// Extract included package names for conftest evaluation
-		for pkg := range policyResolution.IncludedPackages {
-			filteredNamespaces = append(filteredNamespaces, pkg)
-		}
-
-		log.Debugf("Policy resolution: %d packages included",
-			len(policyResolution.IncludedPackages))
-		log.Debugf("Policy resolution details: included=%v",
-			policyResolution.IncludedPackages)
-	} else {
-		// Legacy filtering approach - use the old namespace filtering logic
-		// This ensures backward compatibility with existing tests
-		log.Debugf("Using legacy filtering approach")
-		// For legacy tests, we don't filter namespaces at the conftest level
-		// Instead, we evaluate all namespaces and filter results afterward
-	}
-
-	r, ok := ctx.Value(runnerKey).(testRunner)
-	if r == nil || !ok {
-
-		// Determine which namespaces to use
-		namespacesToUse := c.namespace
-		allNamespaces := false
-
-		// If we have filtered namespaces from the filtering system, use those
-		if len(filteredNamespaces) > 0 {
-			namespacesToUse = filteredNamespaces
-
-		} else if len(namespacesToUse) == 0 {
-			// For new filtering with empty namespaces, also evaluate all namespaces
-			// This ensures backward compatibility with tests that don't specify namespaces
-			allNamespaces = true
-		}
-
-		// log the namespaces to use
-		log.Debugf("Namespaces to use: %v, allNamespaces: %v", namespacesToUse, allNamespaces)
-
-		// Prepare the list of data dirs
-		dataDirs, err := c.prepareDataDirs(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		log.Debugf("Data dirs: %v", dataDirs)
-
-		r = &conftestRunner{
-			runner.TestRunner{
-				Data:          dataDirs,
-				Policy:        []string{c.policyDir},
-				Namespace:     namespacesToUse,
-				AllNamespaces: allNamespaces, // Use all namespaces for legacy filtering
-				NoFail:        true,
-				Output:        c.outputFormat,
-				Capabilities:  c.CapabilitiesPath(),
-				RegoVersion:   "v1",
-			},
-		}
-	}
-
-	log.Debugf("runner: %#v", r)
-	log.Debugf("inputs: %#v", target.Inputs)
-
-	runResults, err := r.Run(ctx, target.Inputs)
+	// Step 3: Create and run the test runner
+	runner, err := c.createTestRunner(ctx, namespaceResolution)
 	if err != nil {
-		// TODO do we want to evaluate further policies instead of erroring out?
 		return nil, err
 	}
 
+	// Step 4: Execute the evaluation
+	runResults, err := runner.Run(ctx, target.Inputs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 5: Process results
 	effectiveTime := c.policy.EffectiveTime()
 	ctx = context.WithValue(ctx, effectiveTimeKey, effectiveTime)
 
-	// Track how many rules have been processed. This is used later on to determine if anything
-	// at all was processed.
+	missingIncludes := c.initializeMissingIncludes()
+	resultProcessor := NewResultProcessor(c.policyResolver)
+
+	var results []Outcome
 	totalRules := 0
 
-	// Populate a list with all the include directives specified in the
-	// policy config.
-	// Each include matching a result will be pruned from the list, so
-	// that in the end the list will contain all the unmatched includes.
+	for _, result := range runResults {
+		processedResult, updatedMissingIncludes, err := resultProcessor.ProcessResult(
+			ctx, result, collectResult.AnnotatedRules, target.Target, missingIncludes, effectiveTime)
+		if err != nil {
+			return nil, err
+		}
+
+		missingIncludes = updatedMissingIncludes
+		totalRules += len(processedResult.Warnings) + len(processedResult.Failures) + len(processedResult.Successes)
+		results = append(results, processedResult)
+	}
+
+	// Step 6: Handle missing includes and final processing
+	results = c.handleMissingIncludes(results, missingIncludes)
+	trim(&results)
+
+	// Step 7: Validate that rules were actually processed
+	if totalRules == 0 {
+		log.Error("no successes, warnings, or failures, check input")
+		return nil, fmt.Errorf("no successes, warnings, or failures, check input")
+	}
+
+	return results, nil
+}
+
+// createTestRunner creates and configures the test runner for evaluation.
+func (c conftestEvaluator) createTestRunner(ctx context.Context, namespaceResolution NamespaceResolution) (testRunner, error) {
+	r, ok := ctx.Value(runnerKey).(testRunner)
+	if r != nil && ok {
+		return r, nil
+	}
+
+	// Prepare the list of data dirs
+	dataDirs, err := c.prepareDataDirs(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debugf("Data dirs: %v", dataDirs)
+
+	return &conftestRunner{
+		runner.TestRunner{
+			Data:          dataDirs,
+			Policy:        []string{c.policyDir},
+			Namespace:     namespaceResolution.NamespacesToUse,
+			AllNamespaces: namespaceResolution.AllNamespaces,
+			NoFail:        true,
+			Output:        c.outputFormat,
+			Capabilities:  c.CapabilitiesPath(),
+			RegoVersion:   "v1",
+		},
+	}, nil
+}
+
+// initializeMissingIncludes initializes the missing includes tracking map.
+func (c conftestEvaluator) initializeMissingIncludes() map[string]bool {
 	missingIncludes := map[string]bool{}
 	for _, defaultItem := range c.include.defaultItems {
 		missingIncludes[defaultItem] = true
@@ -634,50 +507,11 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 			missingIncludes[digestItem] = true
 		}
 	}
+	return missingIncludes
+}
 
-	// loop over each policy (namespace) evaluation
-	// effectively replacing the results returned from conftest
-	for _, result := range runResults {
-		// Use unified post-evaluation filter for consistent filtering logic
-
-		unifiedFilter := NewUnifiedPostEvaluationFilter(c.policyResolver)
-
-		// Collect all results for processing
-		allResults := []Result{}
-		allResults = append(allResults, result.Warnings...)
-		allResults = append(allResults, result.Failures...)
-		allResults = append(allResults, result.Exceptions...)
-		allResults = append(allResults, result.Skipped...)
-
-		// Add metadata to all results
-		for j := range allResults {
-			addRuleMetadata(ctx, &allResults[j], rules)
-		}
-
-		// Filter results using the unified filter
-		filteredResults, updatedMissingIncludes := unifiedFilter.FilterResults(
-			allResults, allRules, target.Target, missingIncludes, effectiveTime)
-
-		// Update missing includes
-		missingIncludes = updatedMissingIncludes
-
-		// Categorize results using the unified filter
-		warnings, failures, exceptions, skipped := unifiedFilter.CategorizeResults(
-			filteredResults, result, effectiveTime)
-
-		result.Warnings = warnings
-		result.Failures = failures
-		result.Exceptions = exceptions
-		result.Skipped = skipped
-
-		// Replace the placeholder successes slice with the actual successes.
-		result.Successes = c.computeSuccesses(result, rules, target.Target, missingIncludes, unifiedFilter)
-
-		totalRules += len(result.Warnings) + len(result.Failures) + len(result.Successes)
-
-		results = append(results, result)
-	}
-
+// handleMissingIncludes adds warnings for missing include criteria.
+func (c conftestEvaluator) handleMissingIncludes(results []Outcome, missingIncludes map[string]bool) []Outcome {
 	for missingInclude, isMissing := range missingIncludes {
 		if isMissing {
 			results = append(results, Outcome{
@@ -687,22 +521,12 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 			})
 		}
 	}
-
-	trim(&results)
-
-	// If no rules were checked, then we have effectively failed, because no tests were actually
-	// ran due to input error, etc.
-	if totalRules == 0 {
-		log.Error("no successes, warnings, or failures, check input")
-		return nil, fmt.Errorf("no successes, warnings, or failures, check input")
-	}
-
-	return results, nil
+	return results
 }
 
 // prepareDataDirs inspects the top level data dir and returns a list of the directories
 // that appear to have data files in them. That list will be passed to the conftest runner.
-func (c conftestEvaluator) prepareDataDirs(ctx context.Context) ([]string, error) {
+func (c conftestEvaluator) prepareDataDirs(_ context.Context) ([]string, error) {
 	// The reason we do this is to avoid having the names of the subdirs under c.dataDir
 	// converted to keys in the data structure. We want the top level keys in the data files
 	// to be at the top level of the data structure visible to the rego rules.
@@ -764,98 +588,6 @@ func toRules(results []output.Result) []Result {
 	return eResults
 }
 
-// computeSuccesses generates success results, these are not provided in the
-// Conftest results, so we reconstruct these from the parsed rules, any rule
-// that hasn't been touched by adding metadata must have succeeded
-func (c conftestEvaluator) computeSuccesses(
-	result Outcome,
-	rules policyRules,
-	target string,
-	missingIncludes map[string]bool,
-	unifiedFilter PostEvaluationFilter,
-) []Result {
-	// what rules, by code, have we seen in the Conftest results, use map to
-	// take advantage of hashing for quicker lookup
-	seenRules := map[string]bool{}
-	for _, o := range [][]Result{result.Failures, result.Warnings, result.Skipped, result.Exceptions} {
-		for _, r := range o {
-			if code, ok := r.Metadata[metadataCode].(string); ok {
-				seenRules[code] = true
-			}
-		}
-	}
-
-	var successes []Result
-	if l := len(rules); l > 0 {
-		successes = make([]Result, 0, l)
-	}
-
-	// any rule left DID NOT get metadata added so it's a success
-	// this depends on the delete in addMetadata
-	for code, rule := range rules {
-		if _, ok := seenRules[code]; ok {
-			continue
-		}
-
-		// Ignore any successes that are not meant for the package this CheckResult represents
-		if rule.Package != result.Namespace {
-			continue
-		}
-
-		success := Result{
-			Message: "Pass",
-			Metadata: map[string]interface{}{
-				metadataCode: code,
-			},
-		}
-
-		if rule.Title != "" {
-			success.Metadata[metadataTitle] = rule.Title
-		}
-
-		if rule.Description != "" {
-			success.Metadata[metadataDescription] = rule.Description
-		}
-
-		if len(rule.Collections) > 0 {
-			success.Metadata[metadataCollections] = rule.Collections
-		}
-
-		if len(rule.DependsOn) > 0 {
-			success.Metadata[metadataDependsOn] = rule.DependsOn
-		}
-
-		// Use unified filtering approach for consistency
-		if unifiedFilter != nil {
-			// Use the unified filter to check if this success should be included
-			filteredResults, _ := unifiedFilter.FilterResults(
-				[]Result{success}, rules, target, missingIncludes, time.Now())
-
-			if len(filteredResults) == 0 {
-				log.Debugf("Skipping result success: %#v", success)
-				continue
-			}
-		} else {
-			// Fallback to legacy filtering for backward compatibility
-			if !c.isResultIncluded(success, target, missingIncludes) {
-				log.Debugf("Skipping result success: %#v", success)
-				continue
-			}
-		}
-
-		if rule.EffectiveOn != "" {
-			success.Metadata[metadataEffectiveOn] = rule.EffectiveOn
-		}
-
-		// Let's omit the solution text here because if the rule is passing
-		// already then the user probably doesn't care about the solution.
-
-		successes = append(successes, success)
-	}
-
-	return successes
-}
-
 func addRuleMetadata(ctx context.Context, result *Result, rules policyRules) {
 	code, ok := (*result).Metadata[metadataCode].(string)
 	if ok {
@@ -875,60 +607,78 @@ func addMetadataToResults(ctx context.Context, r *Result, rule rule.Info) {
 		return
 	}
 
-	// normalize collection to []string
-	if v, ok := r.Metadata[metadataCollections]; ok {
+	normalizeCollections(r.Metadata)
+	addRuleFields(r.Metadata, rule)
+	handleEffectiveOnDate(ctx, r.Metadata)
+}
+
+// normalizeCollections normalizes the collections metadata to []string format
+func normalizeCollections(metadata map[string]any) {
+	if v, ok := metadata[metadataCollections]; ok {
 		switch vals := v.(type) {
 		case []any:
 			col := make([]string, 0, len(vals))
 			for _, c := range vals {
 				col = append(col, fmt.Sprint(c))
 			}
-			r.Metadata[metadataCollections] = col
+			metadata[metadataCollections] = col
 		case []string:
 			// all good, mainly left for documentation of the normalization
 		default:
 			// remove unsupported collections attribute
-			delete(r.Metadata, metadataCollections)
+			delete(metadata, metadataCollections)
 		}
 	}
+}
 
+// addRuleFields adds rule metadata fields to the result metadata
+func addRuleFields(metadata map[string]any, rule rule.Info) {
 	if rule.Title != "" {
-		r.Metadata[metadataTitle] = rule.Title
+		metadata[metadataTitle] = rule.Title
 	}
 	if rule.EffectiveOn != "" {
-		r.Metadata[metadataEffectiveOn] = rule.EffectiveOn
+		metadata[metadataEffectiveOn] = rule.EffectiveOn
 	}
 	if rule.Severity != "" {
-		r.Metadata[metadataSeverity] = rule.Severity
+		metadata[metadataSeverity] = rule.Severity
 	}
 	if rule.Description != "" {
-		r.Metadata[metadataDescription] = rule.Description
+		metadata[metadataDescription] = rule.Description
 	}
 	if rule.Solution != "" {
-		r.Metadata[metadataSolution] = rule.Solution
+		metadata[metadataSolution] = rule.Solution
 	}
 	if len(rule.Collections) > 0 {
-		r.Metadata[metadataCollections] = rule.Collections
+		metadata[metadataCollections] = rule.Collections
 	}
 	if len(rule.DependsOn) > 0 {
-		r.Metadata[metadataDependsOn] = rule.DependsOn
+		metadata[metadataDependsOn] = rule.DependsOn
+	}
+}
+
+// handleEffectiveOnDate handles the effective_on date logic
+func handleEffectiveOnDate(ctx context.Context, metadata map[string]any) {
+	effectiveTime, ok := ctx.Value(effectiveTimeKey).(time.Time)
+	if !ok {
+		log.Warnf("Could not get effectiveTime from context")
+		return
+	}
+
+	effectiveOnString, ok := metadata[metadataEffectiveOn].(string)
+	if !ok {
+		return
+	}
+
+	effectiveOnTime, err := time.Parse(effectiveOnFormat, effectiveOnString)
+	if err != nil {
+		log.Warnf("Invalid %q value %q", metadataEffectiveOn, effectiveOnString)
+		return
 	}
 
 	// If the rule has been effective for a long time, we'll consider
 	// the effective_on date not relevant and not bother including it
-	if effectiveTime, ok := ctx.Value(effectiveTimeKey).(time.Time); ok {
-		if effectiveOnString, ok := r.Metadata[metadataEffectiveOn].(string); ok {
-			effectiveOnTime, err := time.Parse(effectiveOnFormat, effectiveOnString)
-			if err == nil {
-				if effectiveOnTime.Before(effectiveTime.Add(effectiveOnTimeout)) {
-					delete(r.Metadata, metadataEffectiveOn)
-				}
-			} else {
-				log.Warnf("Invalid %q value %q", metadataEffectiveOn, rule.EffectiveOn)
-			}
-		}
-	} else {
-		log.Warnf("Could not get effectiveTime from context")
+	if effectiveOnTime.Before(effectiveTime.Add(effectiveOnTimeout)) {
+		delete(metadata, metadataEffectiveOn)
 	}
 }
 
@@ -1092,12 +842,6 @@ func isResultEffective(failure Result, now time.Time) bool {
 // isResultIncluded returns whether or not the result should be included or
 // discarded based on the policy configuration.
 // 'missingIncludes' is a list of include directives that gets pruned if the result is matched
-func (c conftestEvaluator) isResultIncluded(result Result, target string, missingIncludes map[string]bool) bool {
-	ruleMatchers := LegacyMakeMatchers(result)
-	includeScore := LegacyScoreMatches(ruleMatchers, c.include.get(target), missingIncludes)
-	excludeScore := LegacyScoreMatches(ruleMatchers, c.exclude.get(target), map[string]bool{})
-	return includeScore > excludeScore
-}
 
 // extractCollections returns the collections encoded in the result metadata.
 func extractCollections(result Result) []string {
@@ -1157,7 +901,7 @@ func strictCapabilities(ctx context.Context) (string, error) {
 
 	capabilities := ast.CapabilitiesForThisVersion()
 	// An empty list means no hosts can be reached. However, a nil value means all
-	// hosts can be reached. Unfortunately, the required JSON marshalling process
+	// hosts can be reached. Unfortunately, the required JSON marshaling process
 	// drops the "allow_net" attribute if it's an empty list. So when it's loaded
 	// by OPA, it's seen as a nil value. As a workaround, we add an empty string
 	// to the list which shouldn't match any host but preserves the list after the

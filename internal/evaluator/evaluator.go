@@ -18,6 +18,8 @@ package evaluator
 
 import (
 	"context"
+
+	"github.com/conforma/cli/internal/opa/rule"
 )
 
 type EvaluationTarget struct {
@@ -52,3 +54,9 @@ type Result struct {
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 	Outputs  []string               `json:"outputs,omitempty"`
 }
+
+// policyRules is a map of rule codes to rule information
+type policyRules map[string]rule.Info
+
+// nonAnnotatedRules is a map of rule codes to boolean flags for non-annotated rules
+type nonAnnotatedRules map[string]bool

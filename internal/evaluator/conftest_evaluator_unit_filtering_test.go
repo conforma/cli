@@ -36,6 +36,44 @@ import (
 	"github.com/conforma/cli/internal/policy/source"
 )
 
+// createTestOutcomeWithBreakfastAndLunch creates a test outcome with breakfast and lunch items
+func createTestOutcomeWithBreakfastAndLunch() []Outcome {
+	return []Outcome{
+		{
+			Failures: []Result{
+				{Metadata: map[string]any{"code": "breakfast.spam"}},
+				{Metadata: map[string]any{"code": "lunch.spam"}},
+			},
+			Warnings: []Result{
+				{Metadata: map[string]any{"code": "breakfast.ham"}},
+				{Metadata: map[string]any{"code": "lunch.ham"}},
+			},
+		},
+	}
+}
+
+// createExpectedOutcome creates an expected outcome with the given failure and warning codes
+func createExpectedOutcome(failureCodes, warningCodes []string) []Outcome {
+	failures := make([]Result, len(failureCodes))
+	for i, code := range failureCodes {
+		failures[i] = Result{Metadata: map[string]any{"code": code}}
+	}
+
+	warnings := make([]Result, len(warningCodes))
+	for i, code := range warningCodes {
+		warnings[i] = Result{Metadata: map[string]any{"code": code}}
+	}
+
+	return []Outcome{
+		{
+			Failures:   failures,
+			Warnings:   warnings,
+			Skipped:    []Result{},
+			Exceptions: []Result{},
+		},
+	}
+}
+
 func TestConftestEvaluatorIncludeExclude(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -44,60 +82,16 @@ func TestConftestEvaluatorIncludeExclude(t *testing.T) {
 		want    []Outcome
 	}{
 		{
-			name: "exclude by package name",
-			results: []Outcome{
-				{
-					Failures: []Result{
-						{Metadata: map[string]any{"code": "breakfast.spam"}},
-						{Metadata: map[string]any{"code": "lunch.spam"}},
-					},
-					Warnings: []Result{
-						{Metadata: map[string]any{"code": "breakfast.ham"}},
-						{Metadata: map[string]any{"code": "lunch.ham"}},
-					},
-				},
-			},
-			config: &ecc.EnterpriseContractPolicyConfiguration{Exclude: []string{"breakfast"}},
-			want: []Outcome{
-				{
-					Failures: []Result{
-						{Metadata: map[string]any{"code": "lunch.spam"}},
-					},
-					Warnings: []Result{
-						{Metadata: map[string]any{"code": "lunch.ham"}},
-					},
-					Skipped:    []Result{},
-					Exceptions: []Result{},
-				},
-			},
+			name:    "exclude by package name",
+			results: createTestOutcomeWithBreakfastAndLunch(),
+			config:  &ecc.EnterpriseContractPolicyConfiguration{Exclude: []string{"breakfast"}},
+			want:    createExpectedOutcome([]string{"lunch.spam"}, []string{"lunch.ham"}),
 		},
 		{
-			name: "include by package",
-			results: []Outcome{
-				{
-					Failures: []Result{
-						{Metadata: map[string]any{"code": "breakfast.spam"}},
-						{Metadata: map[string]any{"code": "lunch.spam"}},
-					},
-					Warnings: []Result{
-						{Metadata: map[string]any{"code": "breakfast.ham"}},
-						{Metadata: map[string]any{"code": "lunch.ham"}},
-					},
-				},
-			},
-			config: &ecc.EnterpriseContractPolicyConfiguration{Include: []string{"breakfast"}},
-			want: []Outcome{
-				{
-					Failures: []Result{
-						{Metadata: map[string]any{"code": "breakfast.spam"}},
-					},
-					Warnings: []Result{
-						{Metadata: map[string]any{"code": "breakfast.ham"}},
-					},
-					Skipped:    []Result{},
-					Exceptions: []Result{},
-				},
-			},
+			name:    "include by package",
+			results: createTestOutcomeWithBreakfastAndLunch(),
+			config:  &ecc.EnterpriseContractPolicyConfiguration{Include: []string{"breakfast"}},
+			want:    createExpectedOutcome([]string{"breakfast.spam"}, []string{"breakfast.ham"}),
 		},
 	}
 

@@ -834,32 +834,44 @@ func LegacyScore(name string) int {
 	nameSplitLen := len(nameSplit)
 
 	if nameSplitLen == 1 {
-		// When there are no dots we assume the name refers to a
-		// package and any rule inside the package is matched
-		if shortName == "*" {
-			value += 1
-		} else {
-			value += 10
-		}
+		value += scoreSingleNameMatch(shortName)
 	} else if nameSplitLen > 1 {
-		// When there is at least one dot we assume the last element
-		// is the rule and everything else is the package path
-		rule := nameSplit[nameSplitLen-1]
-		pkg := strings.Join(nameSplit[:nameSplitLen-1], ".")
-
-		if pkg == "*" {
-			// E.g. "*.rule", a weird edge case
-			value += 1
-		} else {
-			// E.g. "pkg.rule" or "path.pkg.rule"
-			value += 10 * (nameSplitLen - 1)
-		}
-
-		if rule != "*" && rule != "" {
-			// E.g. "pkg.rule" so a specific rule was specified
-			value += 100
-		}
+		value += scoreMultiNameMatch(nameSplit, nameSplitLen)
 	}
+	return value
+}
+
+// scoreSingleNameMatch scores a single name match (no dots)
+func scoreSingleNameMatch(shortName string) int {
+	// When there are no dots we assume the name refers to a
+	// package and any rule inside the package is matched
+	if shortName == "*" {
+		return 1
+	}
+	return 10
+}
+
+// scoreMultiNameMatch scores a multi-name match (with dots)
+func scoreMultiNameMatch(nameSplit []string, nameSplitLen int) int {
+	// When there is at least one dot we assume the last element
+	// is the rule and everything else is the package path
+	rule := nameSplit[nameSplitLen-1]
+	pkg := strings.Join(nameSplit[:nameSplitLen-1], ".")
+
+	value := 0
+	if pkg == "*" {
+		// E.g. "*.rule", a weird edge case
+		value += 1
+	} else {
+		// E.g. "pkg.rule" or "path.pkg.rule"
+		value += 10 * (nameSplitLen - 1)
+	}
+
+	if rule != "*" && rule != "" {
+		// E.g. "pkg.rule" so a specific rule was specified
+		value += 100
+	}
+
 	return value
 }
 
@@ -974,26 +986,26 @@ func (f *LegacyPostEvaluationFilter) CategorizeResults(
 		originalType := "unknown"
 		for _, originalWarning := range originalResult.Warnings {
 			if ExtractStringFromMetadata(originalWarning, metadataCode) == code {
-				originalType = "warning"
+				originalType = severityWarning
 				break
 			}
 		}
 		for _, originalFailure := range originalResult.Failures {
 			if ExtractStringFromMetadata(originalFailure, metadataCode) == code {
-				originalType = "failure"
+				originalType = severityFailure
 				break
 			}
 		}
 
 		// Apply severity logic based on original type
 		switch originalType {
-		case "warning":
+		case severityWarning:
 			if getSeverity(result) == severityFailure {
 				failures = append(failures, result)
 			} else {
 				warnings = append(warnings, result)
 			}
-		case "failure":
+		case severityFailure:
 			if getSeverity(result) == severityWarning || !isResultEffective(result, effectiveTime) {
 				warnings = append(warnings, result)
 			} else {
@@ -1028,36 +1040,70 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 	// Check if we're using an ECPolicyResolver (which handles pipeline intentions)
 	// vs IncludeExcludePolicyResolver (which doesn't)
 	if ecResolver, ok := f.policyResolver.(*ECPolicyResolver); ok {
-		// Use policy resolution for ECPolicyResolver to handle pipeline intentions
-		policyResolution := ecResolver.ResolvePolicy(rules, target)
-
-		var filteredResults []Result
-		for _, result := range results {
-			code := ExtractStringFromMetadata(result, metadataCode)
-			// For results without codes, always include them (matches legacy behavior)
-			if code == "" {
-				filteredResults = append(filteredResults, result)
-				continue
-			}
-
-			// Check if the result's rule is included based on policy resolution
-			if policyResolution.IncludedRules[code] {
-				filteredResults = append(filteredResults, result)
-			}
-		}
-
-		// Update missing includes based on policy resolution
-		for include := range missingIncludes {
-			if !policyResolution.MissingIncludes[include] {
-				delete(missingIncludes, include)
-			}
-		}
-
-		return filteredResults, missingIncludes
+		return f.filterWithECResolver(results, rules, target, missingIncludes, ecResolver)
 	}
 
 	// Fall back to legacy filtering for other policy resolvers
+	return f.filterWithLegacyLogic(results, target, missingIncludes)
+}
+
+// filterWithECResolver handles filtering using ECPolicyResolver
+func (f *UnifiedPostEvaluationFilter) filterWithECResolver(
+	results []Result,
+	rules policyRules,
+	target string,
+	missingIncludes map[string]bool,
+	ecResolver *ECPolicyResolver,
+) ([]Result, map[string]bool) {
+	policyResolution := ecResolver.ResolvePolicy(rules, target)
+
+	filteredResults := f.filterResultsByPolicyResolution(results, policyResolution)
+	f.updateMissingIncludesFromPolicyResolution(missingIncludes, policyResolution)
+
+	return filteredResults, missingIncludes
+}
+
+// filterWithLegacyLogic handles filtering using legacy logic
+func (f *UnifiedPostEvaluationFilter) filterWithLegacyLogic(
+	results []Result,
+	target string,
+	missingIncludes map[string]bool,
+) ([]Result, map[string]bool) {
+	filteredResults := f.filterResultsWithLegacyLogic(results, target, missingIncludes)
+	f.updateMissingIncludesFromResults(missingIncludes, filteredResults)
+
+	return filteredResults, missingIncludes
+}
+
+// filterResultsByPolicyResolution filters results based on policy resolution
+func (f *UnifiedPostEvaluationFilter) filterResultsByPolicyResolution(results []Result, policyResolution PolicyResolutionResult) []Result {
 	var filteredResults []Result
+
+	for _, result := range results {
+		code := ExtractStringFromMetadata(result, metadataCode)
+		// For results without codes, always include them (matches legacy behavior)
+		if code == "" {
+			filteredResults = append(filteredResults, result)
+			continue
+		}
+
+		// Check if the result's rule is included based on policy resolution
+		if policyResolution.IncludedRules[code] {
+			filteredResults = append(filteredResults, result)
+		}
+	}
+
+	return filteredResults
+}
+
+// filterResultsWithLegacyLogic filters results using legacy logic
+func (f *UnifiedPostEvaluationFilter) filterResultsWithLegacyLogic(
+	results []Result,
+	target string,
+	missingIncludes map[string]bool,
+) []Result {
+	var filteredResults []Result
+
 	for _, result := range results {
 		code := ExtractStringFromMetadata(result, metadataCode)
 		// For results without codes, always include them (matches legacy behavior)
@@ -1073,27 +1119,44 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 		}
 	}
 
-	// Update missing includes based on what was actually matched
+	return filteredResults
+}
+
+// updateMissingIncludesFromPolicyResolution updates missing includes based on policy resolution
+func (f *UnifiedPostEvaluationFilter) updateMissingIncludesFromPolicyResolution(
+	missingIncludes map[string]bool,
+	policyResolution PolicyResolutionResult,
+) {
 	for include := range missingIncludes {
-		matched := false
-		for _, result := range filteredResults {
-			matchers := LegacyMakeMatchers(result)
-			for _, matcher := range matchers {
-				if matcher == include {
-					matched = true
-					break
-				}
-			}
-			if matched {
-				break
-			}
-		}
-		if matched {
+		if !policyResolution.MissingIncludes[include] {
 			delete(missingIncludes, include)
 		}
 	}
+}
 
-	return filteredResults, missingIncludes
+// updateMissingIncludesFromResults updates missing includes based on filtered results
+func (f *UnifiedPostEvaluationFilter) updateMissingIncludesFromResults(
+	missingIncludes map[string]bool,
+	filteredResults []Result,
+) {
+	for include := range missingIncludes {
+		if f.isIncludeMatched(include, filteredResults) {
+			delete(missingIncludes, include)
+		}
+	}
+}
+
+// isIncludeMatched checks if an include directive was matched by any result
+func (f *UnifiedPostEvaluationFilter) isIncludeMatched(include string, results []Result) bool {
+	for _, result := range results {
+		matchers := LegacyMakeMatchers(result)
+		for _, matcher := range matchers {
+			if matcher == include {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // CategorizeResults takes filtered results and categorizes them by type
@@ -1109,21 +1172,21 @@ func (f *UnifiedPostEvaluationFilter) CategorizeResults(
 
 		// Apply severity logic based on original type
 		switch originalType {
-		case "warning":
+		case severityWarning:
 			if getSeverity(filteredResult) == severityFailure {
 				failures = append(failures, filteredResult)
 			} else {
 				warnings = append(warnings, filteredResult)
 			}
-		case "failure":
+		case severityFailure:
 			if getSeverity(filteredResult) == severityWarning || !isResultEffective(filteredResult, effectiveTime) {
 				warnings = append(warnings, filteredResult)
 			} else {
 				failures = append(failures, filteredResult)
 			}
-		case "exception":
+		case severityException:
 			exceptions = append(exceptions, filteredResult)
-		case "skipped":
+		case severitySkipped:
 			skipped = append(skipped, filteredResult)
 		default:
 			// For unknown types, assume it was a warning
@@ -1147,57 +1210,72 @@ func (f *UnifiedPostEvaluationFilter) determineOriginalType(filteredResult Resul
 
 	// If we have a code, try to match it against original results
 	if filteredCode != "" {
-		// Check each category in the original result
-		for _, originalWarning := range originalResult.Warnings {
-			if ExtractStringFromMetadata(originalWarning, metadataCode) == filteredCode {
-				return "warning"
-			}
-		}
-		for _, originalFailure := range originalResult.Failures {
-			if ExtractStringFromMetadata(originalFailure, metadataCode) == filteredCode {
-				return "failure"
-			}
-		}
-		for _, originalException := range originalResult.Exceptions {
-			if ExtractStringFromMetadata(originalException, metadataCode) == filteredCode {
-				return "exception"
-			}
-		}
-		for _, originalSkipped := range originalResult.Skipped {
-			if ExtractStringFromMetadata(originalSkipped, metadataCode) == filteredCode {
-				return "skipped"
-			}
+		if originalType := f.findOriginalTypeByCode(filteredCode, originalResult); originalType != "" {
+			return originalType
 		}
 	}
 
-	// For results without codes, check if they match any original results by message first
-	for _, originalWarning := range originalResult.Warnings {
-		if originalWarning.Message == filteredResult.Message {
-			return "warning"
-		}
-	}
-	for _, originalFailure := range originalResult.Failures {
-		if originalFailure.Message == filteredResult.Message {
-			return "failure"
-		}
-	}
-	for _, originalException := range originalResult.Exceptions {
-		if originalException.Message == filteredResult.Message {
-			return "exception"
-		}
-	}
-	for _, originalSkipped := range originalResult.Skipped {
-		if originalSkipped.Message == filteredResult.Message {
-			return "skipped"
-		}
+	// For results without codes, check if they match any original results by message
+	if originalType := f.findOriginalTypeByMessage(filteredResult.Message, originalResult); originalType != "" {
+		return originalType
 	}
 
-	// If no message match found, check if the result has an effective_on field, which suggests it was originally a failure
+	// If no message match found, check if the result has an effective_on field
 	if _, hasEffectiveOn := filteredResult.Metadata[metadataEffectiveOn]; hasEffectiveOn {
 		// Results with effective_on are typically failures that might be demoted to warnings
-		// The effective time logic will determine if it should be demoted to warning
-		return "failure"
+		return severityFailure
 	}
 
 	return "unknown"
+}
+
+// findOriginalTypeByCode finds the original type by matching code
+func (f *UnifiedPostEvaluationFilter) findOriginalTypeByCode(code string, originalResult Outcome) string {
+	// Check each category in the original result
+	for _, originalWarning := range originalResult.Warnings {
+		if ExtractStringFromMetadata(originalWarning, metadataCode) == code {
+			return severityWarning
+		}
+	}
+	for _, originalFailure := range originalResult.Failures {
+		if ExtractStringFromMetadata(originalFailure, metadataCode) == code {
+			return severityFailure
+		}
+	}
+	for _, originalException := range originalResult.Exceptions {
+		if ExtractStringFromMetadata(originalException, metadataCode) == code {
+			return severityException
+		}
+	}
+	for _, originalSkipped := range originalResult.Skipped {
+		if ExtractStringFromMetadata(originalSkipped, metadataCode) == code {
+			return severitySkipped
+		}
+	}
+	return ""
+}
+
+// findOriginalTypeByMessage finds the original type by matching message
+func (f *UnifiedPostEvaluationFilter) findOriginalTypeByMessage(message string, originalResult Outcome) string {
+	for _, originalWarning := range originalResult.Warnings {
+		if originalWarning.Message == message {
+			return severityWarning
+		}
+	}
+	for _, originalFailure := range originalResult.Failures {
+		if originalFailure.Message == message {
+			return severityFailure
+		}
+	}
+	for _, originalException := range originalResult.Exceptions {
+		if originalException.Message == message {
+			return severityException
+		}
+	}
+	for _, originalSkipped := range originalResult.Skipped {
+		if originalSkipped.Message == message {
+			return severitySkipped
+		}
+	}
+	return ""
 }

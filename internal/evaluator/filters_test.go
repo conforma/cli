@@ -20,6 +20,7 @@ package evaluator
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -93,7 +94,7 @@ func TestDefaultFilterFactory(t *testing.T) {
 }
 
 //////////////////////////////////////////////////////////////////////////////
-// IncludeListFilter – core behaviour
+// IncludeListFilter – core behavior
 //////////////////////////////////////////////////////////////////////////////
 
 func TestIncludeListFilter(t *testing.T) {
@@ -1362,17 +1363,17 @@ func TestConftestEvaluator_FilterType_ECPolicy(t *testing.T) {
 	assert.NotNil(t, evaluator, "evaluator should not be nil")
 
 	t.Logf("Evaluator type: %T", evaluator)
-	conftestEval, ok := evaluator.(conftestEvaluator)
+	conftestEval, ok := evaluator.(*conftestEvaluator)
 	t.Logf("Type assertion result: ok=%v, conftestEval=%v", ok, conftestEval)
-	assert.True(t, ok, "evaluator should be conftestEvaluator")
+	assert.True(t, ok, "evaluator should be *conftestEvaluator")
 
 	// Should use ECPolicyResolver which supports pipeline intentions
 	_, isECPolicyResolver := conftestEval.policyResolver.(*ECPolicyResolver)
 	assert.True(t, isECPolicyResolver, "should use ECPolicyResolver for ec-policy filter type")
 }
 
-func TestConftestEvaluator_FilterType_IncludeExclude(t *testing.T) {
-	// Test that include-exclude filter type uses IncludeExcludePolicyResolver
+// setupFilterTypeTest creates a common test setup for filter type tests
+func setupFilterTypeTest(_ *testing.T, filterType string) (*conftestEvaluator, error) {
 	sourceConfig := ecc.Source{
 		RuleData: &extv1.JSON{Raw: json.RawMessage(`{"pipeline_intention":["build"]}`)},
 		Config: &ecc.SourceConfig{
@@ -1382,14 +1383,91 @@ func TestConftestEvaluator_FilterType_IncludeExclude(t *testing.T) {
 
 	ctx := setupTestContext(nil, nil)
 	configProvider, err := policy.NewOfflinePolicy(ctx, policy.Now)
-	assert.NoError(t, err)
+	if err != nil {
+		return nil, err
+	}
 
 	policySources := []source.PolicySource{testPolicySource{}}
-	evaluator, err := NewConftestEvaluatorWithFilterType(ctx, policySources, configProvider, sourceConfig, "include-exclude")
-	assert.NoError(t, err)
+	evaluator, err := NewConftestEvaluatorWithFilterType(ctx, policySources, configProvider, sourceConfig, filterType)
+	if err != nil {
+		return nil, err
+	}
 
-	conftestEval, ok := evaluator.(conftestEvaluator)
-	assert.True(t, ok, "evaluator should be conftestEvaluator")
+	conftestEval, ok := evaluator.(*conftestEvaluator)
+	if !ok {
+		return nil, fmt.Errorf("evaluator should be *conftestEvaluator")
+	}
+
+	return conftestEval, nil
+}
+
+// createSecurityTestRules creates test rules for security package testing
+func createSecurityTestRules() policyRules {
+	return policyRules{
+		"security.build_security_check": rule.Info{
+			Package:           "security",
+			Code:              "build_security_check",
+			PipelineIntention: []string{"build"},
+		},
+		"security.deploy_security_check": rule.Info{
+			Package:           "security",
+			Code:              "deploy_security_check",
+			PipelineIntention: []string{"deploy"},
+		},
+		"security.general_security_check": rule.Info{
+			Package: "security",
+			Code:    "general_security_check",
+			// No pipeline intention
+		},
+	}
+}
+
+// testResolverBehavior tests the behavior of a policy resolver with given expectations
+func testResolverBehavior(t *testing.T, resolver PolicyResolver, expectedInclusions map[string]bool, expectedPackageInclusions map[string]bool) {
+	rules := createSecurityTestRules()
+	result := resolver.ResolvePolicy(rules, "test-target")
+
+	// Check individual rule inclusions
+	for ruleName, expected := range expectedInclusions {
+		assert.Equal(t, expected, result.IncludedRules[ruleName],
+			"Rule %s inclusion should be %v", ruleName, expected)
+	}
+
+	// Check package inclusions
+	for packageName, expected := range expectedPackageInclusions {
+		assert.Equal(t, expected, result.IncludedPackages[packageName],
+			"Package %s inclusion should be %v", packageName, expected)
+	}
+}
+
+// createTestResolver creates a test resolver with the given configuration
+func createTestResolver(t *testing.T, ruleData string, resolverType string) PolicyResolver {
+	source := ecc.Source{
+		RuleData: &extv1.JSON{Raw: json.RawMessage(ruleData)},
+		Config: &ecc.SourceConfig{
+			Include: []string{"*"},
+		},
+	}
+
+	configProvider := &simpleConfigProvider{
+		effectiveTime: time.Now(),
+	}
+
+	switch resolverType {
+	case "ECPolicyResolver":
+		return NewECPolicyResolver(source, configProvider)
+	case "IncludeExcludePolicyResolver":
+		return NewIncludeExcludePolicyResolver(source, configProvider)
+	default:
+		t.Fatalf("Unknown resolver type: %s", resolverType)
+		return nil
+	}
+}
+
+func TestConftestEvaluator_FilterType_IncludeExclude(t *testing.T) {
+	// Test that include-exclude filter type uses IncludeExcludePolicyResolver
+	conftestEval, err := setupFilterTypeTest(t, "include-exclude")
+	assert.NoError(t, err)
 
 	// Should use IncludeExcludePolicyResolver which ignores pipeline intentions
 	_, isIncludeExcludeResolver := conftestEval.policyResolver.(*IncludeExcludePolicyResolver)
@@ -1398,23 +1476,8 @@ func TestConftestEvaluator_FilterType_IncludeExclude(t *testing.T) {
 
 func TestConftestEvaluator_FilterType_Default(t *testing.T) {
 	// Test that default filter type uses IncludeExcludePolicyResolver
-	sourceConfig := ecc.Source{
-		RuleData: &extv1.JSON{Raw: json.RawMessage(`{"pipeline_intention":["build"]}`)},
-		Config: &ecc.SourceConfig{
-			Include: []string{"*"},
-		},
-	}
-
-	ctx := setupTestContext(nil, nil)
-	configProvider, err := policy.NewOfflinePolicy(ctx, policy.Now)
+	conftestEval, err := setupFilterTypeTest(t, "unknown-type")
 	assert.NoError(t, err)
-
-	policySources := []source.PolicySource{testPolicySource{}}
-	evaluator, err := NewConftestEvaluatorWithFilterType(ctx, policySources, configProvider, sourceConfig, "unknown-type")
-	assert.NoError(t, err)
-
-	conftestEval, ok := evaluator.(conftestEvaluator)
-	assert.True(t, ok, "evaluator should be conftestEvaluator")
 
 	// Should default to IncludeExcludePolicyResolver
 	_, isIncludeExcludeResolver := conftestEval.policyResolver.(*IncludeExcludePolicyResolver)
@@ -1512,101 +1575,31 @@ func TestRegoPackageWithMixedPipelineIntentions(t *testing.T) {
 	})
 
 	t.Run("ECPolicyResolver with no pipeline intention specified", func(t *testing.T) {
-		// Create a source with no pipeline intention
-		source := ecc.Source{
-			RuleData: &extv1.JSON{Raw: json.RawMessage(`{}`)},
-			Config: &ecc.SourceConfig{
-				Include: []string{"*"},
-			},
-		}
-
-		configProvider := &simpleConfigProvider{
-			effectiveTime: time.Now(),
-		}
-
-		resolver := NewECPolicyResolver(source, configProvider)
-
-		// Same rules as above
-		rules := policyRules{
-			"security.build_security_check": rule.Info{
-				Package:           "security",
-				Code:              "build_security_check",
-				PipelineIntention: []string{"build"},
-			},
-			"security.deploy_security_check": rule.Info{
-				Package:           "security",
-				Code:              "deploy_security_check",
-				PipelineIntention: []string{"deploy"},
-			},
-			"security.general_security_check": rule.Info{
-				Package: "security",
-				Code:    "general_security_check",
-				// No pipeline intention
-			},
-		}
-
-		result := resolver.ResolvePolicy(rules, "test-target")
-
 		// When no pipeline intention is specified, only rules with no pipeline intention should be included
-		assert.False(t, result.IncludedRules["build_security_check"],
-			"build_security_check should be excluded (has pipeline intention)")
-		assert.False(t, result.IncludedRules["deploy_security_check"],
-			"deploy_security_check should be excluded (has pipeline intention)")
-		assert.True(t, result.IncludedRules["general_security_check"],
-			"general_security_check should be included (no pipeline intention)")
-
-		// Verify that the security package is included (has at least one included rule)
-		assert.True(t, result.IncludedPackages["security"],
-			"security package should be included (has included rules)")
+		resolver := createTestResolver(t, `{}`, "ECPolicyResolver")
+		expectedInclusions := map[string]bool{
+			"build_security_check":   false, // has pipeline intention
+			"deploy_security_check":  false, // has pipeline intention
+			"general_security_check": true,  // no pipeline intention
+		}
+		expectedPackageInclusions := map[string]bool{
+			"security": true, // has at least one included rule
+		}
+		testResolverBehavior(t, resolver, expectedInclusions, expectedPackageInclusions)
 	})
 
 	t.Run("IncludeExcludePolicyResolver ignores pipeline intentions", func(t *testing.T) {
-		// Create a source with build pipeline intention
-		source := ecc.Source{
-			RuleData: &extv1.JSON{Raw: json.RawMessage(`{"pipeline_intention":["build"]}`)},
-			Config: &ecc.SourceConfig{
-				Include: []string{"*"},
-			},
-		}
-
-		configProvider := &simpleConfigProvider{
-			effectiveTime: time.Now(),
-		}
-
-		resolver := NewIncludeExcludePolicyResolver(source, configProvider)
-
-		// Same rules as above
-		rules := policyRules{
-			"security.build_security_check": rule.Info{
-				Package:           "security",
-				Code:              "build_security_check",
-				PipelineIntention: []string{"build"},
-			},
-			"security.deploy_security_check": rule.Info{
-				Package:           "security",
-				Code:              "deploy_security_check",
-				PipelineIntention: []string{"deploy"},
-			},
-			"security.general_security_check": rule.Info{
-				Package: "security",
-				Code:    "general_security_check",
-				// No pipeline intention
-			},
-		}
-
-		result := resolver.ResolvePolicy(rules, "test-target")
-
 		// IncludeExcludePolicyResolver should include all rules regardless of pipeline intention
-		assert.True(t, result.IncludedRules["build_security_check"],
-			"build_security_check should be included (include-exclude ignores pipeline intention)")
-		assert.True(t, result.IncludedRules["deploy_security_check"],
-			"deploy_security_check should be included (include-exclude ignores pipeline intention)")
-		assert.True(t, result.IncludedRules["general_security_check"],
-			"general_security_check should be included (include-exclude ignores pipeline intention)")
-
-		// Verify that the security package is included
-		assert.True(t, result.IncludedPackages["security"],
-			"security package should be included")
+		resolver := createTestResolver(t, `{"pipeline_intention":["build"]}`, "IncludeExcludePolicyResolver")
+		expectedInclusions := map[string]bool{
+			"build_security_check":   true, // include-exclude ignores pipeline intention
+			"deploy_security_check":  true, // include-exclude ignores pipeline intention
+			"general_security_check": true, // include-exclude ignores pipeline intention
+		}
+		expectedPackageInclusions := map[string]bool{
+			"security": true, // all rules included
+		}
+		testResolverBehavior(t, resolver, expectedInclusions, expectedPackageInclusions)
 	})
 }
 
