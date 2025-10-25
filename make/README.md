@@ -17,7 +17,7 @@ Runs comprehensive linting and static analysis using `golangci-lint` to catch:
 
 ### Enhanced Sanity Check
 ```bash
-make sanity-plus FILE="./path/to/file.go" -f make/postconditions.mk
+make sanity-plus -f make/postconditions.mk
 ```
 Runs the basic sanity check **plus** unused function detection using `find-func-refs`:
 - All benefits of `make sanity`
@@ -316,7 +316,7 @@ go test -race ./...
 | Command | Purpose | When to Use |
 |---------|---------|-------------|
 | `make sanity` | Basic linting | After any code change |
-| `make sanity-plus FILE="..."` | Enhanced linting + unused functions | Before major refactoring |
+| `make sanity-plus` | Enhanced linting + unused functions | Before major refactoring |
 | `make sanity-file FILES="..."` | File-specific linting | After changing specific files |
 | `make sanity-summary` | Detailed analysis | Before committing |
 | `make sanity-file-summary FILES="..."` | File-specific analysis | Before committing specific changes |
@@ -340,7 +340,7 @@ go test ./cmd/validate -v
 ### Example 1b: Major Refactoring with Unused Function Detection
 ```bash
 # You're doing major refactoring and want to find unused functions
-make sanity-plus FILE="./cmd/validate/image.go" -f make/postconditions.mk
+make sanity-plus -f make/postconditions.mk
 # This runs both sanity checks AND finds unused functions in the file
 ```
 

@@ -55,7 +55,7 @@ make sanity-file-summary FILES="./cmd/validate/image.go" -f make/postconditions.
 - **Optional**: `make sanity-summary -f make/postconditions.mk`
 
 ### Major Refactoring
-- **Required**: `make sanity-plus FILE="..." -f make/postconditions.mk`
+- **Required**: `make sanity-plus -f make/postconditions.mk`
 - **Required**: `make test` (for significant changes)
 
 ### New Features or Bug Fixes
@@ -115,7 +115,7 @@ make sanity-file FILES="./cmd/validate/image.go" -f make/postconditions.mk
 ```bash
 # Make significant changes
 # Then validate with unused function detection:
-make sanity-plus FILE="./cmd/validate/image.go" -f make/postconditions.mk
+make sanity-plus -f make/postconditions.mk
 
 # Run tests to ensure functionality:
 make test
@@ -174,7 +174,7 @@ make sanity-file FILES="./path/to/changed/file.go" -f make/postconditions.mk
 make sanity -f make/postconditions.mk
 
 # For major refactoring (includes unused function detection)
-make sanity-plus FILE="./path/to/changed/file.go" -f make/postconditions.mk
+make sanity-plus -f make/postconditions.mk
 ```
 
 ### 2. Before Committing
@@ -206,7 +206,7 @@ make sanity-file-summary FILES="./cmd/validate/image.go" -f make/postconditions.
 - **Optional**: `make sanity-summary -f make/postconditions.mk`
 
 ### Major Refactoring
-- **Required**: `make sanity-plus FILE="..." -f make/postconditions.mk`
+- **Required**: `make sanity-plus -f make/postconditions.mk`
 - **Required**: `make test` (for significant changes)
 
 ### New Features or Bug Fixes
@@ -266,7 +266,7 @@ make sanity-file FILES="./cmd/validate/image.go" -f make/postconditions.mk
 ```bash
 # Make significant changes
 # Then validate with unused function detection:
-make sanity-plus FILE="./cmd/validate/image.go" -f make/postconditions.mk
+make sanity-plus -f make/postconditions.mk
 
 # Run tests to ensure functionality:
 make test

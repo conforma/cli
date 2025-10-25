@@ -181,9 +181,8 @@ FFR ?= $(HOME)/go/bin/find-func-refs
 .PHONY: ffr
 ffr:
 	@test -x "$(FFR)" || { echo "find-func-refs not found at $(FFR)"; exit 1; }
-	@test -n "$(FILE)" || { echo "Usage: make ffr FILE=./path/to/file.go"; exit 1; }
-	@echo "Checking unused funcs in $(FILE)"
-	@$(FFR) -file "$(FILE)" -root . -snippet
+	@echo "Checking unused funcs"
+	@$(FFR) -all -root . -snippet
 
 # Use the current makefile for recursive calls
 THIS_MAKEFILE := $(lastword $(MAKEFILE_LIST))
@@ -191,4 +190,4 @@ THIS_MAKEFILE := $(lastword $(MAKEFILE_LIST))
 .PHONY: sanity-plus
 sanity-plus: ## Run sanity checks + unused function scan
 	@$(MAKE) -f $(THIS_MAKEFILE) sanity
-	@$(MAKE) -f $(THIS_MAKEFILE) ffr FILE="$(FILE)"
+	@$(MAKE) -f $(THIS_MAKEFILE) ffr
