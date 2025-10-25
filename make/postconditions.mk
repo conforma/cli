@@ -229,13 +229,13 @@ go-patterns-lint: revive gocyclo nestif dupl goconst misspell unparam ineffassig
 quick: fmt check-sanity ## Small/local changes: fast guard
 
 .PHONY: refactor
-refactor: fmt check-sanity ffr ## Structural changes: add unused scan
+refactor: fmt check-sanity ffr go-patterns-lint ## Structural changes: add unused scan + Go patterns
 
 .PHONY: behavior
 behavior: fmt check-sanity analysis test cover-check ## Behavior change: full quality + tests + coverage
 
 .PHONY: prepr
-prepr: analysis test cover-check report-sanity go-patterns-lint ## Pre-PR stabilization (adds deeper Go patterns)
+prepr: analysis test cover-check go-patterns-lint ## Pre-PR stabilization (adds deeper Go patterns)
 
 # --- CI / default ------------------------------------------------------------
 .PHONY: analysis
