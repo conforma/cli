@@ -1,0 +1,281 @@
+---
+alwaysApply: true
+---
+
+# Postcondition Validation Rule
+
+Every code change must be validated using the project's postcondition checks. The level of validation depends on the scope of the change: small edits, multi-file changes, refactors, or behavior-altering modifications. These checks enforce correctness, maintainability, readability, and long-term consistency.
+
+## Workflow Commands
+
+### Single File Change (small / additive)
+```bash
+make -f make/postconditions.mk check-sanity FILES="${FILE_PATH}"
+```
+
+### Multiple File Change (small refactor or feature work)
+```bash
+make -f make/postconditions.mk check-sanity
+```
+
+### Major Refactor (structure, deletes, reorganize)
+```bash
+make -f make/postconditions.mk refactor
+make test  # required
+```
+
+### Behavior Change (logic, rules, data flow changes)
+```bash
+make -f make/postconditions.mk behavior
+```
+
+### Before Commit / Pre-PR Prep
+```bash
+make -f make/postconditions.mk prepr
+```
+
+## File-Scoped Quick / Detailed Checks
+
+### Quick Check
+```bash
+make -f make/postconditions.mk check-sanity FILES="./path/to/file.go"
+```
+
+### Detailed Report
+```bash
+make -f make/postconditions.mk report-sanity FILES="./path/to/file.go"
+```
+
+### ⚠️ Important: Test File Limitations
+**DO NOT target test files directly** - they cannot be linted in isolation:
+```bash
+# ❌ WRONG - Will fail with "undefined" errors
+make -f make/postconditions.mk check-sanity FILES="./path/to/file_test.go"
+
+# ✅ CORRECT - Target the package instead
+make -f make/postconditions.mk check-sanity FILES="./path/to/package"
+
+# ✅ CORRECT - Target both source and test files together
+make -f make/postconditions.mk check-sanity FILES="./path/to/file.go ./path/to/file_test.go"
+```
+
+**Why?** Test files depend on their source files and cannot be compiled in isolation. golangci-lint's typecheck linter will fail with "undefined" errors when test files are targeted alone.
+
+## Quality Gates
+
+### Must Pass
+- golangci linters: dupl, gocyclo, goconst, unparam, ineffassign, nestif
+- no new lint errors introduced
+- tests pass if behavior changed
+
+### Should Pass
+- cyclomatic complexity < 12
+- no duplicate code expansions
+- no unused params
+- avoid nested conditional pyramids
+
+### Nice to Have
+- strings extracted to constants
+- no stutter naming (revive)
+- spelling clean (misspell)
+
+## Error Recovery
+
+### Sanity Fail
+```bash
+make -f make/postconditions.mk report-sanity
+# Or file-only:
+make -f make/postconditions.mk report-sanity FILES="${FILE_PATH}"
+```
+
+### Test Fail
+```bash
+go test ./path/to/package -v
+# Fix and re-run:
+make -f make/postconditions.mk behavior
+```
+
+## Examples
+
+### Fix Single File
+```bash
+make -f make/postconditions.mk check-sanity FILES="./cmd/validate/image.go"
+make -f make/postconditions.mk report-sanity FILES="./cmd/validate/image.go"
+```
+
+### Major Refactor
+```bash
+make -f make/postconditions.mk refactor
+make test
+make -f make/postconditions.mk report-sanity
+```
+
+### Multi-File Work
+```bash
+make -f make/postconditions.mk check-sanity
+make -f make/postconditions.mk report-sanity
+```
+
+## Success Criteria
+- check-sanity (or refactor/behavior/prepr) passes
+- no new lint errors introduced
+- tests pass where applicable
+- complexity & duplication are reasonable
+- documentation updated if behavior changed
+
+## Notes
+- Build tags (acceptance, generative, integration, unit) are intentionally *kept* for realism.
+- Prefer **file-scoped** `check-sanity` while iterating for fast feedback.
+- Use `refactor` to detect unused functions across the repo.
+- Use `behavior` when modifying actual program logic.
+
+## Decision Matrix
+
+| Change Type | Command | When to Use |
+|-------------|---------|-------------|
+| Single file edit | `make -f make/postconditions.mk check-sanity FILES="${FILE_PATH}"` | Small changes to one file |
+| Multi-file change | `make -f make/postconditions.mk check-sanity` | Multiple files, no major refactor |
+| Major refactor | `make -f make/postconditions.mk refactor && make test` | Structural changes, renames, deletions |
+| Behavior change | `make -f make/postconditions.mk behavior` | Logic changes, algorithm modifications |
+| Pre-commit | `make -f make/postconditions.mk prepr` | Before PR or review |
+
+## Always Apply
+This rule should be applied to every code change to ensure quality gates are met and the codebase maintains its standards.# Postcondition Validation Rule
+
+Every code change must be validated using the project's postcondition checks. The level of validation depends on the scope of the change: small edits, multi-file changes, refactors, or behavior-altering modifications. These checks enforce correctness, maintainability, readability, and long-term consistency.
+
+## Workflow Commands
+
+### Single File Change (small / additive)
+```bash
+make -f make/postconditions.mk check-sanity FILES="${FILE_PATH}"
+```
+
+### Multiple File Change (small refactor or feature work)
+```bash
+make -f make/postconditions.mk check-sanity
+```
+
+### Major Refactor (structure, deletes, reorganize)
+```bash
+make -f make/postconditions.mk refactor
+make test  # required
+```
+
+### Behavior Change (logic, rules, data flow changes)
+```bash
+make -f make/postconditions.mk behavior
+```
+
+### Before Commit / Pre-PR Prep
+```bash
+make -f make/postconditions.mk prepr
+```
+
+## File-Scoped Quick / Detailed Checks
+
+### Quick Check
+```bash
+make -f make/postconditions.mk check-sanity FILES="./path/to/file.go"
+```
+
+### Detailed Report
+```bash
+make -f make/postconditions.mk report-sanity FILES="./path/to/file.go"
+```
+
+### ⚠️ Important: Test File Limitations
+**DO NOT target test files directly** - they cannot be linted in isolation:
+```bash
+# ❌ WRONG - Will fail with "undefined" errors
+make -f make/postconditions.mk check-sanity FILES="./path/to/file_test.go"
+
+# ✅ CORRECT - Target the package instead
+make -f make/postconditions.mk check-sanity FILES="./path/to/package"
+
+# ✅ CORRECT - Target both source and test files together
+make -f make/postconditions.mk check-sanity FILES="./path/to/file.go ./path/to/file_test.go"
+```
+
+**Why?** Test files depend on their source files and cannot be compiled in isolation. golangci-lint's typecheck linter will fail with "undefined" errors when test files are targeted alone.
+
+## Quality Gates
+
+### Must Pass
+- golangci linters: dupl, gocyclo, goconst, unparam, ineffassign, nestif
+- no new lint errors introduced
+- tests pass if behavior changed
+
+### Should Pass
+- cyclomatic complexity < 12
+- no duplicate code expansions
+- no unused params
+- avoid nested conditional pyramids
+
+### Nice to Have
+- strings extracted to constants
+- no stutter naming (revive)
+- spelling clean (misspell)
+
+## Error Recovery
+
+### Sanity Fail
+```bash
+make -f make/postconditions.mk report-sanity
+# Or file-only:
+make -f make/postconditions.mk report-sanity FILES="${FILE_PATH}"
+```
+
+### Test Fail
+```bash
+go test ./path/to/package -v
+# Fix and re-run:
+make -f make/postconditions.mk behavior
+```
+
+## Examples
+
+### Fix Single File
+```bash
+make -f make/postconditions.mk check-sanity FILES="./cmd/validate/image.go"
+make -f make/postconditions.mk report-sanity FILES="./cmd/validate/image.go"
+```
+
+### Major Refactor
+```bash
+make -f make/postconditions.mk refactor
+make test
+make -f make/postconditions.mk report-sanity
+```
+
+### Multi-File Work
+```bash
+make -f make/postconditions.mk check-sanity
+make -f make/postconditions.mk report-sanity
+```
+
+## Success Criteria
+- check-sanity (or refactor/behavior/prepr) passes
+- no new lint errors introduced
+- tests pass where applicable
+- complexity & duplication are reasonable
+- documentation updated if behavior changed
+
+## Notes
+- Build tags (acceptance, generative, integration, unit) are intentionally *kept* for realism.
+- Prefer **file-scoped** `check-sanity` while iterating for fast feedback.
+- Use `refactor` to detect unused functions across the repo.
+- Use `behavior` when modifying actual program logic.
+
+## Decision Matrix
+
+| Change Type | Command | When to Use |
+|-------------|---------|-------------|
+| Single file edit | `make -f make/postconditions.mk check-sanity FILES="${FILE_PATH}"` | Small changes to one file |
+| Multi-file change | `make -f make/postconditions.mk check-sanity` | Multiple files, no major refactor |
+| Major refactor | `make -f make/postconditions.mk refactor && make test` | Structural changes, renames, deletions |
+| Behavior change | `make -f make/postconditions.mk behavior` | Logic changes, algorithm modifications |
+| Pre-commit | `make -f make/postconditions.mk prepr` | Before PR or review |
+
+## Always Apply
+This rule should be applied to every code change to ensure quality gates are met and the codebase maintains its standards.
