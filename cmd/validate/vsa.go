@@ -452,14 +452,9 @@ func performVSAValidationForSingle(ctx context.Context, identifier string, data 
 }
 
 // handleFallbackValidation handles the fallback validation logic
-func handleFallbackValidation(ctx context.Context, identifier string, result *vsa.ValidationResult, data *validateVSAData, fs afero.Fs) error {
+func handleFallbackValidation(ctx context.Context, imageRef string, result *vsa.ValidationResult, data *validateVSAData, fs afero.Fs) error {
 	printVSAInfo(os.Stdout, "Falling back to image validation...")
-
-	// Extract image reference from VSA identifier for fallback
-	imageRef, extractErr := vsa.ExtractImageFromVSAIdentifier(identifier)
-	if extractErr != nil {
-		return fmt.Errorf("fallback validation not supported for file paths: %s", identifier)
-	}
+	printVSAInfo(os.Stdout, fmt.Sprintf("Image reference: %s", imageRef))
 
 	// Create worker context for fallback validation
 	workerFallbackContext, workerErr := vsa.CreateWorkerFallbackContext(ctx, data.fallbackContext.FallbackPolicy)
@@ -467,17 +462,8 @@ func handleFallbackValidation(ctx context.Context, identifier string, result *vs
 		return fmt.Errorf("failed to create fallback context: %w", workerErr)
 	}
 
-	// Create fallback config
-	fallbackConfig := &vsa.FallbackConfig{
-		FallbackToImageValidation: data.fallbackToImageValidation,
-		FallbackPublicKey:         data.fallbackPublicKey,
-		PolicyConfig:              data.policyConfig,
-		EffectiveTime:             data.effectiveTime,
-		Info:                      data.info,
-	}
-
 	// Use the common fallback validation logic
-	fallbackResult := vsa.PerformFallbackValidation(ctx, fallbackConfig, data.fallbackContext, imageRef, "single-vsa-component", result, "", workerFallbackContext)
+	fallbackResult := vsa.PerformFallbackValidation(result, "")
 	if fallbackResult.Error != nil {
 		return fallbackResult.Error
 	}
@@ -831,6 +817,7 @@ func validateImageFallbackWithWorkerContext(ctx context.Context, data *validateV
 
 	// Perform image validation using precomputed context and worker-specific evaluators
 	log.Debugf("🔄 Fallback: Starting image validation...")
+	log.Debugf("🔄 Fallback: Using fallback policy: %s", data.fallbackContext.FallbackPolicy)
 	result, err := image.ValidateImage(ctx, comp, spec, data.fallbackContext.FallbackPolicy, workerFallbackContext.Evaluators, data.info)
 	if err != nil {
 		log.Debugf("🔄 Fallback: Image validation failed with error: %v", err)
@@ -910,17 +897,8 @@ func handleComponentFallback(ctx context.Context, component app.SnapshotComponen
 		predicateStatus = result.PredicateOutcome
 	}
 
-	// Create fallback config
-	fallbackConfig := &vsa.FallbackConfig{
-		FallbackToImageValidation: data.fallbackToImageValidation,
-		FallbackPublicKey:         data.fallbackPublicKey,
-		PolicyConfig:              data.policyConfig,
-		EffectiveTime:             data.effectiveTime,
-		Info:                      data.info,
-	}
-
 	// Use the common fallback validation logic
-	fallbackResult := vsa.PerformFallbackValidation(ctx, fallbackConfig, data.fallbackContext, imageRef, component.Name, result, predicateStatus, workerFallbackContext)
+	fallbackResult := vsa.PerformFallbackValidation(result, predicateStatus)
 	if fallbackResult.Error != nil {
 		return createErrorResult(component, fallbackResult.Error)
 	}

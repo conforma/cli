@@ -113,34 +113,15 @@ func TestShouldTriggerFallback(t *testing.T) {
 }
 
 func TestPerformFallbackValidation(t *testing.T) {
-	ctx := context.Background()
-
 	tests := []struct {
-		name                  string
-		config                *FallbackConfig
-		fallbackContext       *FallbackValidationContext
-		imageRef              string
-		componentName         string
-		result                *ValidationResult
-		predicateStatus       string
-		workerFallbackContext *WorkerFallbackContext
-		expectedVSAResult     *ValidationResult
-		expectedError         error
+		name              string
+		result            *ValidationResult
+		predicateStatus   string
+		expectedVSAResult *ValidationResult
+		expectedError     error
 	}{
 		{
 			name: "With VSA result - should use provided result",
-			config: &FallbackConfig{
-				FallbackToImageValidation: true,
-				FallbackPublicKey:         "test-key",
-				PolicyConfig:              "test-policy",
-				EffectiveTime:             "2023-01-01T00:00:00Z",
-				Info:                      false,
-			},
-			fallbackContext: &FallbackValidationContext{
-				PolicyConfiguration: "test-policy",
-			},
-			imageRef:      "test-image:latest",
-			componentName: "test-component",
 			result: &ValidationResult{
 				Passed:            false,
 				Message:           "VSA validation failed",
@@ -148,9 +129,6 @@ func TestPerformFallbackValidation(t *testing.T) {
 				PredicateOutcome:  "failed",
 			},
 			predicateStatus: "failed",
-			workerFallbackContext: &WorkerFallbackContext{
-				Evaluators: []evaluator.Evaluator{},
-			},
 			expectedVSAResult: &ValidationResult{
 				Passed:            false,
 				Message:           "VSA validation failed",
@@ -160,24 +138,9 @@ func TestPerformFallbackValidation(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name: "Without VSA result - should create minimal result",
-			config: &FallbackConfig{
-				FallbackToImageValidation: true,
-				FallbackPublicKey:         "test-key",
-				PolicyConfig:              "test-policy",
-				EffectiveTime:             "2023-01-01T00:00:00Z",
-				Info:                      false,
-			},
-			fallbackContext: &FallbackValidationContext{
-				PolicyConfiguration: "test-policy",
-			},
-			imageRef:        "test-image:latest",
-			componentName:   "test-component",
+			name:            "Without VSA result - should create minimal result",
 			result:          nil, // No VSA result
 			predicateStatus: "failed",
-			workerFallbackContext: &WorkerFallbackContext{
-				Evaluators: []evaluator.Evaluator{},
-			},
 			expectedVSAResult: &ValidationResult{
 				Passed:            false,
 				Message:           "VSA validation failed",
@@ -188,18 +151,6 @@ func TestPerformFallbackValidation(t *testing.T) {
 		},
 		{
 			name: "With successful VSA result - should use provided result",
-			config: &FallbackConfig{
-				FallbackToImageValidation: true,
-				FallbackPublicKey:         "test-key",
-				PolicyConfig:              "test-policy",
-				EffectiveTime:             "2023-01-01T00:00:00Z",
-				Info:                      false,
-			},
-			fallbackContext: &FallbackValidationContext{
-				PolicyConfiguration: "test-policy",
-			},
-			imageRef:      "test-image:latest",
-			componentName: "test-component",
 			result: &ValidationResult{
 				Passed:            true,
 				Message:           "VSA validation passed",
@@ -207,9 +158,6 @@ func TestPerformFallbackValidation(t *testing.T) {
 				PredicateOutcome:  "passed",
 			},
 			predicateStatus: "passed",
-			workerFallbackContext: &WorkerFallbackContext{
-				Evaluators: []evaluator.Evaluator{},
-			},
 			expectedVSAResult: &ValidationResult{
 				Passed:            true,
 				Message:           "VSA validation passed",
@@ -223,14 +171,8 @@ func TestPerformFallbackValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fallbackResult := PerformFallbackValidation(
-				ctx,
-				tt.config,
-				tt.fallbackContext,
-				tt.imageRef,
-				tt.componentName,
 				tt.result,
 				tt.predicateStatus,
-				tt.workerFallbackContext,
 			)
 
 			// Verify the result structure
@@ -426,7 +368,6 @@ func TestShouldTriggerFallback_EdgeCases(t *testing.T) {
 
 // Test PerformFallbackValidation with different predicate statuses
 func TestPerformFallbackValidation_PredicateStatuses(t *testing.T) {
-	ctx := context.Background()
 
 	tests := []struct {
 		name            string
@@ -461,23 +402,9 @@ func TestPerformFallbackValidation_PredicateStatuses(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := &FallbackConfig{
-				FallbackToImageValidation: true,
-				FallbackPublicKey:         "test-key",
-				PolicyConfig:              "test-policy",
-				EffectiveTime:             "2023-01-01T00:00:00Z",
-				Info:                      false,
-			}
-
 			fallbackResult := PerformFallbackValidation(
-				ctx,
-				config,
-				nil, // fallbackContext
-				"test-image:latest",
-				"test-component",
 				tt.result,
 				tt.predicateStatus,
-				nil, // workerFallbackContext
 			)
 
 			require.NotNil(t, fallbackResult)

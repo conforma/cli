@@ -35,7 +35,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/conforma/cli/internal/evaluator"
 	"github.com/conforma/cli/internal/output"
 	"github.com/conforma/cli/internal/validate/vsa"
 )
@@ -1779,25 +1778,15 @@ func (m *mockOutputFormatter) PrintText(writer io.Writer) error {
 
 // TestPerformFallbackValidation tests the extracted fallback validation function
 func TestPerformFallbackValidation(t *testing.T) {
-	ctx := context.Background()
-
-	// Create a mock worker fallback context
-	workerContext := &vsa.WorkerFallbackContext{
-		Evaluators: []evaluator.Evaluator{}, // Empty for testing
-	}
 
 	tests := []struct {
 		name            string
-		imageRef        string
-		componentName   string
 		result          *vsa.ValidationResult
 		predicateStatus string
 		expectError     bool
 	}{
 		{
-			name:          "successful fallback with VSA result",
-			imageRef:      "test-image:latest",
-			componentName: "test-component",
+			name: "successful fallback with VSA result",
 			result: &vsa.ValidationResult{
 				Passed:  false,
 				Message: "VSA validation failed",
@@ -1807,16 +1796,12 @@ func TestPerformFallbackValidation(t *testing.T) {
 		},
 		{
 			name:            "successful fallback without VSA result",
-			imageRef:        "test-image:latest",
-			componentName:   "test-component",
 			result:          nil,
 			predicateStatus: "failed",
 			expectError:     false,
 		},
 		{
 			name:            "fallback with empty predicate status",
-			imageRef:        "test-image:latest",
-			componentName:   "test-component",
 			result:          nil,
 			predicateStatus: "",
 			expectError:     false,
@@ -1827,16 +1812,7 @@ func TestPerformFallbackValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Note: This test will fail in practice because it requires actual
 			// fallback context and evaluators, but it tests the function structure
-			// Create fallback config
-			fallbackConfig := &vsa.FallbackConfig{
-				FallbackToImageValidation: true,
-				FallbackPublicKey:         "test-key",
-				PolicyConfig:              "test-policy",
-				EffectiveTime:             "2023-01-01T00:00:00Z",
-				Info:                      false,
-			}
-
-			fallbackResult := vsa.PerformFallbackValidation(ctx, fallbackConfig, nil, tt.imageRef, tt.componentName, tt.result, tt.predicateStatus, workerContext)
+			fallbackResult := vsa.PerformFallbackValidation(tt.result, tt.predicateStatus)
 
 			if tt.expectError {
 				assert.Error(t, fallbackResult.Error)
@@ -1852,19 +1828,8 @@ func TestPerformFallbackValidation(t *testing.T) {
 
 // TestPerformFallbackValidation_ErrorHandling tests error handling in fallback validation
 func TestPerformFallbackValidation_ErrorHandling(t *testing.T) {
-	ctx := context.Background()
-
 	// Test with nil worker context - should not cause error as function only handles VSA result logic
-	// Create fallback config
-	fallbackConfig := &vsa.FallbackConfig{
-		FallbackToImageValidation: true,
-		FallbackPublicKey:         "test-key",
-		PolicyConfig:              "test-policy",
-		EffectiveTime:             "2023-01-01T00:00:00Z",
-		Info:                      false,
-	}
-
-	fallbackResult := vsa.PerformFallbackValidation(ctx, fallbackConfig, nil, "test-image:latest", "test-component", nil, "failed", nil)
+	fallbackResult := vsa.PerformFallbackValidation(nil, "failed")
 	// The function now only handles VSA result logic, so it should not return an error
 	assert.NoError(t, fallbackResult.Error)
 	assert.NotNil(t, fallbackResult.VSAResult)

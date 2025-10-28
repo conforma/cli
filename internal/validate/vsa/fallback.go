@@ -83,7 +83,7 @@ func ShouldTriggerFallback(err error, result *ValidationResult) bool {
 
 // performFallbackValidation performs the common fallback validation logic
 // Note: This function now only handles the VSA result logic, image validation is handled in CLI layer
-func PerformFallbackValidation(ctx context.Context, config *FallbackConfig, fallbackContext *FallbackValidationContext, imageRef string, componentName string, result *ValidationResult, predicateStatus string, workerFallbackContext *WorkerFallbackContext) *FallbackResult {
+func PerformFallbackValidation(result *ValidationResult, predicateStatus string) *FallbackResult {
 	// Use the actual VSA result for fallback case
 	// If we have a result, use it; otherwise create a minimal result
 	var vsaResult *ValidationResult

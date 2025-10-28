@@ -931,36 +931,6 @@ func ExtractDigestFromImageRef(imageRef string) (string, error) {
 	return imageRef, nil
 }
 
-// ExtractImageFromVSAIdentifier extracts the image reference from VSA identifier
-// This function is used for fallback validation when VSA validation fails
-func ExtractImageFromVSAIdentifier(identifier string) (string, error) {
-	// Handle empty identifier specially
-	if identifier == "" {
-		return "", nil
-	}
-
-	identifierType := DetectIdentifierType(identifier)
-
-	switch identifierType {
-	case IdentifierImageDigest:
-		// Convert digest to image reference
-		// e.g., registry/image@sha256:abc123 -> registry/image:tag
-		return ConvertDigestToImageRef(identifier)
-	case IdentifierImageReference:
-		// Check if it's actually a file path that was incorrectly detected as image reference
-		if IsFilePathLike(identifier) {
-			return "", fmt.Errorf("fallback validation not supported for file paths: %s", identifier)
-		}
-		// Already an image reference
-		return identifier, nil
-	case IdentifierFile:
-		// Cannot extract image from file path - fallback not supported
-		return "", fmt.Errorf("fallback validation not supported for file paths: %s", identifier)
-	default:
-		return "", fmt.Errorf("fallback validation not supported for identifier type: %s", identifier)
-	}
-}
-
 // isFilePathLike checks if an identifier looks like a file path
 // This handles the case where name.ParseReference incorrectly accepts file paths as valid image references
 func IsFilePathLike(identifier string) bool {
@@ -986,29 +956,4 @@ func IsFilePathLike(identifier string) bool {
 	}
 
 	return false
-}
-
-// ConvertDigestToImageRef converts a digest to an image reference
-// This is a simplified implementation that attempts to construct a reasonable image reference
-func ConvertDigestToImageRef(digest string) (string, error) {
-	// If the digest is already in the format registry/image@sha256:abc123,
-	// we can extract the repository part and construct a tag reference
-	if strings.Contains(digest, "@") {
-		parts := strings.Split(digest, "@")
-		if len(parts) == 2 {
-			repository := parts[0]
-			// Try to construct a reasonable tag reference
-			// This is a best-effort approach since we don't have the original tag
-			imageRef := repository + ":latest"
-
-			// Validate that the constructed reference is valid
-			if _, err := name.ParseReference(imageRef); err == nil {
-				return imageRef, nil
-			}
-		}
-	}
-
-	// If we can't convert the digest to an image reference,
-	// return an error as fallback is not supported for pure digests
-	return "", fmt.Errorf("fallback validation: cannot convert digest to image reference: %s", digest)
 }
