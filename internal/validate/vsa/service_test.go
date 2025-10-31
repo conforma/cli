@@ -406,8 +406,8 @@ func TestService_ProcessComponentVSA_UnsignedMode(t *testing.T) {
 		Successes:  []evaluator.Result{{Message: "test success"}},
 	}
 
-	// Create service with nil signer (unsigned mode)
-	service := NewServiceWithFS(nil, fs, "https://github.com/test/policy", nil)
+	// Create service with unsigned mode enabled
+	service := NewServiceWithOptions(nil, fs, "https://github.com/test/policy", nil, true)
 
 	// Test unsigned processing
 	predicatePath, err := service.ProcessComponentVSA(ctx, report, comp, "https://github.com/test/repo", "sha256:testdigest")
@@ -443,8 +443,8 @@ func TestService_ProcessSnapshotVSA_UnsignedMode(t *testing.T) {
 		},
 	}
 
-	// Create service with nil signer (unsigned mode)
-	service := NewServiceWithFS(nil, fs, "https://github.com/test/policy", nil)
+	// Create service with unsigned mode enabled
+	service := NewServiceWithOptions(nil, fs, "https://github.com/test/policy", nil, true)
 
 	// Test unsigned processing
 	predicatePath, err := service.ProcessSnapshotVSA(ctx, report)

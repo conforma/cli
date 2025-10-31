@@ -39,6 +39,7 @@ type Service struct {
 	fs           afero.Fs
 	policySource string
 	policy       PublicKeyProvider
+	unsignedMode bool // Whether to create unsigned VSAs (raw predicates)
 }
 
 // NewServiceWithFS creates a new VSA service with the given signer and filesystem
@@ -48,6 +49,18 @@ func NewServiceWithFS(signer *Signer, fs afero.Fs, policySource string, policy P
 		fs:           fs,
 		policySource: policySource,
 		policy:       policy,
+		unsignedMode: false, // Default to signed mode
+	}
+}
+
+// NewServiceWithOptions creates a new VSA service with explicit options including unsigned mode
+func NewServiceWithOptions(signer *Signer, fs afero.Fs, policySource string, policy PublicKeyProvider, unsignedMode bool) *Service {
+	return &Service{
+		signer:       signer,
+		fs:           fs,
+		policySource: policySource,
+		policy:       policy,
+		unsignedMode: unsignedMode,
 	}
 }
 
@@ -66,8 +79,8 @@ func (s *Service) ProcessComponentVSA(ctx context.Context, report applicationsna
 		return "", fmt.Errorf("failed to generate and write component Predicate: %w", err)
 	}
 
-	// If signing is disabled, return the raw predicate path
-	if s.signer == nil {
+	// If unsigned mode is enabled, return the raw predicate path
+	if s.unsignedMode {
 		log.WithFields(log.Fields{
 			"predicate_path": writtenPath,
 		}).Info("[VSA] Component Predicate written (signing disabled)")
@@ -114,8 +127,8 @@ func (s *Service) ProcessSnapshotVSA(ctx context.Context, report applicationsnap
 		return "", fmt.Errorf("failed to calculate digest for snapshot Predicate: %w", err)
 	}
 
-	// If signing is disabled, return the raw predicate path
-	if s.signer == nil {
+	// If unsigned mode is enabled, return the raw predicate path
+	if s.unsignedMode {
 		log.WithFields(log.Fields{
 			"predicate_path": writtenPath,
 		}).Info("[VSA] Snapshot Predicate written (signing disabled)")

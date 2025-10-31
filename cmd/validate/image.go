@@ -516,8 +516,8 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 					}
 				}
 
-				// Create VSA service
-				vsaService := vsa.NewServiceWithFS(signer, utils.FS(cmd.Context()), data.policySource, data.policy)
+				// Create VSA service with explicit unsigned mode setting
+				vsaService := vsa.NewServiceWithOptions(signer, utils.FS(cmd.Context()), data.policySource, data.policy, data.disableVSASigning)
 
 				// Define helper functions for getting git URL and digest
 				getGitURL := func(comp applicationsnapshot.Component) string {
