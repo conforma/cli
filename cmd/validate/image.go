@@ -75,16 +75,17 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 		snapshot                    string
 		spec                        *app.SnapshotSpec
 		// Only used to pass the expansion info to the report. Not a cli flag.
-		expansion     *applicationsnapshot.ExpansionInfo
-		strict        bool
-		images        string
-		noColor       bool
-		forceColor    bool
-		workers       int
-		vsaEnabled    bool
-		vsaSigningKey string
-		vsaUpload     []string
-		vsaExpiration time.Duration
+		expansion        *applicationsnapshot.ExpansionInfo
+		strict           bool
+		images           string
+		noColor          bool
+		forceColor       bool
+		workers          int
+		vsaEnabled       bool
+		vsaSigningKey    string
+		vsaUpload        []string
+		vsaExpiration    time.Duration
+		disableVSASigning bool
 	}{
 		strict:        true,
 		workers:       5,
@@ -311,6 +312,11 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				data.policy = p
 			}
 
+			// Validate VSA flags
+			if data.vsaEnabled && !data.disableVSASigning && data.vsaSigningKey == "" {
+				allErrors = errors.Join(allErrors, fmt.Errorf("--vsa-signing-key is required when --vsa is enabled and --disable-vsa-signing is not set"))
+			}
+
 			return
 		},
 
@@ -497,11 +503,17 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 			}
 
 			if data.vsaEnabled {
-				// Use the signer function that supports both file and k8s:// URLs
-				signer, err := vsa.NewSigner(cmd.Context(), data.vsaSigningKey, utils.FS(cmd.Context()))
-				if err != nil {
-					log.Error(err)
-					return err
+				var signer *vsa.Signer
+				var err error
+
+				// Only create signer if VSA signing is enabled
+				if !data.disableVSASigning {
+					// Use the signer function that supports both file and k8s:// URLs
+					signer, err = vsa.NewSigner(cmd.Context(), data.vsaSigningKey, utils.FS(cmd.Context()))
+					if err != nil {
+						log.Error(err)
+						return err
+					}
 				}
 
 				// Create VSA service
@@ -539,23 +551,31 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 					if len(data.vsaUpload) > 0 {
 						log.Infof("[VSA] Starting upload to %d storage backend(s)", len(data.vsaUpload))
 
-						// Upload component VSA envelopes
-						for imageRef, envelopePath := range vsaResult.ComponentEnvelopes {
-							uploadErr := vsa.UploadVSAEnvelope(cmd.Context(), envelopePath, data.vsaUpload, signer)
+						// Upload component VSA envelopes (or raw predicates if signing is disabled)
+						for imageRef, filePath := range vsaResult.ComponentEnvelopes {
+							uploadErr := vsa.UploadVSAEnvelope(cmd.Context(), filePath, data.vsaUpload, signer)
 							if uploadErr != nil {
 								log.Errorf("[VSA] Upload failed for component %s: %v", imageRef, uploadErr)
 							} else {
-								log.Infof("[VSA] Uploaded Component VSA")
+								if data.disableVSASigning {
+									log.Infof("[VSA] Uploaded Component VSA (raw predicate)")
+								} else {
+									log.Infof("[VSA] Uploaded Component VSA (signed envelope)")
+								}
 							}
 						}
 
-						// Upload snapshot VSA envelope if it exists
+						// Upload snapshot VSA envelope (or raw predicate if signing is disabled) if it exists
 						if vsaResult.SnapshotEnvelope != "" {
 							uploadErr := vsa.UploadVSAEnvelope(cmd.Context(), vsaResult.SnapshotEnvelope, data.vsaUpload, signer)
 							if uploadErr != nil {
 								log.Errorf("[VSA] Upload failed for snapshot: %v", uploadErr)
 							} else {
-								log.Infof("[VSA] Uploaded Snapshot VSA")
+								if data.disableVSASigning {
+									log.Infof("[VSA] Uploaded Snapshot VSA (raw predicate)")
+								} else {
+									log.Infof("[VSA] Uploaded Snapshot VSA (signed envelope)")
+								}
 							}
 						}
 					} else {
@@ -673,6 +693,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 	cmd.Flags().StringVar(&data.vsaSigningKey, "vsa-signing-key", "", "Path to the private key for signing the VSA. Supports file paths and Kubernetes secret references (k8s://namespace/secret-name/key-field).")
 	cmd.Flags().StringSliceVar(&data.vsaUpload, "vsa-upload", nil, "Storage backends for VSA upload. Format: backend@url?param=value. Examples: rekor@https://rekor.sigstore.dev, local@./vsa-dir")
 	cmd.Flags().DurationVar(&data.vsaExpiration, "vsa-expiration", data.vsaExpiration, "Expiration threshold for existing VSAs. If a valid VSA exists and is newer than this threshold, validation will be skipped. (default 168h)")
+	cmd.Flags().BoolVar(&data.disableVSASigning, "disable-vsa-signing", false, "Upload raw VSA attestation without wrapping it in a signed DSSE envelope.")
 
 	if len(data.input) > 0 || len(data.filePath) > 0 || len(data.images) > 0 {
 		if err := cmd.MarkFlagRequired("image"); err != nil {

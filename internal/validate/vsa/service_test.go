@@ -384,3 +384,79 @@ func TestService_ProcessAllVSAs_PartialSuccess(t *testing.T) {
 	assert.NotEmpty(t, result.SnapshotEnvelope, "SnapshotEnvelope should be processed even with component failures")
 	assert.Contains(t, result.SnapshotEnvelope, ".intoto.jsonl", "Snapshot envelope should be a .intoto.jsonl file")
 }
+
+func TestService_ProcessComponentVSA_UnsignedMode(t *testing.T) {
+	ctx := context.Background()
+	fs := afero.NewMemMapFs()
+
+	// Create test data
+	report := applicationsnapshot.Report{
+		Success: true,
+		Policy:  ecc.EnterpriseContractPolicySpec{},
+	}
+
+	comp := applicationsnapshot.Component{
+		SnapshotComponent: app.SnapshotComponent{
+			Name:           "test-component",
+			ContainerImage: "quay.io/test/image:tag",
+		},
+		Success:    true,
+		Violations: []evaluator.Result{},
+		Warnings:   []evaluator.Result{},
+		Successes:  []evaluator.Result{{Message: "test success"}},
+	}
+
+	// Create service with nil signer (unsigned mode)
+	service := NewServiceWithFS(nil, fs, "https://github.com/test/policy", nil)
+
+	// Test unsigned processing
+	predicatePath, err := service.ProcessComponentVSA(ctx, report, comp, "https://github.com/test/repo", "sha256:testdigest")
+
+	assert.NoError(t, err)
+	assert.NotEmpty(t, predicatePath)
+	// In unsigned mode, should return raw predicate path, not envelope
+	assert.Contains(t, predicatePath, "vsa-test-component.json")
+	assert.NotContains(t, predicatePath, ".intoto.jsonl")
+
+	// Verify the predicate file exists and contains expected content
+	exists, err := afero.Exists(fs, predicatePath)
+	assert.NoError(t, err)
+	assert.True(t, exists, "Predicate file should exist")
+}
+
+func TestService_ProcessSnapshotVSA_UnsignedMode(t *testing.T) {
+	ctx := context.Background()
+	fs := afero.NewMemMapFs()
+
+	// Create test data
+	report := applicationsnapshot.Report{
+		Success: true,
+		Policy:  ecc.EnterpriseContractPolicySpec{},
+		Components: []applicationsnapshot.Component{
+			{
+				SnapshotComponent: app.SnapshotComponent{
+					Name:           "test-component",
+					ContainerImage: "quay.io/test/image:tag",
+				},
+				Success: true,
+			},
+		},
+	}
+
+	// Create service with nil signer (unsigned mode)
+	service := NewServiceWithFS(nil, fs, "https://github.com/test/policy", nil)
+
+	// Test unsigned processing
+	predicatePath, err := service.ProcessSnapshotVSA(ctx, report)
+
+	assert.NoError(t, err)
+	assert.NotEmpty(t, predicatePath)
+	// In unsigned mode, should return raw predicate path, not envelope
+	assert.Contains(t, predicatePath, "snapshot-vsa.json")
+	assert.NotContains(t, predicatePath, ".intoto.jsonl")
+
+	// Verify the predicate file exists
+	exists, err := afero.Exists(fs, predicatePath)
+	assert.NoError(t, err)
+	assert.True(t, exists, "Predicate file should exist")
+}

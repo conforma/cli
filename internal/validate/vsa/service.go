@@ -66,6 +66,14 @@ func (s *Service) ProcessComponentVSA(ctx context.Context, report applicationsna
 		return "", fmt.Errorf("failed to generate and write component Predicate: %w", err)
 	}
 
+	// If signing is disabled, return the raw predicate path
+	if s.signer == nil {
+		log.WithFields(log.Fields{
+			"predicate_path": writtenPath,
+		}).Info("[VSA] Component Predicate written (signing disabled)")
+		return writtenPath, nil
+	}
+
 	// Create attestor and attest Predicate
 	// Use the image reference (without digest) as the repo for the subject name
 	imageRef := comp.ContainerImage
@@ -104,6 +112,14 @@ func (s *Service) ProcessSnapshotVSA(ctx context.Context, report applicationsnap
 	digest, err := applicationsnapshot.GetVSAPredicateDigest(s.fs, writtenPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to calculate digest for snapshot Predicate: %w", err)
+	}
+
+	// If signing is disabled, return the raw predicate path
+	if s.signer == nil {
+		log.WithFields(log.Fields{
+			"predicate_path": writtenPath,
+		}).Info("[VSA] Snapshot Predicate written (signing disabled)")
+		return writtenPath, nil
 	}
 
 	// Create attestor and attest Predicate
