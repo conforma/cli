@@ -1,0 +1,91 @@
+= verify-conforma-vsa-release-ta
+
+Version: 0.1
+
+== Synopsis
+
+Validates a Snapshot using Conforma in two phases: 1) `ec validate vsa` (CLI will fall back to `validate image` if VSA missing/expired) 2) `ec validate image` with release-time rules only (pipeline_intention=release)
+
+
+== Params
+[horizontal]
+
+*SNAPSHOT_FILENAME* (`string`):: The filename of the Snapshot located within the trusted artifact
+*SOURCE_DATA_ARTIFACT* (`string`):: Trusted Artifact to use to obtain the Snapshot to validate.
+*POLICY_CONFIGURATION* (`string`):: Name of the policy configuration (EnterpriseContractPolicy
+resource) to use. `namespace/name` or just `name`. Can also be a
+Git URL, e.g. `github.com/conforma/config//slsa3`.
+
++
+*Default*: `enterprise-contract-service/default`
+*PUBLIC_KEY* (`string`):: Public key used to verify signatures. Must be a valid k8s cosign reference (e.g. k8s://my-ns/my-secret) where the secret contains `cosign.pub`.
+
+*VSA_PUBLIC_KEY* (`string`):: Public key used to verify signatures. Must be a valid k8s cosign reference (e.g. k8s://my-ns/my-secret) where the secret contains `cosign.pub`.
+
+*REKOR_HOST* (`string`):: Rekor host for transparency log lookups
+*IGNORE_REKOR* (`string`):: Skip Rekor transparency log checks during validation.
++
+*Default*: `true`
+*TUF_MIRROR* (`string`):: TUF mirror URL. Provide a value when NOT using public sigstore deployment.
+*SSL_CERT_DIR* (`string`):: Extra certs path(s) for external services. Useful with local
+registries/Rekor. Multiple paths can be provided using `:`.
+
+*CA_TRUST_CONFIGMAP_NAME* (`string`):: Name of the ConfigMap to read CA bundle data from.
++
+*Default*: `trusted-ca`
+*CA_TRUST_CONFIG_MAP_KEY* (`string`):: Key in the ConfigMap that contains the CA bundle data.
++
+*Default*: `ca-bundle.crt`
+*INFO* (`string`):: Include rule titles/descriptions in output. Set to "false" to disable.
++
+*Default*: `true`
+*STRICT* (`string`):: Fail the task if policy fails. Set to "false" to disable.
++
+*Default*: `true`
+*HOMEDIR* (`string`):: Value for the HOME environment variable.
++
+*Default*: `/tekton/home`
+*EFFECTIVE_TIME* (`string`):: Run policy checks with the provided time.
++
+*Default*: `now`
+*EXTRA_RULE_DATA* (`string`):: Merge additional Rego variables into the policy data. Syntax: key=val,key2=val2
+
+*TIMEOUT* (`string`):: Deprecated; ignored by the task. EC is run without a timeout (use Tekton timeouts).
+
+*WORKERS* (`string`):: Number of parallel workers to use for policy evaluation.
++
+*Default*: `4`
+*SINGLE_COMPONENT* (`string`):: Reduce Snapshot to only the component whose build created the Snapshot
++
+*Default*: `false`
+*SINGLE_COMPONENT_CUSTOM_RESOURCE* (`string`):: Kind/name of the Kubernetes resource to query labels when single component mode is enabled, e.g. pr/somepipeline.
+
++
+*Default*: `unknown`
+*SINGLE_COMPONENT_CUSTOM_RESOURCE_NS* (`string`):: Namespace where SINGLE_COMPONENT_CUSTOM_RESOURCE is found (for single component mode).
+*ORAS_OPTIONS* (`string`):: ORAS options to pass to Trusted Artifacts calls
+*TRUSTED_ARTIFACTS_DEBUG* (`string`):: Enable debug logging in trusted artifacts when non-empty.
+*TRUSTED_ARTIFACTS_EXTRACT_DIR* (`string`):: Directory to extract the trusted artifact archive into.
++
+*Default*: `/var/workdir/conforma`
+*RETRY_DURATION* (`string`):: Base duration for exponential backoff (e.g., "1s", "500ms")
++
+*Default*: `1s`
+*RETRY_FACTOR* (`string`):: Exponential backoff multiplier (e.g., "2.0", "1.5")
++
+*Default*: `2.0`
+*RETRY_JITTER* (`string`):: Randomness factor for backoff (0.0-1.0, e.g., "0.1", "0.2")
++
+*Default*: `0.1`
+*RETRY_MAX_RETRY* (`string`):: Maximum number of retry attempts
++
+*Default*: `3`
+*RETRY_MAX_WAIT* (`string`):: Maximum wait time between retries (e.g., "3s", "10s")
++
+*Default*: `3s`
+
+== Results
+
+[horizontal]
+*VSA_TEST_OUTPUT*:: Short summary of the VSA validation result
+*IMAGE_RELEASE_TEST_OUTPUT*:: Short summary of the release-time image validation result

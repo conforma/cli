@@ -287,9 +287,12 @@ spec:
         - "--workers"
         - "$(params.WORKERS)"
         - "--strict=false"
-        - "--debug"
         - "--fallback-public-key"
         - "$(params.PUBLIC_KEY)"
+        - "--output"
+        - "status=$(results.VSA_TEST_OUTPUT.path)"
+        - "--output"
+        - "text"
       env:
         - name: SSL_CERT_DIR
           value: >-
@@ -356,8 +359,6 @@ spec:
         - "--output"
         - "text"
         - "--output"
-        - "text=$(params.HOMEDIR)/text-report.txt?show-successes=false"
-        - "--output"
         - "appstudio=$(results.IMAGE_RELEASE_TEST_OUTPUT.path)"
         - "--output"
         - "json=$(params.HOMEDIR)/report-json.json"
@@ -421,7 +422,7 @@ spec:
         - |
           set -euo pipefail
           strict='$(params.STRICT)'
-          vsa_ok=$(jq -r '.result=="SUCCESS" or .result=="WARNING"' \
+          vsa_ok=$(jq -r '.result=="SUCCESS"' \
             "$(results.VSA_TEST_OUTPUT.path)" || echo false)
           rel_ok=$(jq -r '.result=="SUCCESS" or .result=="WARNING"' \
             "$(results.IMAGE_RELEASE_TEST_OUTPUT.path)" || echo false)
