@@ -216,7 +216,7 @@ func addVSAFlags(cmd *cobra.Command, data *validateVSAData) {
 	cmd.Flags().BoolVar(&data.noFallback, "no-fallback", false, "Disable fallback to image validation when VSA validation fails (fallback is enabled by default)")
 	cmd.Flags().StringVar(&data.fallbackPublicKey, "fallback-public-key", "", "Public key to use for fallback image validation (different from VSA verification key)")
 	// Output options
-	validOutputFormats := []string{"json", "yaml", "text"}
+	validOutputFormats := []string{"json", "yaml", "text", "status"}
 	cmd.Flags().StringSliceVar(&data.output, "output", []string{}, hd.Doc(`
 		write output to a file in a specific format. Use empty string path for stdout.
 		May be used multiple times. Possible formats are:
@@ -1206,8 +1206,21 @@ func (d ComponentResultsDisplay) toFormat(format string) ([]byte, error) {
 		return data, nil
 	case "text":
 		return d.toText(), nil
+	case "status":
+		// Status format: simple JSON with overall result as SUCCESS or FAILURE
+		// Determine result from Overall field (contains "PASSED" or "FAILED")
+		resultStr := "FAILURE"
+		if strings.Contains(d.Result.Overall, "PASSED") {
+			resultStr = "SUCCESS"
+		}
+		statusReport := map[string]string{"result": resultStr}
+		data, err := json.Marshal(statusReport)
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
 	default:
-		return nil, fmt.Errorf("unsupported format: %s (supported: json, yaml, text)", format)
+		return nil, fmt.Errorf("unsupported format: %s (supported: json, yaml, text, status)", format)
 	}
 }
 
@@ -1313,8 +1326,25 @@ func writeVSAReport(report VSAReport, display ComponentResultsDisplay, outputFor
 				b.WriteString(fallbackBuf.String())
 			}
 			data = []byte(b.String())
+		case "status":
+			// Status format: simple JSON with overall result as SUCCESS or FAILURE
+			// If fallback was used, use fallback result; otherwise use VSA result
+			resultStr := "FAILURE"
+			if report.Fallback != nil {
+				// Fallback was used, use its success status as the overall result
+				if report.Fallback.Success {
+					resultStr = "SUCCESS"
+				}
+			} else if strings.Contains(display.Result.Overall, "PASSED") {
+				resultStr = "SUCCESS"
+			}
+			statusReport := map[string]string{"result": resultStr}
+			data, err = json.Marshal(statusReport)
+			if err != nil {
+				return fmt.Errorf("failed to marshal status report: %w", err)
+			}
 		default:
-			return fmt.Errorf("unsupported format: %s (supported: json, yaml, text)", formatName)
+			return fmt.Errorf("unsupported format: %s (supported: json, yaml, text, status)", formatName)
 		}
 
 		// Use shared file writing logic
@@ -1381,34 +1411,37 @@ func displayComponentResults(allResults []vsa.ComponentResult, data *validateVSA
 	// Filter output formats to only json, yaml, text (exclude other formats like appstudio, etc.)
 	vsaOutputFormats := filterVSAOutputFormats(data.output)
 
-	// Check if we need combined output (file output specified AND fallback will be used)
+	// Check if file output is specified
 	hasFileOutput := hasFileOutputInFormats(vsaOutputFormats)
 
-	// If file output is specified and fallback will be used, combine them
-	if hasFileOutput && allData.FallbackUsed {
-		// Create fallback report without writing
-		fallbackReport, err := createFallbackReport(allData, data)
-		if err != nil {
-			return fmt.Errorf("failed to create fallback report: %w", err)
-		}
-
-		// Build combined VSAReport (call toVSASectionsReport once and reuse)
+	// If file output is specified, write to file (with or without fallback)
+	if hasFileOutput {
+		// Build VSAReport (call toVSASectionsReport once and reuse)
 		vsaSections := display.toVSASectionsReport()
 		vsaReport := VSAReport{
 			Header:     vsaSections.Header,
 			Result:     vsaSections.Result,
 			VSASummary: vsaSections.VSASummary,
 			PolicyDiff: vsaSections.PolicyDiff,
-			Fallback:   fallbackReport,
+			Fallback:   nil, // Will be set if fallback is used
 		}
 
-		// Write combined report to file(s)
+		// Add fallback report if fallback was used
+		if allData.FallbackUsed {
+			fallbackReport, err := createFallbackReport(allData, data)
+			if err != nil {
+				return fmt.Errorf("failed to create fallback report: %w", err)
+			}
+			vsaReport.Fallback = fallbackReport
+		}
+
+		// Write report to file(s)
 		fs := utils.FS(cmd.Context())
 		if err := writeVSAReport(vsaReport, display, vsaOutputFormats, fs, cmd); err != nil {
-			return fmt.Errorf("failed to write combined VSA report: %w", err)
+			return fmt.Errorf("failed to write VSA report: %w", err)
 		}
 	} else {
-		// Use separate output (current behavior)
+		// Use separate output to stdout (current behavior)
 		if len(vsaOutputFormats) > 0 {
 			// Use format system for structured output (json/yaml/text)
 			fs := utils.FS(cmd.Context())
@@ -1445,14 +1478,13 @@ func displayComponentResults(allResults []vsa.ComponentResult, data *validateVSA
 	return nil
 }
 
-// filterVSAOutputFormats filters output formats to only include json, yaml, and text
-// Other formats (like appstudio, summary, etc.) are handled by handleSnapshotOutput
+// filterVSAOutputFormats filters output formats to only include json, yaml, text, and status
 func filterVSAOutputFormats(outputFormats []string) []string {
 	var filtered []string
 	for _, format := range outputFormats {
 		parts := strings.SplitN(format, "=", 2)
 		formatName := parts[0]
-		if formatName == "json" || formatName == "yaml" || formatName == "text" {
+		if formatName == "json" || formatName == "yaml" || formatName == "text" || formatName == "status" {
 			filtered = append(filtered, format)
 		}
 	}
