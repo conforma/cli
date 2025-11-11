@@ -270,7 +270,7 @@ spec:
     # Phase 1: Validate VSA (CLI will internally fall back to image
     # validation if VSA missing/expired)
     - name: validate-vsa
-      image: quay.io/jstuart/conforma-cli:latest
+      image: quay.io/conforma/cli:latest
       onError: continue
       command: [ec]
       args:
@@ -302,9 +302,9 @@ spec:
       computeResources:
         requests:
           cpu: 100m
-          memory: 256Mi
+          memory: 2Gi
         limits:
-          memory: 512Mi
+          memory: 2Gi
       volumeMounts:
         - name: trusted-ca
           mountPath: /etc/pki/tls/certs/ca-custom-bundle.crt
@@ -312,7 +312,7 @@ spec:
           readOnly: true
     # Phase 2: Validate Image with release-time rules only
     - name: validate-image-release
-      image: quay.io/jstuart/conforma-cli:latest
+      image: quay.io/conforma/cli:latest
       # progress even if the step fails so we can see the debug logs
       onError: continue
       command: [ec]
@@ -386,9 +386,9 @@ spec:
       computeResources:
         requests:
           cpu: 100m
-          memory: 256Mi
+          memory: 2Gi
         limits:
-          memory: 512Mi
+          memory: 2Gi
       volumeMounts:
         - name: trusted-ca
           mountPath: /etc/pki/tls/certs/ca-custom-bundle.crt
