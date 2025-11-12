@@ -1,0 +1,20 @@
+{
+  "id" : "a8db5f59-569d-3792-9e2a-ddcfd64e4bf7",
+  "request" : {
+    "url" : "/1.snapshot.json",
+    "method" : "GET"
+  },
+  "response" : {
+    "status" : 200,
+    "bodyFileName" : "body-1.snapshot.json-rvEro.json",
+    "headers" : {
+      "date" : "Tue, 11 Nov 2025 21:35:40 GMT",
+      "server" : "envoy",
+      "last-modified" : "Tue, 11 Nov 2025 21:35:15 GMT",
+      "x-envoy-upstream-service-time" : "1",
+      "content-type" : "application/json",
+      "accept-ranges" : "bytes"
+    }
+  },
+  "uuid" : "a8db5f59-569d-3792-9e2a-ddcfd64e4bf7"
+}

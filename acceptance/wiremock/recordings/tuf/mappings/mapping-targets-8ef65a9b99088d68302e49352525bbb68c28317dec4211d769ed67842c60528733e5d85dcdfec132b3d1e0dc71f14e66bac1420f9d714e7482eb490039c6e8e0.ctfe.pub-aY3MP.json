@@ -1,0 +1,20 @@
+{
+  "id" : "8ed6324e-5376-3bb0-80c0-f9978fde0a64",
+  "request" : {
+    "url" : "/targets/8ef65a9b99088d68302e49352525bbb68c28317dec4211d769ed67842c60528733e5d85dcdfec132b3d1e0dc71f14e66bac1420f9d714e7482eb490039c6e8e0.ctfe.pub",
+    "method" : "GET"
+  },
+  "response" : {
+    "status" : 200,
+    "bodyFileName" : "body-targets-8ef65a9b99088d68302e49352525bbb68c28317dec4211d769ed67842c60528733e5d85dcdfec132b3d1e0dc71f14e66bac1420f9d714e7482eb490039c6e8e0.ctfe.pub-aY3MP.pub",
+    "headers" : {
+      "date" : "Tue, 11 Nov 2025 21:35:40 GMT",
+      "server" : "envoy",
+      "last-modified" : "Tue, 11 Nov 2025 21:35:15 GMT",
+      "x-envoy-upstream-service-time" : "0",
+      "content-type" : "application/vnd.exstream-package",
+      "accept-ranges" : "bytes"
+    }
+  },
+  "uuid" : "8ed6324e-5376-3bb0-80c0-f9978fde0a64"
+}

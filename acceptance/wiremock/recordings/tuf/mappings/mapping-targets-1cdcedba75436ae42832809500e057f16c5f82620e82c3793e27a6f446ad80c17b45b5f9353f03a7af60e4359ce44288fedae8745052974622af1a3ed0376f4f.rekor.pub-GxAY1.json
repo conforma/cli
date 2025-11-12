@@ -1,0 +1,20 @@
+{
+  "id" : "91cf94c1-e995-32d7-b2a0-63d9a6a867b3",
+  "request" : {
+    "url" : "/targets/1cdcedba75436ae42832809500e057f16c5f82620e82c3793e27a6f446ad80c17b45b5f9353f03a7af60e4359ce44288fedae8745052974622af1a3ed0376f4f.rekor.pub",
+    "method" : "GET"
+  },
+  "response" : {
+    "status" : 200,
+    "bodyFileName" : "body-targets-1cdcedba75436ae42832809500e057f16c5f82620e82c3793e27a6f446ad80c17b45b5f9353f03a7af60e4359ce44288fedae8745052974622af1a3ed0376f4f.rekor.pub-GxAY1.pub",
+    "headers" : {
+      "date" : "Tue, 11 Nov 2025 21:35:40 GMT",
+      "server" : "envoy",
+      "last-modified" : "Tue, 11 Nov 2025 21:35:15 GMT",
+      "x-envoy-upstream-service-time" : "0",
+      "content-type" : "application/vnd.exstream-package",
+      "accept-ranges" : "bytes"
+    }
+  },
+  "uuid" : "91cf94c1-e995-32d7-b2a0-63d9a6a867b3"
+}

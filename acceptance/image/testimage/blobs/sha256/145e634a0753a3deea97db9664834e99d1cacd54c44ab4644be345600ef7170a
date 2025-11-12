@@ -1,0 +1,1 @@
+{"critical":{"identity":{"docker-reference":"registry.local:5001/sigstore/testimage"},"image":{"docker-manifest-digest":"sha256:ed743cc1e3d5fe4bd70578d2aa4acbf15ce76688be30d68566f7d76d386db00e"},"type":"cosign container image signature"},"optional":null}

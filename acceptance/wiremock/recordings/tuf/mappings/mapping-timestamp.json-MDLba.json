@@ -1,0 +1,20 @@
+{
+  "id" : "852f3aea-e43c-34b4-8f22-8e9cfb95fb49",
+  "request" : {
+    "url" : "/timestamp.json",
+    "method" : "GET"
+  },
+  "response" : {
+    "status" : 200,
+    "bodyFileName" : "body-timestamp.json-MDLba.json",
+    "headers" : {
+      "date" : "Tue, 11 Nov 2025 21:35:40 GMT",
+      "server" : "envoy",
+      "last-modified" : "Tue, 11 Nov 2025 21:35:15 GMT",
+      "x-envoy-upstream-service-time" : "1",
+      "content-type" : "application/json",
+      "accept-ranges" : "bytes"
+    }
+  },
+  "uuid" : "852f3aea-e43c-34b4-8f22-8e9cfb95fb49"
+}
