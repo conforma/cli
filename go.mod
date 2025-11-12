@@ -3,23 +3,23 @@ module github.com/enterprise-contract/ec-cli
 go 1.23.6
 
 require (
-	cuelang.org/go v0.10.0
+	cuelang.org/go v0.10.1
 	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/Maldris/go-billy-afero v0.0.0-20200815120323-e9d3de59c99a
-	github.com/enterprise-contract/enterprise-contract-controller/api v0.1.55
+	github.com/enterprise-contract/enterprise-contract-controller/api v0.1.198
 	github.com/enterprise-contract/go-gather/gather v0.0.3
 	github.com/enterprise-contract/go-gather/metadata v0.0.2
 	github.com/enterprise-contract/go-gather/metadata/file v0.0.1
 	github.com/enterprise-contract/go-gather/metadata/git v0.0.2
 	github.com/enterprise-contract/go-gather/metadata/oci v0.0.3
-	github.com/evanphx/json-patch v5.9.0+incompatible
-	github.com/gkampitakis/go-snaps v0.5.7
+	github.com/evanphx/json-patch v5.9.11+incompatible
+	github.com/gkampitakis/go-snaps v0.5.15
 	github.com/go-git/go-git/v5 v5.13.2
-	github.com/go-logr/logr v1.4.2
+	github.com/go-logr/logr v1.4.3
 	github.com/google/go-cmp v0.7.0
-	github.com/google/go-containerregistry v0.20.2
+	github.com/google/go-containerregistry v0.20.6
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
-	github.com/hashicorp/go-getter v1.7.9
+	github.com/hashicorp/go-getter v1.7.10
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/in-toto/in-toto-golang v0.9.0
 	github.com/invopop/jsonschema v0.12.0
@@ -33,29 +33,29 @@ require (
 	github.com/package-url/packageurl-go v0.1.3
 	github.com/qri-io/jsonpointer v0.1.1
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
-	github.com/secure-systems-lab/go-securesystemslib v0.9.0
-	github.com/sigstore/cosign/v2 v2.4.0
+	github.com/secure-systems-lab/go-securesystemslib v0.9.1
+	github.com/sigstore/cosign/v2 v2.4.3
 	github.com/sigstore/sigstore v1.8.15
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/afero v1.11.0
 	github.com/spf13/cobra v1.8.1
-	github.com/spf13/pflag v1.0.5
+	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
 	github.com/stuart-warren/yamlfmt v0.2.0
 	github.com/tektoncd/pipeline v0.70.0
 	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948
 	golang.org/x/net v0.34.0
-	k8s.io/apiextensions-apiserver v0.31.4
-	k8s.io/apimachinery v0.31.6
-	k8s.io/client-go v0.31.6
+	k8s.io/apiextensions-apiserver v0.31.14
+	k8s.io/apimachinery v0.31.14
+	k8s.io/client-go v0.31.14
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/kube-openapi v0.0.0-20240903163716-9e1beecbcb38
 	sigs.k8s.io/yaml v1.4.0
 )
 
 // use forked version until we can get the fixes merged see https://github.com/enterprise-contract/go-containerregistry/blob/main/hack/ec-patches.sh for a list of patches we carry
-replace github.com/google/go-containerregistry => github.com/enterprise-contract/go-containerregistry v0.20.3-0.20240814111759-1368a664d919
+replace github.com/google/go-containerregistry => github.com/enterprise-contract/go-containerregistry v0.20.6
 
 require (
 	cel.dev/expr v0.19.1 // indirect
