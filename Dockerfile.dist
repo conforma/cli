@@ -43,7 +43,7 @@ RUN /build/build.sh "${BUILD_LIST}" "${BUILD_SUFFIX}"
 
 ## Final image
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:34880b64c07f28f64d95737f82f891516de9a3b43583f39970f7bf8e4cfa48b7
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:dae77d7704c67439cec54f7062084024d3d8c5719aa66dc8132b7d51907d44c5
 
 ARG TARGETOS
 ARG TARGETARCH

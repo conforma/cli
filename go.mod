@@ -72,13 +72,13 @@ require (
 
 require (
 	cel.dev/expr v0.20.0 // indirect
-	cloud.google.com/go v0.116.0 // indirect
-	cloud.google.com/go/auth v0.13.0 // indirect
-	cloud.google.com/go/auth/oauth2adapt v0.2.6 // indirect
+	cloud.google.com/go v0.118.1 // indirect
+	cloud.google.com/go/auth v0.15.0 // indirect
+	cloud.google.com/go/auth/oauth2adapt v0.2.7 // indirect
 	cloud.google.com/go/compute/metadata v0.7.0 // indirect
-	cloud.google.com/go/iam v1.2.2 // indirect
-	cloud.google.com/go/monitoring v1.21.2 // indirect
-	cloud.google.com/go/storage v1.49.0 // indirect
+	cloud.google.com/go/iam v1.3.1 // indirect
+	cloud.google.com/go/monitoring v1.24.0 // indirect
+	cloud.google.com/go/storage v1.50.0 // indirect
 	contrib.go.opencensus.io/exporter/ocagent v0.7.1-0.20200907061046-05415f1de66d // indirect
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2 // indirect
 	dario.cat/mergo v1.0.1 // indirect
@@ -96,8 +96,8 @@ require (
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.26.0 // indirect
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.48.1 // indirect
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.48.1 // indirect
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.49.0 // indirect
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.49.0 // indirect
 	github.com/KeisukeYamashita/go-vcl v0.4.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.1.5 // indirect
@@ -217,20 +217,20 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
-	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/cel-go v0.21.0 // indirect
-	github.com/google/certificate-transparency-go v1.2.1 // indirect
+	github.com/google/certificate-transparency-go v1.3.2 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/google/gnostic-models v0.6.9-0.20230804172637-c7be7c783f49 // indirect
 	github.com/google/go-github/v55 v55.0.0 // indirect
 	github.com/google/go-jsonnet v0.21.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/google/s2a-go v0.1.8 // indirect
+	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.3.5 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect
 	github.com/hashicorp/aws-sdk-go-base/v2 v2.0.0-beta.65 // indirect
@@ -246,7 +246,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/jedisct1/go-minisign v0.0.0-20230811132847-661be99b8267 // indirect
-	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/jmespath/go-jmespath v0.4.1-0.20220621161143-b0104c826a24 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/jstemmer/go-junit-report v1.0.0 // indirect
@@ -376,8 +376,8 @@ require (
 	golang.org/x/time v0.11.0 // indirect
 	golang.org/x/tools v0.35.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
-	google.golang.org/api v0.215.0 // indirect
-	google.golang.org/genproto v0.0.0-20241118233622-e639e219e697 // indirect
+	google.golang.org/api v0.226.0 // indirect
+	google.golang.org/genproto v0.0.0-20250122153221-138b5a5a4fd4 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250519155744-55703ea1f237 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250519155744-55703ea1f237 // indirect
 	google.golang.org/grpc v1.72.2 // indirect
@@ -395,3 +395,5 @@ require (
 	sigs.k8s.io/release-utils v0.8.4 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.2 // indirect
 )
+
+replace github.com/mattn/go-sqlite3 => github.com/mattn/go-sqlite3 v1.14.29
