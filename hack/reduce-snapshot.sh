@@ -31,10 +31,12 @@ set -o pipefail
 
 
 # Make sure to move snapshot contents to the WORKING_SNAPSHOT location. Then allow jq to
-# work with it there. This avoids having to read SNAPSHOT to memory.
+# work with it there and prevent truncating the original. This avoids having to read
+# SNAPSHOT to memory.
 
 if [[ -f "$SNAPSHOT" ]]; then
-  WORKING_SNAPSHOT="$SNAPSHOT"
+  WORKING_SNAPSHOT="$(mktemp "${HOME:-/tmp}/snapshot.XXXXXX")"
+  cp "$SNAPSHOT" "$WORKING_SNAPSHOT"
 else
   WORKING_SNAPSHOT="$(mktemp "${HOME:-/tmp}/snapshot.XXXXXX")"
   printf "%s" "$SNAPSHOT" > "$WORKING_SNAPSHOT"
