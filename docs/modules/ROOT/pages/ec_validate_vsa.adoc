@@ -35,7 +35,12 @@ ec validate vsa <vsa-identifier> [flags]
 --images:: Application snapshot file
 --no-color:: Disable color when using text output even when the current terminal supports it (Default: false)
 --no-fallback:: Disable fallback to image validation when VSA validation fails (fallback is enabled by default) (Default: false)
---output:: Output formats (e.g., json, yaml, text) (Default: [])
+--output:: write output to a file in a specific format. Use empty string path for stdout.
+May be used multiple times. Possible formats are:
+json, yaml, text, status. In following format and file path
+additional options can be provided in key=value form following the question
+mark (?) sign, for example: --output text=output.txt?show-successes=false
+ (Default: [])
 -p, --policy:: Policy configuration
 --strict:: Exit with non-zero code if validation fails (Default: true)
 -v, --vsa:: VSA identifier (image digest, file path)
