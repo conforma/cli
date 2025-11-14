@@ -14,7 +14,7 @@ uses the established Go test to launch Godog.
 
 To run the acceptance tests either run:
 
-    $ make acceptance
+    $ E2E_INSTRUMENTATION=true make acceptance
 
 from the root of the repository.
 
@@ -64,7 +64,7 @@ Docker website how to accomplish that.
 ## Debugging
 
 The acceptance tests execute the `ec` binary during test execution. (For this
-reason `make acceptance` builds the binary prior to running the tests.)
+reason `E2E_INSTRUMENTATION=true make acceptance` builds the binary prior to running the tests.)
 
 To use a debugger, like [delve](https://github.com/go-delve/delve), you must
 determine what part of the code is being debugged. If it's part of the

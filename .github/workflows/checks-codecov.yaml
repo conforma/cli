@@ -91,6 +91,7 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           files: ./coverage-unit.out
+          disable_search: true
           flags: unit
 
       - name: Upload generative test coverage report
@@ -99,6 +100,7 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           files: ./coverage-generative.out
+          disable_search: true
           flags: generative
 
       - name: Upload integration test coverage report
@@ -107,6 +109,7 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           files: ./coverage-integration.out
+          disable_search: true
           flags: integration
 
   Acceptance:
@@ -143,12 +146,16 @@ jobs:
         run: git log --oneline -n1
 
       - name: Acceptance test
-        run: make acceptance
+        id: acceptance_test
+        run: E2E_INSTRUMENTATION=true make acceptance
 
       - name: Upload coverage report
         uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           files: ./coverage-acceptance.out
+          disable_search: true
           flags: acceptance
 
   Tools:

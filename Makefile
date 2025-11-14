@@ -13,6 +13,7 @@ SHELL=$(if $@,$(info ❱ [1m$@[0m))$(_SHELL)
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 COPY:=The Conforma Contributors
 COSIGN_VERSION=$(shell go list -f '{{.Version}}' -m github.com/sigstore/cosign/v2)
+E2E_INSTRUMENTATION_FLAGS := $(if $(filter $(E2E_INSTRUMENTATION),true),-cover -covermode atomic)
 
 ##@ Information
 
@@ -54,7 +55,7 @@ BUILD_BIN_SUFFIX=$(if $(DEBUG_BUILD),_debug,)
 $(ALL_SUPPORTED_OS_ARCH): generate ## Build binaries for specific platform/architecture, e.g. make dist/ec_linux_amd64
 	@GOOS=$(word 2,$(subst _, ,$(notdir $@))); \
 	GOARCH=$(word 3,$(subst _, ,$(notdir $@))); \
-	GOOS=$${GOOS} GOARCH=$${GOARCH} CGO_ENABLED=0 go build $(BUILD_TRIMPATH) $(BUILD_GC_FLAGS) -ldflags="$(BUILD_LD_FLAGS) -X github.com/conforma/cli/internal/version.Version=$(VERSION)" -o dist/ec_$${GOOS}_$${GOARCH}$(BUILD_BIN_SUFFIX); \
+	GOOS=$${GOOS} GOARCH=$${GOARCH} CGO_ENABLED=0 go build $(E2E_INSTRUMENTATION_FLAGS) $(BUILD_TRIMPATH) $(BUILD_GC_FLAGS) -ldflags="$(BUILD_LD_FLAGS) -X github.com/conforma/cli/internal/version.Version=$(VERSION)" -o dist/ec_$${GOOS}_$${GOARCH}$(BUILD_BIN_SUFFIX); \
 	sha256sum -b dist/ec_$${GOOS}_$${GOARCH}$(BUILD_BIN_SUFFIX) > dist/ec_$${GOOS}_$${GOARCH}$(BUILD_BIN_SUFFIX).sha256
 
 .PHONY: dist
@@ -120,15 +121,13 @@ acceptance: ## Run all acceptance tests
 	cleanup() { \
 		cp "$${ACCEPTANCE_WORKDIR}"/features/__snapshots__/* "$(ROOT_DIR)"/features/__snapshots__/; \
 	}; \
+	mkdir -p "$${ACCEPTANCE_WORKDIR}/coverage"; \
 	trap cleanup EXIT; \
 	cp -R . "$$ACCEPTANCE_WORKDIR"; \
 	cd "$$ACCEPTANCE_WORKDIR" && \
-	go run acceptance/coverage/coverage.go && \
 	$(MAKE) build && \
-	export COVERAGE_FILEPATH="$$ACCEPTANCE_WORKDIR"; \
-	export COVERAGE_FILENAME="-acceptance"; \
-	cd acceptance && go test -coverprofile "$$ACCEPTANCE_WORKDIR/coverage-acceptance.out" -timeout $(ACCEPTANCE_TIMEOUT) ./... && \
-	go run -modfile "$$ACCEPTANCE_WORKDIR/tools/go.mod" github.com/wadey/gocovmerge "$$ACCEPTANCE_WORKDIR/coverage-acceptance.out" > "$(ROOT_DIR)/coverage-acceptance.out"
+	export GOCOVERDIR="$${ACCEPTANCE_WORKDIR}/coverage"; \
+	cd acceptance && go test -timeout $(ACCEPTANCE_TIMEOUT) ./... ; go tool covdata textfmt -i=$${GOCOVERDIR} -o="$(ROOT_DIR)/coverage-acceptance.out"
 
 # Add @focus above the feature you're hacking on to use this
 # (Mainly for use with the feature-% target below)

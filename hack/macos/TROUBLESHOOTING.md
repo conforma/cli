@@ -102,7 +102,7 @@ podman machine start
 
 ```bash
 # Run all acceptance tests
-make acceptance
+E2E_INSTRUMENTATION=true make acceptance
 
 # Or run tests directly
 cd acceptance

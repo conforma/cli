@@ -305,7 +305,7 @@ main() {
     echo
     echo "To run acceptance tests:"
     echo "  1. Source the environment: source setup-test-env.sh"
-    echo "  2. Run tests: make acceptance"
+    echo "  2. Run tests: E2E_INSTRUMENTATION=true make acceptance"
     echo "     or: cd acceptance && go test -v ./..."
     echo
     echo "Environment variables are saved in: setup-test-env.sh"

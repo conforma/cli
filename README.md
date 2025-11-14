@@ -18,8 +18,13 @@ run `make dist` to build for all supported architectures.
 
 ## Testing
 
-Run `make test` to run the unit tests, and `make acceptance` to run the
+Run `make test` to run the unit tests, and `E2E_INSTRUMENTATION=true make acceptance` to run the
 acceptance tests.
+
+The purpose of the `E2E_INSTRUMENTATION=true` environment variable is to pass
+extra flags to the build command. This instruments the resulting binary,
+allowing for the collection of coverage data during the acceptance test run.
+(more information here: https://go.dev/doc/build-cover).
 
 ## Linting
 
