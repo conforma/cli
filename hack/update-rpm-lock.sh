@@ -23,11 +23,18 @@ set -o nounset
 
 root_dir=$(git rev-parse --show-toplevel)
 
+# Platform to use for building and running containers
+# Use linux/amd64 for compatibility with base images that may not have ARM64 variants
+PLATFORM="linux/amd64"
+
 latest_release=$(gh api '/repos/konflux-ci/rpm-lockfile-prototype/tags?per_page=1' --jq '.[0].name')
 
 # build the image for running the RPM lock tool
 echo Building RPM lock tooling image...
-image=$(podman build --quiet --file <(cat <<DOCKERFILE
+dockerfile=$(mktemp "${TMPDIR:-/tmp}/rpm-lock-dockerfile.XXXXXX")
+trap "rm -f ${dockerfile}" EXIT
+
+cat > "${dockerfile}" <<DOCKERFILE
 FROM quay.io/openshift/origin-cli:latest as oc-cli
 
 # Python version needs to match whatever version of Python dnf itself depends on
@@ -46,7 +53,8 @@ COPY --from=oc-cli /usr/bin/oc /usr/bin
 
 ENV PYTHONPATH=/usr/lib64/python3.9/site-packages:/usr/lib/python3.9/site-packages
 DOCKERFILE
-))
+
+image=$(podman build --platform "${PLATFORM}" --quiet --file "${dockerfile}" .)
 
 echo "Built: ${image}"
 
@@ -97,6 +105,7 @@ fi
 
 echo Running RPM lock tooling...
 podman run \
+    --platform "${PLATFORM}" \
     --rm \
     --volume "${root_dir}/Dockerfile.dist:/opt/app-root/src/Dockerfile:Z" \
     --volume "${root_dir}/rpms.in.yaml:/opt/app-root/src/rpms.in.yaml:Z" \
