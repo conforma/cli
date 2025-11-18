@@ -406,12 +406,9 @@ spec:
       # yamllint disable rule:line-length
       args:
         - |
-          echo "=== VSA CONFIG ==="
-          jq '{policy: .policy, key: .key, "effective-time": .["effective-time"]}' \
-            "$(params.HOMEDIR)/vsa-report.json" || true
           echo "=== RELEASE CONFIG ==="
           jq '{policy: .policy, key: .key, "effective-time": .["effective-time"]}' \
-            "$(params.HOMEDIR)/rel-report.json" || true
+            "$(params.HOMEDIR)/report-json.json" || true
       # yamllint enable rule:line-length
 
     # Final assert: both phases must be SUCCESS (or WARNING if STRICT=false)
