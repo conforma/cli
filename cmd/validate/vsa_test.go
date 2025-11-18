@@ -27,7 +27,6 @@ import (
 
 	ecapi "github.com/conforma/crds/api/v1alpha1"
 	app "github.com/konflux-ci/application-api/api/v1alpha1"
-	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
@@ -943,7 +942,7 @@ func TestRunValidateVSA(t *testing.T) {
 			cmd := &cobra.Command{}
 			cmd.SetContext(context.Background())
 
-			err := runValidateVSA(cmd, tt.data, tt.args, afero.NewMemMapFs())
+			err := runValidateVSA(cmd, tt.data, tt.args)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -1037,7 +1036,7 @@ func TestValidateSingleVSA(t *testing.T) {
 			cmd.SetContext(ctx)
 
 			// Use the unified runValidateVSA function which handles both single and snapshot cases
-			err := runValidateVSA(cmd, tt.data, tt.args, afero.NewMemMapFs())
+			err := runValidateVSA(cmd, tt.data, tt.args)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -1135,7 +1134,7 @@ func TestValidateSnapshotVSAs(t *testing.T) {
 			cmd.SetContext(ctx)
 
 			// Use the unified runValidateVSA function which handles both single and snapshot cases
-			err := runValidateVSA(cmd, tt.data, []string{}, afero.NewMemMapFs())
+			err := runValidateVSA(cmd, tt.data, []string{})
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -1463,7 +1462,7 @@ func TestValidateSnapshotVSAs_Comprehensive(t *testing.T) {
 			cmd.SetContext(ctx)
 
 			// Use the unified runValidateVSA function which handles both single and snapshot cases
-			err := runValidateVSA(cmd, tt.data, []string{}, afero.NewMemMapFs())
+			err := runValidateVSA(cmd, tt.data, []string{})
 
 			if tt.expectError {
 				assert.Error(t, err)

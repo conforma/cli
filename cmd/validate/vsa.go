@@ -63,6 +63,20 @@ const (
 	retrievalFailedRC = "retrieval_failed"
 )
 
+// Constants for output formats
+const (
+	outputFormatJSON   = "json"
+	outputFormatYAML   = "yaml"
+	outputFormatText   = "text"
+	outputFormatStatus = "status"
+)
+
+// Constants for status results
+const (
+	statusSuccess = "SUCCESS"
+	statusFailure = "FAILURE"
+)
+
 // Reason code mappings
 var reasonCodeToDisplay = map[string]string{
 	"policy_mismatch":  "policy mismatch",
@@ -183,7 +197,7 @@ func NewValidateVSACmd() *cobra.Command {
 			return validateVSAInput(data, args)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runValidateVSA(cmd, data, args, afero.NewOsFs())
+			return runValidateVSA(cmd, data, args)
 		},
 	}
 
@@ -216,7 +230,7 @@ func addVSAFlags(cmd *cobra.Command, data *validateVSAData) {
 	cmd.Flags().BoolVar(&data.noFallback, "no-fallback", false, "Disable fallback to image validation when VSA validation fails (fallback is enabled by default)")
 	cmd.Flags().StringVar(&data.fallbackPublicKey, "fallback-public-key", "", "Public key to use for fallback image validation (different from VSA verification key)")
 	// Output options
-	validOutputFormats := []string{"json", "yaml", "text", "status"}
+	validOutputFormats := []string{outputFormatJSON, outputFormatYAML, outputFormatText, outputFormatStatus}
 	cmd.Flags().StringSliceVar(&data.output, "output", []string{}, hd.Doc(`
 		write output to a file in a specific format. Use empty string path for stdout.
 		May be used multiple times. Possible formats are:
@@ -246,7 +260,7 @@ func addVSAFlags(cmd *cobra.Command, data *validateVSAData) {
 }
 
 // runValidateVSA is the main command execution function
-func runValidateVSA(cmd *cobra.Command, data *validateVSAData, args []string, fs afero.Fs) error {
+func runValidateVSA(cmd *cobra.Command, data *validateVSAData, args []string) error {
 	ctx := cmd.Context()
 
 	// Set color support based on flags
@@ -1150,7 +1164,7 @@ func filterOutStatusFormat(outputFormats []string) []string {
 	for _, format := range outputFormats {
 		parts := strings.SplitN(format, "=", 2)
 		formatName := parts[0]
-		if formatName != "status" {
+		if formatName != outputFormatStatus {
 			filtered = append(filtered, format)
 		}
 	}
@@ -1167,7 +1181,7 @@ func shouldPrintFallbackHeader(outputFormats []string) bool {
 	}
 
 	// Check if "text" format is in the output formats
-	return validate_utils.ContainsOutputFormat(outputFormats, "text")
+	return validate_utils.ContainsOutputFormat(outputFormats, outputFormatText)
 }
 
 // toVSASectionsReport converts ComponentResultsDisplay to VSASectionsReport
@@ -1207,16 +1221,16 @@ func (d ComponentResultsDisplay) toVSASectionsReport() VSASectionsReport {
 // For text format, uses ComponentResultsDisplay to leverage existing String() methods
 func (d ComponentResultsDisplay) toFormat(format string) ([]byte, error) {
 	switch format {
-	case "json":
+	case outputFormatJSON:
 		return d.toJSON()
-	case "yaml":
+	case outputFormatYAML:
 		return d.toYAML()
-	case "text":
+	case outputFormatText:
 		return d.toText(), nil
-	case "status":
+	case outputFormatStatus:
 		return d.toStatus()
 	default:
-		return nil, fmt.Errorf("unsupported format: %s (supported: json, yaml, text, status)", format)
+		return nil, fmt.Errorf("unsupported format: %s (supported: %s, %s, %s, %s)", format, outputFormatJSON, outputFormatYAML, outputFormatText, outputFormatStatus)
 	}
 }
 
@@ -1254,9 +1268,9 @@ func (d ComponentResultsDisplay) toStatus() ([]byte, error) {
 // determineStatusFromOverall extracts SUCCESS or FAILURE from overall result string
 func determineStatusFromOverall(overall string) string {
 	if strings.Contains(overall, "PASSED") {
-		return "SUCCESS"
+		return statusSuccess
 	}
-	return "FAILURE"
+	return statusFailure
 }
 
 // toText converts ComponentResultsDisplay to text format using existing String() methods
@@ -1279,7 +1293,7 @@ func (d ComponentResultsDisplay) toText() []byte {
 // WriteAll writes ComponentResultsDisplay to all specified output formats
 func (d ComponentResultsDisplay) WriteAll(outputFormats []string, fs afero.Fs, cmd *cobra.Command) error {
 	if len(outputFormats) == 0 {
-		outputFormats = []string{"text"}
+		outputFormats = []string{outputFormatText}
 	}
 
 	for _, outputSpec := range outputFormats {
@@ -1313,7 +1327,7 @@ func parseOutputSpec(outputSpec string) (formatName, file string) {
 // display is used for text format to avoid reconstructing ComponentResultsDisplay
 func writeVSAReport(report VSAReport, display ComponentResultsDisplay, outputFormats []string, fs afero.Fs, cmd *cobra.Command) error {
 	if len(outputFormats) == 0 {
-		outputFormats = []string{"text"}
+		outputFormats = []string{outputFormatText}
 	}
 
 	for _, outputSpec := range outputFormats {
@@ -1335,16 +1349,16 @@ func writeVSAReport(report VSAReport, display ComponentResultsDisplay, outputFor
 // convertVSAReportToFormat converts a VSAReport to the specified format
 func convertVSAReportToFormat(report VSAReport, display ComponentResultsDisplay, formatName string, fs afero.Fs) ([]byte, error) {
 	switch formatName {
-	case "json":
+	case outputFormatJSON:
 		return marshalVSAReportJSON(report)
-	case "yaml":
+	case outputFormatYAML:
 		return marshalVSAReportYAML(report)
-	case "text":
+	case outputFormatText:
 		return marshalVSAReportText(report, display, fs)
-	case "status":
+	case outputFormatStatus:
 		return marshalVSAReportStatus(report, display)
 	default:
-		return nil, fmt.Errorf("unsupported format: %s (supported: json, yaml, text, status)", formatName)
+		return nil, fmt.Errorf("unsupported format: %s (supported: %s, %s, %s, %s)", formatName, outputFormatJSON, outputFormatYAML, outputFormatText, outputFormatStatus)
 	}
 }
 
@@ -1400,9 +1414,9 @@ func determineStatusFromReport(report VSAReport, display ComponentResultsDisplay
 	if report.Fallback != nil {
 		// Fallback was used, use its success status
 		if report.Fallback.Success {
-			return "SUCCESS"
+			return statusSuccess
 		}
-		return "FAILURE"
+		return statusFailure
 	}
 	// Use VSA result
 	return determineStatusFromOverall(display.Result.Overall)
@@ -1422,7 +1436,7 @@ func captureFallbackText(fallbackReport *applicationsnapshot.Report, fs afero.Fs
 		fallbackWriter,
 		fs,
 	)
-	if err := fallbackReport.WriteAll([]string{"text"}, fallbackParser); err != nil {
+	if err := fallbackReport.WriteAll([]string{outputFormatText}, fallbackParser); err != nil {
 		return "", err
 	}
 	return fallbackBuf.String(), nil
@@ -1557,9 +1571,9 @@ func writeSeparateOutputToStdout(display ComponentResultsDisplay, allData AllSec
 
 // writeStatusOutput writes only the status format output based on overall result
 func writeStatusOutput(allData AllSectionsData, outputFormats []string, cmd *cobra.Command) error {
-	resultStr := "FAILURE"
+	resultStr := statusFailure
 	if allData.OverallPassed {
-		resultStr = "SUCCESS"
+		resultStr = statusSuccess
 	}
 
 	statusReport := map[string]string{"result": resultStr}
@@ -1572,7 +1586,7 @@ func writeStatusOutput(allData AllSectionsData, outputFormats []string, cmd *cob
 	for _, outputSpec := range outputFormats {
 		_, file := parseOutputSpec(outputSpec)
 		fs := utils.FS(cmd.Context())
-		if err := writeDataToOutput(data, "status", file, fs, cmd); err != nil {
+		if err := writeDataToOutput(data, outputFormatStatus, file, fs, cmd); err != nil {
 			return err
 		}
 	}
@@ -1587,7 +1601,7 @@ func isStatusOnlyFormat(outputFormats []string) bool {
 	}
 	for _, format := range outputFormats {
 		formatName, _ := parseOutputSpec(format)
-		if formatName != "status" {
+		if formatName != outputFormatStatus {
 			return false
 		}
 	}
@@ -1614,7 +1628,7 @@ func filterVSAOutputFormats(outputFormats []string) []string {
 	for _, format := range outputFormats {
 		parts := strings.SplitN(format, "=", 2)
 		formatName := parts[0]
-		if formatName == "json" || formatName == "yaml" || formatName == "text" || formatName == "status" {
+		if formatName == outputFormatJSON || formatName == outputFormatYAML || formatName == outputFormatText || formatName == outputFormatStatus {
 			filtered = append(filtered, format)
 		}
 	}
