@@ -16,7 +16,7 @@
 
 ## Build
 
-FROM registry.access.redhat.com/ubi9/go-toolset:1.23.6@sha256:e0ad156b08e0b50ad509d79513e13e8a31f2812c66e9c48c98cea53420ec2bca AS build
+FROM registry.access.redhat.com/ubi9/go-toolset:1.25.3@sha256:71f121a44270e46a17a548d6b92096a1a0fb56db44927ad318d095177d6dce4b AS build
 
 ARG TARGETOS
 ARG TARGETARCH
