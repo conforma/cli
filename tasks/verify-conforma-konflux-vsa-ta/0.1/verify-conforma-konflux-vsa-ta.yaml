@@ -1,0 +1,451 @@
+# Copyright The Conforma Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: verify-conforma-vsa-release-ta
+  annotations:
+    tekton.dev/displayName: Verify Conforma (VSA + Release Rules)
+    tekton.dev/pipelines.minVersion: "0.19"
+    tekton.dev/tags: ec, chains, signature, conftest, vsa
+  labels:
+    app.kubernetes.io/version: "0.1"
+
+spec:
+  description: >
+    Validates a Snapshot using Conforma in two phases:
+    1) `ec validate vsa` (CLI will fall back to `validate image`
+    if VSA missing/expired)
+    2) `ec validate image` with release-time rules only
+    (pipeline_intention=release)
+
+  params:
+    - name: SNAPSHOT_FILENAME
+      type: string
+      description: >-
+        The filename of the Snapshot located within the trusted artifact
+
+    - name: SOURCE_DATA_ARTIFACT
+      type: string
+      description: >-
+        Trusted Artifact to use to obtain the Snapshot to validate.
+
+    - name: POLICY_CONFIGURATION
+      type: string
+      description: |
+        Name of the policy configuration (EnterpriseContractPolicy
+        resource) to use. `namespace/name` or just `name`. Can also be a
+        Git URL, e.g. `github.com/conforma/config//slsa3`.
+      default: "enterprise-contract-service/default"
+
+    - name: PUBLIC_KEY
+      type: string
+      description: >
+        Public key used to verify signatures. Must be a valid k8s cosign
+        reference (e.g. k8s://my-ns/my-secret) where the secret contains
+        `cosign.pub`.
+      default: ""
+
+    - name: VSA_PUBLIC_KEY
+      type: string
+      description: >
+        Public key used to verify signatures. Must be a valid k8s cosign
+        reference (e.g. k8s://my-ns/my-secret) where the secret contains
+        `cosign.pub`.
+      default: ""
+
+    - name: REKOR_HOST
+      type: string
+      description: Rekor host for transparency log lookups
+      default: ""
+
+    - name: IGNORE_REKOR
+      type: string
+      description: Skip Rekor transparency log checks during validation.
+      default: "true"
+
+    - name: TUF_MIRROR
+      type: string
+      description: >-
+        TUF mirror URL. Provide a value when NOT using public sigstore
+        deployment.
+      default: ""
+
+    - name: SSL_CERT_DIR
+      type: string
+      description: |
+        Extra certs path(s) for external services. Useful with local
+        registries/Rekor. Multiple paths can be provided using `:`.
+      default: ""
+
+    - name: CA_TRUST_CONFIGMAP_NAME
+      type: string
+      description: Name of the ConfigMap to read CA bundle data from.
+      default: trusted-ca
+
+    - name: CA_TRUST_CONFIG_MAP_KEY
+      type: string
+      description: Key in the ConfigMap that contains the CA bundle data.
+      default: ca-bundle.crt
+
+    - name: INFO
+      type: string
+      description: >-
+        Include rule titles/descriptions in output. Set to "false" to
+        disable.
+      default: "true"
+
+    - name: STRICT
+      type: string
+      description: Fail the task if policy fails. Set to "false" to disable.
+      default: "true"
+
+    - name: HOMEDIR
+      type: string
+      description: Value for the HOME environment variable.
+      default: /tekton/home
+
+    - name: EFFECTIVE_TIME
+      type: string
+      description: Run policy checks with the provided time.
+      default: "now"
+
+    - name: EXTRA_RULE_DATA
+      type: string
+      description: >
+        Merge additional Rego variables into the policy data. Syntax:
+        key=val,key2=val2
+      default: ""
+
+    - name: TIMEOUT
+      type: string
+      description: >
+        Deprecated; ignored by the task. EC is run without a timeout (use
+        Tekton timeouts).
+      default: ""
+
+    - name: WORKERS
+      type: string
+      description: Number of parallel workers to use for policy evaluation.
+      default: "4"
+
+    - name: SINGLE_COMPONENT
+      type: string
+      description: >-
+        Reduce Snapshot to only the component whose build created the
+        Snapshot
+      default: "false"
+
+    - name: SINGLE_COMPONENT_CUSTOM_RESOURCE
+      type: string
+      description: >
+        Kind/name of the Kubernetes resource to query labels when single
+        component mode is enabled, e.g. pr/somepipeline.
+      default: "unknown"
+
+    - name: SINGLE_COMPONENT_CUSTOM_RESOURCE_NS
+      type: string
+      description: >-
+        Namespace where SINGLE_COMPONENT_CUSTOM_RESOURCE is found (for
+        single component mode).
+      default: ""
+
+    - name: ORAS_OPTIONS
+      type: string
+      description: ORAS options to pass to Trusted Artifacts calls
+      default: ""
+
+    - name: TRUSTED_ARTIFACTS_DEBUG
+      type: string
+      description: Enable debug logging in trusted artifacts when non-empty.
+      default: ""
+
+    - name: TRUSTED_ARTIFACTS_EXTRACT_DIR
+      type: string
+      description: Directory to extract the trusted artifact archive into.
+      default: "/var/workdir/conforma"
+
+    - name: RETRY_DURATION
+      type: string
+      description: Base duration for exponential backoff (e.g., "1s", "500ms")
+      default: "1s"
+
+    - name: RETRY_FACTOR
+      type: string
+      description: Exponential backoff multiplier (e.g., "2.0", "1.5")
+      default: "2.0"
+
+    - name: RETRY_JITTER
+      type: string
+      description: >-
+        Randomness factor for backoff (0.0-1.0, e.g., "0.1", "0.2")
+      default: "0.1"
+
+    - name: RETRY_MAX_RETRY
+      type: string
+      description: Maximum number of retry attempts
+      default: "3"
+
+    - name: RETRY_MAX_WAIT
+      type: string
+      description: Maximum wait time between retries (e.g., "3s", "10s")
+      default: "3s"
+
+  results:
+    - name: VSA_TEST_OUTPUT
+      description: Short summary of the VSA validation result
+    - name: IMAGE_RELEASE_TEST_OUTPUT
+      description: Short summary of the release-time image validation result
+
+  stepTemplate:
+    volumeMounts:
+      - mountPath: /var/workdir
+        name: workdir
+    env:
+      - name: ORAS_OPTIONS
+        value: "$(params.ORAS_OPTIONS)"
+      - name: DEBUG
+        value: "$(params.TRUSTED_ARTIFACTS_DEBUG)"
+      - name: HOME
+        value: "$(params.HOMEDIR)"
+    securityContext:
+      runAsUser: 1001
+
+  steps:
+    - name: use-trusted-artifact
+      args:
+        - "use"
+        - "$(params.SOURCE_DATA_ARTIFACT)=$(params.TRUSTED_ARTIFACTS_EXTRACT_DIR)"
+      image: >-
+        quay.io/redhat-appstudio/build-trusted-artifacts:e02102ede09aa07187cba066ad547a54724e5cf4
+
+    - name: initialize-tuf
+      image: quay.io/conforma/cli:latest
+      script: |-
+        set -euo pipefail
+        if [[ -z "${TUF_MIRROR:-}" ]]; then
+          echo 'TUF_MIRROR not provided. Skipping TUF root initialization.'
+          exit 0
+        fi
+        echo 'Initializing TUF root...'
+        ec sigstore initialize --mirror "${TUF_MIRROR}" \
+          --root "${TUF_MIRROR}/root.json"
+        echo 'Done!'
+      env:
+        - name: TUF_MIRROR
+          value: "$(params.TUF_MIRROR)"
+
+    - name: reduce
+      image: quay.io/conforma/cli:latest
+      onError: continue
+      command: [reduce-snapshot.sh]
+      env:
+        - name: SNAPSHOT
+          value: >-
+            $(params.TRUSTED_ARTIFACTS_EXTRACT_DIR)/$(params.SNAPSHOT_FILENAME)
+        - name: SINGLE_COMPONENT
+          value: $(params.SINGLE_COMPONENT)
+        - name: CUSTOM_RESOURCE
+          value: $(params.SINGLE_COMPONENT_CUSTOM_RESOURCE)
+        - name: CUSTOM_RESOURCE_NAMESPACE
+          value: $(params.SINGLE_COMPONENT_CUSTOM_RESOURCE_NS)
+        - name: SNAPSHOT_PATH
+          value: $(params.HOMEDIR)/snapshot.json
+
+    # Phase 1: Validate VSA (CLI will internally fall back to image
+    # validation if VSA missing/expired)
+    - name: validate-vsa
+      image: quay.io/conforma/cli:latest
+      onError: continue
+      command: [ec]
+      args:
+        - validate
+        - vsa
+        - "--images"
+        - "/tekton/home/snapshot.json"
+        - "--policy"
+        - "$(params.POLICY_CONFIGURATION)"
+        # this is a different public key than the one used for image
+        # validation. this is the public key for the VSA signing key.
+        - "--vsa-public-key"
+        - "$(params.VSA_PUBLIC_KEY)"
+        - "--workers"
+        - "$(params.WORKERS)"
+        - "--strict=false"
+        - "--fallback-public-key"
+        - "$(params.PUBLIC_KEY)"
+        - "--output"
+        - "status=$(results.VSA_TEST_OUTPUT.path)"
+        - "--output"
+        - "text"
+      env:
+        - name: SSL_CERT_DIR
+          value: >-
+            /tekton-custom-certs:/etc/ssl/certs:/etc/pki/tls/certs:/system/etc/security/cacerts:$(params.SSL_CERT_DIR)
+        - name: EC_CACHE
+          value: "false"
+      computeResources:
+        requests:
+          cpu: 100m
+          memory: 2Gi
+        limits:
+          memory: 2Gi
+      volumeMounts:
+        - name: trusted-ca
+          mountPath: /etc/pki/tls/certs/ca-custom-bundle.crt
+          subPath: ca-bundle.crt
+          readOnly: true
+    # Phase 2: Validate Image with release-time rules only
+    - name: validate-image-release
+      image: quay.io/conforma/cli:latest
+      # progress even if the step fails so we can see the debug logs
+      onError: continue
+      command: [ec]
+      args:
+        - validate
+        - image
+        - "--images"
+        - "/tekton/home/snapshot.json"
+        - "--filter-type"
+        - "ec-policy"
+        - "--policy"
+        - "$(params.POLICY_CONFIGURATION)"
+        - "--public-key"
+        - "$(params.PUBLIC_KEY)"
+        - "--rekor-url"
+        - "$(params.REKOR_HOST)"
+        - "--ignore-rekor=$(params.IGNORE_REKOR)"
+        - "--workers"
+        - "$(params.WORKERS)"
+        # NOTE: The syntax below is required to negate boolean parameters
+        - "--info=$(params.INFO)"
+        # Fresh versions of ec support "--timeout=0" to indicate no
+        # timeout, but this would break the task if it's used with an
+        # older version of ec. In an abundance of caution, let's set an
+        # arbitrary high value instead of using 0 here. In future we can
+        # change it to 0. (The reason to not use an explicit timeout for
+        # ec is so Tekton can handle the timeouts).
+        - "--timeout=100h"
+        - "--strict=false"
+        - "--show-successes"
+        - "--effective-time=$(params.EFFECTIVE_TIME)"
+        - "--extra-rule-data=pipeline_intention=release"
+        - "--retry-max-wait"
+        - "$(params.RETRY_MAX_WAIT)"
+        - "--retry-max-retry"
+        - "$(params.RETRY_MAX_RETRY)"
+        - "--retry-duration"
+        - "$(params.RETRY_DURATION)"
+        - "--retry-factor"
+        - "$(params.RETRY_FACTOR)"
+        - "--retry-jitter"
+        - "$(params.RETRY_JITTER)"
+        - "--info"
+        - "--output"
+        - "text"
+        - "--output"
+        - "appstudio=$(results.IMAGE_RELEASE_TEST_OUTPUT.path)"
+        - "--output"
+        - "json=$(params.HOMEDIR)/report-json.json"
+        - "--debug"
+      env:
+        - name: SSL_CERT_DIR
+          # The Tekton Operator automatically sets the SSL_CERT_DIR env to
+          # the value below but, of course, without the
+          # $(param.SSL_CERT_DIR) bit. When a Task Step sets it to a
+          # value, the Tekton Operator does not do any processing of the
+          # value. However, Tekton Pipelines will fail to execute because
+          # some of these values are required for its execution. As a
+          # workaround, append the SSL_CERT_DIR value from params to the
+          # default value expected by Tekton Pipelines. NOTE: If
+          # params.SSL_CERT_DIR is empty, the value will contain a
+          # trailing ":" - this is ok.
+          value: >-
+            /tekton-custom-certs:/etc/ssl/certs:/etc/pki/tls/certs:/system/etc/security/cacerts:$(params.SSL_CERT_DIR)
+        # The EC cache is used to avoid fetching the same image layers
+        # from the registry more than once. However, this is not thread
+        # safe. This results in inconsistencies when extracting files from
+        # an image, see https://github.com/conforma/cli/issues/1109
+        - name: EC_CACHE
+          value: "false"
+      computeResources:
+        requests:
+          cpu: 100m
+          memory: 2Gi
+        limits:
+          memory: 2Gi
+      volumeMounts:
+        - name: trusted-ca
+          mountPath: /etc/pki/tls/certs/ca-custom-bundle.crt
+          subPath: ca-bundle.crt
+          readOnly: true
+
+    - name: version
+      image: quay.io/conforma/cli:latest
+      command: [ec]
+      args: ["version"]
+
+    - name: show-config
+      image: quay.io/conforma/cli:latest
+      command: [sh, -c]
+      # yamllint disable rule:line-length
+      args:
+        - |
+          echo "=== RELEASE CONFIG ==="
+          jq '{policy: .policy, key: .key, "effective-time": .["effective-time"]}' \
+            "$(params.HOMEDIR)/report-json.json" || true
+      # yamllint enable rule:line-length
+
+    # Final assert: both phases must be SUCCESS (or WARNING if STRICT=false)
+    - name: assert
+      image: quay.io/conforma/cli:latest
+      command: [sh, -c]
+      args:
+        - |
+          set -euo pipefail
+          strict='$(params.STRICT)'
+          vsa_ok=$(jq -r '.result=="SUCCESS"' \
+            "$(results.VSA_TEST_OUTPUT.path)" || echo false)
+          rel_ok=$(jq -r '.result=="SUCCESS" or .result=="WARNING"' \
+            "$(results.IMAGE_RELEASE_TEST_OUTPUT.path)" || echo false)
+
+          if [[ "${strict}" == "false" ]]; then
+            # In non-strict mode, allow failures
+            exit 0
+          fi
+
+          if [[ "${vsa_ok}" != "true" ]]; then
+            echo "VSA validation did not succeed."
+            exit 1
+          fi
+          if [[ "${rel_ok}" != "true" ]]; then
+            echo "Release-time image validation did not succeed."
+            exit 1
+          fi
+          echo "Both validations passed."
+
+  volumes:
+    - name: trusted-ca
+      configMap:
+        name: $(params.CA_TRUST_CONFIGMAP_NAME)
+        items:
+          - key: $(params.CA_TRUST_CONFIG_MAP_KEY)
+            path: ca-bundle.crt
+        optional: true
+    - name: workdir
+      emptyDir: {}
