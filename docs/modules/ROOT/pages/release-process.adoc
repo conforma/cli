@@ -1,0 +1,155 @@
+= Release and Bundle Process
+
+This document describes the EC CLI release and bundle process for the Conforma project.
+
+== Overview
+
+The EC CLI release process is fully automated through GitHub Actions. It builds distribution binaries, container images, Tekton task bundles, and GitHub releases whenever changes are merged to the `main` branch.
+
+== When Releases Are Triggered
+
+Releases are triggered in two ways:
+
+. **Automatic**: After successful completion of the `Checks` workflow on the `main` branch. This happens every time a pull request is merged to `main` (and the checks pass), making the release process continuous.
+. **Manual**: Via workflow dispatch in the GitHub Actions UI
+
+== Artifacts Produced
+
+Each release produces the following artifacts:
+
+=== 1. Distribution Binaries
+
+Built for multiple architectures (Linux, macOS, Windows) using `make dist`. These are uploaded to GitHub releases.
+
+=== 2. Container Images
+
+Container images are built and pushed to *two* registry organizations:
+
+* `quay.io/conforma/cli` - Primary registry
+* `quay.io/enterprise-contract/ec-cli` - Deprecated (see note below)
+
+IMPORTANT: The `quay.io/enterprise-contract/ec-cli` registry is deprecated and maintained only for backward compatibility. It will stop receiving updates in the future. Use `quay.io/conforma/cli` for all new deployments.
+
+Each image is tagged with:
+
+* `gh-<commit-sha>` - Unique identifier for the build
+* `<commit-sha>-<timestamp>` - Timestamped variant
+* `snapshot` - Rolling latest tag
+
+=== 3. Tekton Task Bundles
+
+OCI-compliant Tekton task bundles containing:
+
+* `verify-enterprise-contract` task
+* `verify-conforma-konflux-ta` task
+
+Published to *two* repositories:
+
+* `quay.io/conforma/tekton-task` - Primary repository
+* `quay.io/enterprise-contract/ec-task-bundle` - Deprecated (see note below)
+
+IMPORTANT: The `quay.io/enterprise-contract/ec-task-bundle` repository is deprecated and maintained only for backward compatibility. It will stop receiving updates in the future. Use `quay.io/conforma/tekton-task` for all new deployments.
+
+Bundles are tagged with the same pattern as container images.
+
+=== 4. GitHub Releases
+
+Two releases are created simultaneously every time the workflow runs:
+
+* **Rolling Release** (`snapshot` tag): Always updated to point to the latest successful build from `main`. The previous `snapshot` release is deleted and recreated.
+* **Versioned Release**: Created with an auto-generated semantic version tag (e.g., `v0.8.45`). Each versioned release is preserved, creating a historical record of all builds from `main`.
+
+== Release Workflow Steps
+
+The release workflow (`.github/workflows/release.yaml`) executes these steps:
+
+. **Build Distribution**: Compile binaries for all supported platforms
+. **Build and Push Images**: Create container images with QEMU for multi-architecture support
+. **Verify Images**: Run verification tests to ensure images work correctly
+. **Create Tekton Bundles**: Package Tekton tasks with updated image references
+. **Deploy Statistics**: Generate and publish build statistics to GitHub Pages
+. **Create Releases**: Tag and create GitHub releases with distribution artifacts
+
+== Dual Registry Strategy
+
+The project publishes to two separate organizations for historical and organizational reasons:
+
+* **`conforma/*`**: Primary organizational namespace
+* **`enterprise-contract/*`**: Legacy namespace (deprecated)
+
+Both registries currently receive identical artifacts with identical tags. However, the `enterprise-contract/*` namespace is deprecated and will eventually stop receiving updates.
+
+== Image Verification
+
+After images are pushed, the workflow verifies both images work correctly by running:
+
+[source,bash]
+----
+make verify-image
+----
+
+This ensures the `ec` CLI is functional within the container environment.
+
+== Task Bundle Creation
+
+Tekton task bundles are OCI artifacts that package the Tekton task definitions. The bundles are created by:
+
+. **Reading the task definition files** from the repository:
+  * `tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml`
+  * `tasks/verify-conforma-konflux-ta/0.1/verify-conforma-konflux-ta.yaml`
+
+. **Dynamically updating image references** - During the release process, the workflow:
+  * Reads these task YAML files (which use `:latest` tags)
+  * Uses `yq` to dynamically replace all `.spec.steps[].image` fields with specific image digests
+  * Example transformation:
++
+[source,yaml]
+----
+# What's stored in the repository (unchanged):
+spec:
+  steps:
+    - name: validate
+      image: quay.io/conforma/cli:latest
+      
+# What gets packaged in the released bundle (pinned to digest):
+spec:
+  steps:
+    - name: validate
+      image: quay.io/conforma/cli@sha256:a55110c6de8abe9c94b426084dff73669c3dfdd7c49a45f2339bb91ea2975bbe
+----
+
+. **Packaging and pushing** - The modified task definitions are bundled and pushed as OCI artifacts using `make task-bundle-snapshot`.
+
+NOTE: The task files in the repository use `:latest` tags, but when the bundles are created and pushed, the image references are pinned to specific image digests (SHA256 content hashes). The repository files are never modified. This ensures each released bundle is immutable and always references the exact EC CLI image it was built with.
+
+== Versioning
+
+Version numbers are automatically derived using:
+
+[source,bash]
+----
+source hack/derive-version.sh
+----
+
+The script generates semantic versions based on git history and tags.
+
+== Monitoring Releases
+
+You can monitor releases through:
+
+* **GitHub Actions**: View workflow runs at `.github/workflows/release.yaml`
+* **GitHub Releases**: Check https://github.com/conforma/cli/releases
+* **Container Registries**: 
+** https://quay.io/repository/conforma/cli
+** https://quay.io/repository/enterprise-contract/ec-cli
+
+== Manual Release
+
+To trigger a manual release:
+
+. Navigate to Actions → Release workflow
+. Click "Run workflow"
+. Select the `main` branch
+. Click "Run workflow" button
+
+The release will proceed with the same steps as an automatic release.
