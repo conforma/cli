@@ -28,7 +28,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	"github.com/conforma/cli/internal/applicationsnapshot"
 	"github.com/conforma/cli/internal/format"
 	"github.com/conforma/cli/internal/input"
 	"github.com/conforma/cli/internal/output"
@@ -209,12 +208,12 @@ func validateInputCmd(validate InputValidationFunc) *cobra.Command {
 				return inputs[i].FilePath > inputs[j].FilePath
 			})
 
-			report, err := input.NewReport(inputs, data.policy, manyPolicyInput)
+			report, err := input.NewReport(inputs, data.policy, manyPolicyInput, showSuccesses, showWarnings)
 			if err != nil {
 				return err
 			}
 
-			p := format.NewTargetParser(input.JSON, format.Options{ShowSuccesses: showSuccesses, ShowWarnings: showWarnings}, cmd.OutOrStdout(), utils.FS(cmd.Context()))
+			p := format.NewTargetParser(input.Text, format.Options{ShowSuccesses: showSuccesses, ShowWarnings: showWarnings}, cmd.OutOrStdout(), utils.FS(cmd.Context()))
 			if err := report.WriteAll(data.output, p); err != nil {
 				return err
 			}
@@ -235,7 +234,7 @@ func validateInputCmd(validate InputValidationFunc) *cobra.Command {
 		* git reference (github.com/user/repo//default?ref=main), or
 		* inline JSON ('{sources: {...}}')")`))
 
-	validOutputFormats := applicationsnapshot.OutputFormats
+	validOutputFormats := []string{input.JSON, input.YAML, input.Text, input.Summary}
 	cmd.Flags().StringSliceVarP(&data.output, "output", "o", data.output, hd.Doc(`
 		Write output to a file in a specific format, e.g. yaml=/tmp/output.yaml. Use empty string
 		path for stdout, e.g. yaml. May be used multiple times. Possible formats are:

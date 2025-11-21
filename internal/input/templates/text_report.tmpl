@@ -1,0 +1,28 @@
+{{- $t := .TestReport -}}
+{{- $r := .Report -}}
+{{- $inputs := $r.FilePaths -}}
+
+Success: {{ $r.Success }}
+Result: {{ $t.Result }}
+Violations: {{ $t.Failures }}, Warnings: {{ $t.Warnings }}, Successes: {{ $t.Successes }}{{ nl -}}
+
+{{- template "_inputs.tmpl" $inputs -}}
+{{- if or (gt $t.Failures 0) (and (gt $t.Warnings 0) $r.ShowWarnings) (and (gt $t.Successes 0) $r.ShowSuccesses) -}}
+Results:{{ nl -}}
+{{- if gt $t.Failures 0 -}}
+  {{- template "_results.tmpl" (toMap "Inputs" $inputs "Type" "Violation") -}}
+{{- end -}}
+
+{{- if and (gt $t.Warnings 0) $r.ShowWarnings -}}
+  {{- template "_results.tmpl" (toMap "Inputs" $inputs "Type" "Warning") -}}
+{{- end -}}
+
+{{- if and (gt $t.Successes 0) $r.ShowSuccesses -}}
+  {{- template "_results.tmpl" (toMap "Inputs" $inputs "Type" "Success") -}}
+{{- end -}}
+{{- end -}}
+
+{{- if or (gt $t.Failures 0) (and (gt $t.Warnings 0) $r.ShowWarnings) -}}
+For more information about policy issues, see the policy documentation: https://conforma.dev/docs/policy/{{ nl -}}
+{{- end -}}
+

@@ -36,7 +36,7 @@ func Test_ReportJson(t *testing.T) {
 	inputs := testInputsFor(filePaths)
 	ctx := context.Background()
 	testPolicy := createTestPolicy(t, ctx)
-	report, err := NewReport(inputs, testPolicy, nil)
+	report, err := NewReport(inputs, testPolicy, nil, false, true)
 	assert.NoError(t, err)
 
 	testEffectiveTime := testPolicy.EffectiveTime().UTC().Format(time.RFC3339Nano)
@@ -126,7 +126,7 @@ func Test_ReportYaml(t *testing.T) {
 	inputs := testInputsFor(filePaths)
 	ctx := context.Background()
 	testPolicy := createTestPolicy(t, ctx)
-	report, err := NewReport(inputs, testPolicy, nil)
+	report, err := NewReport(inputs, testPolicy, nil, false, true)
 	assert.NoError(t, err)
 
 	testEffectiveTime := testPolicy.EffectiveTime().UTC().Format(time.RFC3339Nano)
@@ -232,7 +232,7 @@ func Test_ReportSummary(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf("NewReport=%s", tc.name), func(t *testing.T) {
 			ctx := context.Background()
-			report, err := NewReport(tc.input, createTestPolicy(t, ctx), nil)
+			report, err := NewReport(tc.input, createTestPolicy(t, ctx), nil, false, true)
 			// report, err := NewReport(tc.snapshot, []Component{tc.input}, createTestPolicy(t, ctx), nil, nil)
 			assert.NoError(t, err)
 			fmt.Println("\n\nExpected:\n", tc.want, "\n\nActual:\n", report.toSummary())
@@ -282,6 +282,117 @@ func testInputsFor(filePaths []string) []Input {
 		},
 	}
 	return inputs
+}
+
+func Test_ReportText(t *testing.T) {
+	inputs := []Input{
+		{
+			FilePath: "/path/to/file1.yaml",
+			Violations: []evaluator.Result{
+				{
+					Message: "violation1",
+					Metadata: map[string]interface{}{
+						"code": "test.violation",
+					},
+				},
+			},
+			Warnings: []evaluator.Result{
+				{
+					Message: "warning1",
+					Metadata: map[string]interface{}{
+						"code": "test.warning",
+					},
+				},
+			},
+			Successes: []evaluator.Result{
+				{
+					Message: "success1",
+					Metadata: map[string]interface{}{
+						"code": "test.success",
+					},
+				},
+			},
+			SuccessCount: 1,
+			Success:      false,
+		},
+	}
+	ctx := context.Background()
+	testPolicy := createTestPolicy(t, ctx)
+	report, err := NewReport(inputs, testPolicy, nil, false, true)
+	assert.NoError(t, err)
+
+	reportText, err := report.toFormat(Text)
+	assert.NoError(t, err)
+	textOutput := string(reportText)
+
+	// Verify basic structure
+	assert.Contains(t, textOutput, "Success: false")
+	assert.Contains(t, textOutput, "Result: FAILURE")
+	assert.Contains(t, textOutput, "Violations: 1")
+	assert.Contains(t, textOutput, "Warnings: 1")
+	assert.Contains(t, textOutput, "Successes: 1")
+	assert.Contains(t, textOutput, "Input File: /path/to/file1.yaml")
+	assert.Contains(t, textOutput, "Results:")
+	assert.Contains(t, textOutput, "[Violation] test.violation")
+	assert.Contains(t, textOutput, "[Warning] test.warning")
+	// Successes should not be shown when showSuccesses=false
+	assert.NotContains(t, textOutput, "[Success] test.success")
+}
+
+func Test_ReportText_ShowSuccesses(t *testing.T) {
+	inputs := []Input{
+		{
+			FilePath: "/path/to/file1.yaml",
+			Successes: []evaluator.Result{
+				{
+					Message: "success1",
+					Metadata: map[string]interface{}{
+						"code": "test.success",
+					},
+				},
+			},
+			SuccessCount: 1,
+			Success:      true,
+		},
+	}
+	ctx := context.Background()
+	testPolicy := createTestPolicy(t, ctx)
+	report, err := NewReport(inputs, testPolicy, nil, true, true)
+	assert.NoError(t, err)
+
+	reportText, err := report.toFormat(Text)
+	assert.NoError(t, err)
+	textOutput := string(reportText)
+
+	// Verify successes are shown when showSuccesses=true
+	assert.Contains(t, textOutput, "Success: true")
+	assert.Contains(t, textOutput, "Result: SUCCESS")
+	assert.Contains(t, textOutput, "Successes: 1")
+	assert.Contains(t, textOutput, "[Success] test.success")
+}
+
+func Test_ReportText_NoResultsSection(t *testing.T) {
+	// When there are only successes and showSuccesses=false, Results section should not appear
+	inputs := []Input{
+		{
+			FilePath:     "/path/to/file1.yaml",
+			SuccessCount: 1,
+			Success:      true,
+		},
+	}
+	ctx := context.Background()
+	testPolicy := createTestPolicy(t, ctx)
+	report, err := NewReport(inputs, testPolicy, nil, false, true)
+	assert.NoError(t, err)
+
+	reportText, err := report.toFormat(Text)
+	assert.NoError(t, err)
+	textOutput := string(reportText)
+
+	// Results section should not appear when there's nothing to show
+	assert.Contains(t, textOutput, "Success: true")
+	assert.Contains(t, textOutput, "Result: SUCCESS")
+	assert.NotContains(t, textOutput, "Results:")
 }
 
 func createTestPolicy(t *testing.T, ctx context.Context) policy.Policy {

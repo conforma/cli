@@ -86,6 +86,7 @@ func Test_ValidateInputCmd_SuccessSingleFile(t *testing.T) {
 		"input",
 		"--file", "/input.yaml",
 		"--policy", `{"publicKey": "testkey"}`,
+		"--output", "json", // Explicitly request JSON output
 	})
 
 	utils.SetTestRekorPublicKey(t)
@@ -132,6 +133,7 @@ func Test_ValidateInputCmd_SuccessMultipleFiles(t *testing.T) {
 		"--file", "/input1.yaml",
 		"--file", "/input2.yaml",
 		"--policy", `{"name":"Default","description":"Stuff and things","sources":[{"name":"Default","policy":["/bacon/and/eggs/policy/lib","/bacon/and/eggs/policy/release"],"data":["/bacon/and/eggs/example/data"],"config":{"include":["sbom_cyclonedx"],"exclude":[]}}]}`,
+		"--output", "json", // Explicitly request JSON output
 	})
 
 	utils.SetTestRekorPublicKey(t)
@@ -359,7 +361,8 @@ func Test_ValidateInputCmd_ShowWarningsFlag(t *testing.T) {
 			require.NoError(t, afero.WriteFile(fs, "/file.yaml", []byte("some: data"), 0644))
 
 			cmd, buf := setUpValidateInputCmd(warningValidator, fs)
-			cmd.SetArgs(c.args)
+			args := append(c.args, "--output", "json") // Explicitly request JSON output
+			cmd.SetArgs(args)
 
 			utils.SetTestRekorPublicKey(t)
 			err := cmd.Execute()
@@ -393,4 +396,88 @@ func Test_ValidateInputCmd_ShowWarningsFlag(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_ValidateInputCmd_DefaultTextOutput(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	require.NoError(t, afero.WriteFile(fs, "/input.yaml", []byte("some: data"), 0644))
+
+	// Mock validator: returns success with no violations, one success result.
+	outMock := &output.Output{
+		PolicyCheck: []evaluator.Outcome{
+			{
+				Successes: []evaluator.Result{
+					{
+						Message: "Everything looks great!",
+						Metadata: map[string]interface{}{
+							"code": "policy.nice",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cmd, buf := setUpValidateInputCmd(mockValidate(outMock, nil), fs)
+	cmd.SetArgs([]string{
+		"input",
+		"--file", "/input.yaml",
+		"--policy", `{"publicKey": "testkey"}`,
+		// No --output flag, should default to text
+	})
+
+	utils.SetTestRekorPublicKey(t)
+	err := cmd.Execute()
+	assert.NoError(t, err)
+
+	output := buf.String()
+	// Verify text output format
+	assert.Contains(t, output, "Success: true")
+	assert.Contains(t, output, "Result: SUCCESS")
+	assert.Contains(t, output, "Violations: 0")
+	assert.Contains(t, output, "Input File: /input.yaml")
+	// Results section should not appear when there are only successes and showSuccesses=false
+	assert.NotContains(t, output, "Results:")
+}
+
+func Test_ValidateInputCmd_TextOutputWithShowSuccesses(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	require.NoError(t, afero.WriteFile(fs, "/input.yaml", []byte("some: data"), 0644))
+
+	// Mock validator: returns success with one success result.
+	outMock := &output.Output{
+		PolicyCheck: []evaluator.Outcome{
+			{
+				Successes: []evaluator.Result{
+					{
+						Message: "Everything looks great!",
+						Metadata: map[string]interface{}{
+							"code": "policy.nice",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cmd, buf := setUpValidateInputCmd(mockValidate(outMock, nil), fs)
+	cmd.SetArgs([]string{
+		"input",
+		"--file", "/input.yaml",
+		"--policy", `{"publicKey": "testkey"}`,
+		"--show-successes",
+	})
+
+	utils.SetTestRekorPublicKey(t)
+	err := cmd.Execute()
+	assert.NoError(t, err)
+
+	output := buf.String()
+	// Verify text output format with successes shown
+	assert.Contains(t, output, "Success: true")
+	assert.Contains(t, output, "Result: SUCCESS")
+	assert.Contains(t, output, "Successes: 1")
+	assert.Contains(t, output, "Input File: /input.yaml")
+	assert.Contains(t, output, "Results:")
+	assert.Contains(t, output, "[Success] policy.nice")
 }

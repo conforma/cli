@@ -18,6 +18,7 @@ package input
 
 import (
 	"bytes"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +30,7 @@ import (
 	"github.com/conforma/cli/internal/evaluator"
 	"github.com/conforma/cli/internal/format"
 	"github.com/conforma/cli/internal/policy"
+	"github.com/conforma/cli/internal/utils"
 	"github.com/conforma/cli/internal/version"
 )
 
@@ -50,6 +52,8 @@ type Report struct {
 	Data          any                              `json:"-"`
 	EffectiveTime time.Time                        `json:"effective-time"`
 	PolicyInput   [][]byte                         `json:"-"`
+	ShowSuccesses bool                             `json:"-"`
+	ShowWarnings  bool                             `json:"-"`
 }
 
 type summary struct {
@@ -87,12 +91,13 @@ type TestReport struct {
 const (
 	JSON    = "json"
 	YAML    = "yaml"
+	Text    = "text"
 	Summary = "summary"
 )
 
 // WriteReport returns a new instance of Report representing the state of
 // the filepaths provided.
-func NewReport(inputs []Input, policy policy.Policy, policyInput [][]byte) (Report, error) {
+func NewReport(inputs []Input, policy policy.Policy, policyInput [][]byte, showSuccesses bool, showWarnings bool) (Report, error) {
 	success := true
 
 	// Set the report success, remains true if all the files were successfully validated
@@ -113,13 +118,15 @@ func NewReport(inputs []Input, policy policy.Policy, policyInput [][]byte) (Repo
 		EcVersion:     info.Version,
 		EffectiveTime: policy.EffectiveTime().UTC(),
 		PolicyInput:   policyInput,
+		ShowSuccesses: showSuccesses,
+		ShowWarnings:  showWarnings,
 	}, nil
 }
 
 // WriteAll writes the report to all the given targets.
 func (r Report) WriteAll(targets []string, p format.TargetParser) (allErrors error) {
 	if len(targets) == 0 {
-		targets = append(targets, JSON)
+		targets = append(targets, Text)
 	}
 	for _, targetName := range targets {
 		target, err := p.Parse(targetName)
@@ -152,6 +159,8 @@ func (r *Report) toFormat(format string) (data []byte, err error) {
 		data, err = json.Marshal(r)
 	case YAML:
 		data, err = yaml.Marshal(r)
+	case Text:
+		data, err = generateTextReport(r)
 	case Summary:
 		data, err = json.Marshal(r.toSummary())
 	default:
@@ -205,4 +214,44 @@ func condensedMsg(results []evaluator.Result) map[string][]string {
 		}
 	}
 	return shortNames
+}
+
+//go:embed templates/*.tmpl
+var efs embed.FS
+
+func generateTextReport(r *Report) ([]byte, error) {
+	// Prepare some template input
+	// Calculate totals for the test report structure
+	var successes, failures, warnings int
+	for _, input := range r.FilePaths {
+		successes += input.SuccessCount
+		failures += len(input.Violations)
+		warnings += len(input.Warnings)
+	}
+
+	result := "SUCCESS"
+	if failures > 0 {
+		result = "FAILURE"
+	} else if warnings > 0 {
+		result = "WARNING"
+	}
+
+	testReport := TestReport{
+		Timestamp: r.created.Format(time.RFC3339),
+		Namespace: "",
+		Successes: successes,
+		Failures:  failures,
+		Warnings:  warnings,
+		Result:    result,
+	}
+
+	input := struct {
+		Report     *Report
+		TestReport TestReport
+	}{
+		Report:     r,
+		TestReport: testReport,
+	}
+
+	return utils.RenderFromTemplatesWithMain(input, "text_report.tmpl", efs)
 }

@@ -1,0 +1,53 @@
+{{- $type := .Type -}}
+{{- $wrap := 130 -}}
+{{- $indent := 2 -}}
+
+{{- range .Inputs -}}
+  {{- $filePath := .FilePath -}}
+
+  {{ $results := "" }}
+  {{- if eq $type "Violation" -}}{{- $results = .Violations -}}
+  {{- else if eq $type "Warning" -}}{{- $results = .Warnings -}}
+  {{- else if eq $type "Success" -}}{{- $results = .Successes  -}}
+  {{- end -}}
+
+  {{- range $results -}}
+    {{/* Assume .Metadata.code is always present */}}
+    {{- colorIndicator $type }} {{ colorText $type (printf "[%s] %s" $type .Metadata.code) }}{{ nl -}}
+
+    {{- if $filePath -}}
+      {{- indent $indent (printf "FilePath: %s" $filePath ) }}{{ nl -}}
+    {{- end -}}
+
+    {{/* For a success the message is generally just "Pass" so don't show it */}}
+    {{- if and (ne $type "Success") .Message -}}
+      {{- indentWrap $indent $wrap (printf "Reason: %s" .Message) }}{{ nl -}}
+    {{- end -}}
+
+    {{- if .Metadata.term }}
+      {{- if isString .Metadata.term }}
+        {{- indentWrap $indent $wrap (printf "Term: %s" .Metadata.term) }}{{ nl -}}
+      {{- else -}}
+        {{- with $list := joinStrSlice .Metadata.term ", " -}}{{- indentWrap $indent $wrap (printf "Terms: %s" $list) -}}{{ nl -}}{{- end -}}
+      {{- end -}}
+    {{- end -}}
+
+    {{- if .Metadata.title }}
+      {{- indentWrap $indent $wrap (printf "Title: %s" .Metadata.title) }}{{ nl -}}
+    {{- end -}}
+
+    {{- if .Metadata.description -}}
+      {{- indentWrap $indent $wrap (printf "Description: %s" .Metadata.description) -}}{{ nl -}}
+    {{- end -}}
+
+    {{/* Don't show the solution text for a success either */}}
+    {{- if and (ne $type "Success") .Metadata.solution -}}
+      {{- indentWrap $indent $wrap (printf "Solution: %s" .Metadata.solution) -}}{{ nl -}}
+    {{- end -}}
+
+    {{- nl -}}
+  {{- end -}}
+{{- end -}}
+
+
+

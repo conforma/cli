@@ -1,0 +1,26 @@
+{{- if gt (len .) 1 -}}
+{{/*
+  When there are multiple input files we provide totals for each
+  file and change the format to make it more readable as a list
+*/}}
+Input Files:
+{{ range . -}}
+- FilePath: {{ .FilePath }}
+  Violations: {{ len .Violations }}, Warnings: {{ len .Warnings }}, Successes: {{ .SuccessCount }}
+
+{{ end -}}
+
+{{- else -}}
+{{/*
+  When there is only one input file the summary counts are the same
+  as the overall counts, so we don't need to repeat them.
+  (Using range here even though we know there is only one item.)
+*/}}
+{{- range . -}}
+Input File: {{ .FilePath }}
+
+{{ end -}}
+{{- end -}}
+
+
+

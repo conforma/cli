@@ -52,7 +52,7 @@ violations, include the title and the description of the failed policy
 rule. (Default: false)
 -o, --output:: Write output to a file in a specific format, e.g. yaml=/tmp/output.yaml. Use empty string
 path for stdout, e.g. yaml. May be used multiple times. Possible formats are:
-json, yaml, text, appstudio, summary, summary-markdown, junit, attestation, policy-input, vsa. In following format and file path
+json, yaml, text, summary. In following format and file path
 additional options can be provided in key=value form following the question
 mark (?) sign, for example: --output text=output.txt?show-successes=false
  (Default: [])

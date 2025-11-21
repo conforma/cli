@@ -23,7 +23,7 @@ Feature: validate input
           name: init
           version: "0.1"
     """
-    When ec command is run with "validate input --file pipeline_definition.yaml --policy git::https://${GITHOST}/git/happy-day-config.git"
+    When ec command is run with "validate input --file pipeline_definition.yaml --policy git::https://${GITHOST}/git/happy-day-config.git --output json"
     Then the exit status should be 0
     Then the output should match the snapshot
 
@@ -46,7 +46,7 @@ Feature: validate input
           name: init
           version: "0.1"
     """
-    When ec command is run with "validate input --file pipeline_definition.yaml --policy git::https://${GITHOST}/git/sad-day-config.git"
+    When ec command is run with "validate input --file pipeline_definition.yaml --policy git::https://${GITHOST}/git/sad-day-config.git --output json"
     Then the exit status should be 1
     Then the output should match the snapshot
 
@@ -63,7 +63,7 @@ Feature: validate input
       spam: false
       ham: rotten
       """
-    When ec command is run with "validate input --file input.yaml --policy git::https://${GITHOST}/git/multiple-sources-config.git"
+    When ec command is run with "validate input --file input.yaml --policy git::https://${GITHOST}/git/multiple-sources-config.git --output json"
     Then the exit status should be 1
     Then the output should match the snapshot
 
