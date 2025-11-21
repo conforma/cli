@@ -18,6 +18,7 @@ package vsa
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -79,10 +80,10 @@ func (f *FileVSARetriever) RetrieveVSA(ctx context.Context, identifier string) (
 		return nil, fmt.Errorf("failed to read VSA file: %w", err)
 	}
 
-	// Parse the DSSE envelope
-	envelope, err := f.parseDSSEEnvelope(data)
+	// Try to parse as DSSE envelope first, then fall back to raw predicate
+	envelope, err := f.parseVSAContent(data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse DSSE envelope from file: %w", err)
+		return nil, fmt.Errorf("failed to parse VSA content from file: %w", err)
 	}
 
 	log.Debugf("Successfully retrieved VSA from file: %s", filePath)
@@ -124,6 +125,45 @@ func (f *FileVSARetriever) parseDSSEEnvelope(data []byte) (*ssldsse.Envelope, er
 	}
 
 	return &envelope, nil
+}
+
+// parseVSAContent attempts to parse VSA content from either DSSE envelope or raw predicate format
+func (f *FileVSARetriever) parseVSAContent(data []byte) (*ssldsse.Envelope, error) {
+	// First, try to parse as a DSSE envelope (signed format)
+	envelope, err := f.parseDSSEEnvelope(data)
+	if err == nil {
+		return envelope, nil
+	}
+
+	// If DSSE parsing failed, try to parse as raw predicate (unsigned format)
+	return f.parseRawPredicate(data)
+}
+
+// parseRawPredicate parses a raw VSA predicate and wraps it in a minimal DSSE envelope structure
+func (f *FileVSARetriever) parseRawPredicate(data []byte) (*ssldsse.Envelope, error) {
+	// Verify it's valid JSON and looks like a VSA predicate
+	var predicate map[string]interface{}
+	if err := json.Unmarshal(data, &predicate); err != nil {
+		return nil, fmt.Errorf("content is neither valid DSSE envelope nor valid JSON predicate: %w", err)
+	}
+
+	// Check if it looks like a VSA predicate (should have expected fields)
+	if _, hasPolicy := predicate["policy"]; !hasPolicy {
+		return nil, fmt.Errorf("content does not appear to be a VSA predicate (missing 'policy' field)")
+	}
+	if _, hasTimestamp := predicate["timestamp"]; !hasTimestamp {
+		return nil, fmt.Errorf("content does not appear to be a VSA predicate (missing 'timestamp' field)")
+	}
+
+	// Create a minimal DSSE envelope with the raw predicate as base64-encoded payload
+	// This allows the rest of the VSA processing pipeline to work unchanged
+	envelope := &ssldsse.Envelope{
+		PayloadType: "application/vnd.in-toto+json",
+		Payload:     base64.StdEncoding.EncodeToString(data),
+		Signatures:  []ssldsse.Signature{}, // Empty signatures for unsigned content
+	}
+
+	return envelope, nil
 }
 
 // FileVSARetrieverOptions configures filesystem-based VSA retrieval behavior
