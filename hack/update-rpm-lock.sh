@@ -75,10 +75,11 @@ base_image_repos=$(mktemp -d --tmpdir)
 # extract all /etc/yum.repos.d/* files from the base image
 oc image extract "${base_img}" --path /etc/yum.repos.d/*.repo:"${base_image_repos}"
 
-# enable source repositories
-for r in $(dnf repolist --setopt=reposdir="${base_image_repos}" --disabled --quiet|grep -- -source | sed "s/ .*//"); do
-    dnf config-manager --quiet --setopt=reposdir="${base_image_repos}" "${r}" --set-enabled
-done
+# In the past we used to add enable the source repos, but now we follow the example
+# set by MintMaker's automated lock file update PRs and leave the source repos disabled
+#for r in $(dnf repolist --setopt=reposdir="${base_image_repos}" --disabled --quiet|grep -- -source | sed "s/ .*//"); do
+#    dnf config-manager --quiet --setopt=reposdir="${base_image_repos}" "${r}" --set-enabled
+#done
 
 # convert ubi repo ids to archful format for better sbom data
 sed -i 's/^\[ubi-9-/\[ubi-9-for-$basearch-/' "${base_image_repos}"/*.repo
