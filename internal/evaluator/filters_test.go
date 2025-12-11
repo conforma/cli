@@ -626,7 +626,7 @@ func TestUnifiedPostEvaluationFilter(t *testing.T) {
 		}
 
 		filteredResults, updatedMissingIncludes := filter.FilterResults(
-			results, rules, "test-target", missingIncludes, time.Now())
+			results, rules, "test-target", "", missingIncludes, time.Now())
 
 		// Should include cve.high_severity and tasks.build_task, exclude test.test_data_found
 		assert.Len(t, filteredResults, 2)
@@ -695,7 +695,7 @@ func TestUnifiedPostEvaluationFilter(t *testing.T) {
 		}
 
 		filteredResults, updatedMissingIncludes := filter.FilterResults(
-			results, rules, "test-target", missingIncludes, time.Now())
+			results, rules, "test-target", "", missingIncludes, time.Now())
 
 		// Should only include release.security_check (matches pipeline intention)
 		assert.Len(t, filteredResults, 1)
@@ -746,7 +746,7 @@ func TestUnifiedPostEvaluationFilter(t *testing.T) {
 		}
 
 		filteredResults, updatedMissingIncludes := filter.FilterResults(
-			results, rules, "test-target", missingIncludes, time.Now())
+			results, rules, "test-target", "", missingIncludes, time.Now())
 
 		// Should include the CVE result
 		assert.Len(t, filteredResults, 1)
@@ -873,7 +873,7 @@ func TestUnifiedPostEvaluationFilterVsLegacy(t *testing.T) {
 			"security.*": true,
 		}
 		newFilteredResults, newUpdatedMissingIncludes := newFilter.FilterResults(
-			results, rules, "test-target", newMissingIncludes, time.Now())
+			results, rules, "test-target", "", newMissingIncludes, time.Now())
 
 		// Test the legacy approach using the standalone functions
 		legacyMissingIncludes := map[string]bool{
@@ -896,7 +896,7 @@ func TestUnifiedPostEvaluationFilterVsLegacy(t *testing.T) {
 				defaultItems: []string{"test.test_data_found", "slsa3.provenance"},
 			}
 
-			if LegacyIsResultIncluded(result, "test-target", legacyMissingIncludes, include, exclude) {
+			if LegacyIsResultIncluded(result, "test-target", "", legacyMissingIncludes, include, exclude) {
 				legacyFilteredResults = append(legacyFilteredResults, result)
 			}
 		}

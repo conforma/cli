@@ -349,6 +349,67 @@ func TestEvaluatorLifecycle(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestComponentNamePassedToEvaluator verifies that the component name from SnapshotComponent
+// is correctly passed to the evaluator via EvaluationTarget.ComponentName
+func TestComponentNamePassedToEvaluator(t *testing.T) {
+	ctx := context.Background()
+	client := fake.FakeClient{}
+	client.On("Head", mock.Anything).Return(&v1.Descriptor{MediaType: types.OCIManifestSchema1}, nil)
+	client.On("Image", name.MustParseReference(imageRegistry+"@sha256:"+imageDigest), mock.Anything).Return(empty.Image, nil)
+	client.On("VerifyImageSignatures", refNoTag, mock.Anything).Return([]oci.Signature{validSignature}, true, nil)
+	client.On("VerifyImageAttestations", refNoTag, mock.Anything).Return([]oci.Signature{validAttestation}, true, nil)
+	client.On("ResolveDigest", refNoTag).Return("@sha256:"+imageDigest, nil)
+	ctx = ecoci.WithClient(ctx, &client)
+
+	expectedComponentName := "my-test-component"
+	component := app.SnapshotComponent{
+		Name:           expectedComponentName,
+		ContainerImage: imageRef,
+	}
+
+	p, err := policy.NewOfflinePolicy(ctx, policy.Now)
+	require.NoError(t, err)
+
+	// Create a mock evaluator that captures the EvaluationTarget
+	var capturedTarget evaluator.EvaluationTarget
+	e := &mockEvaluatorWithCapture{
+		captureFunc: func(target evaluator.EvaluationTarget) {
+			capturedTarget = target
+		},
+	}
+
+	evaluators := []evaluator.Evaluator{e}
+
+	snap := app.SnapshotSpec{
+		Components: []app.SnapshotComponent{component},
+	}
+
+	_, err = ValidateImage(ctx, component, &snap, p, evaluators, false)
+	require.NoError(t, err)
+
+	// Verify that ComponentName was correctly passed to the evaluator
+	assert.Equal(t, expectedComponentName, capturedTarget.ComponentName,
+		"ComponentName should be passed from SnapshotComponent.Name to EvaluationTarget.ComponentName")
+}
+
+// mockEvaluatorWithCapture is a mock evaluator that captures the EvaluationTarget for verification
+type mockEvaluatorWithCapture struct {
+	captureFunc func(target evaluator.EvaluationTarget)
+}
+
+func (e *mockEvaluatorWithCapture) Evaluate(ctx context.Context, target evaluator.EvaluationTarget) ([]evaluator.Outcome, error) {
+	if e.captureFunc != nil {
+		e.captureFunc(target)
+	}
+	return []evaluator.Outcome{}, nil
+}
+
+func (e *mockEvaluatorWithCapture) Destroy() {}
+
+func (e *mockEvaluatorWithCapture) CapabilitiesPath() string {
+	return ""
+}
+
 // createMockVSAChecker creates a mock VSA checker for testing
 func createMockVSAChecker() *vsa.VSAChecker {
 	// Create a mock retriever that always returns "not found"

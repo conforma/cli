@@ -117,7 +117,10 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 
 	for _, e := range evaluators {
 		// Todo maybe: Handle each one concurrently
-		target := evaluator.EvaluationTarget{Inputs: []string{inputPath}}
+		target := evaluator.EvaluationTarget{
+			Inputs:        []string{inputPath},
+			ComponentName: comp.Name,
+		}
 		if ref := a.ImageReference(ctx); ref == "" {
 			log.Debug("Problem getting image reference")
 		} else {

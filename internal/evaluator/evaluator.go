@@ -21,8 +21,9 @@ import (
 )
 
 type EvaluationTarget struct {
-	Inputs []string
-	Target string
+	Inputs        []string
+	Target        string
+	ComponentName string
 }
 
 type Evaluator interface {

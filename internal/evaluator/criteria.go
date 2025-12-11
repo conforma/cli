@@ -28,15 +28,21 @@ import (
 // contains include/exclude items
 // digestItems stores include/exclude items that are specific with an imageRef
 // - the imageRef is the key, value is the policy to include/exclude.
+// componentItems stores include/exclude items that are specific to a component name
+// - the component name is the key, value is the policy to include/exclude.
 // defaultItems are include/exclude items without an imageRef
 type Criteria struct {
-	digestItems  map[string][]string
-	defaultItems []string
+	digestItems    map[string][]string
+	componentItems map[string][]string
+	defaultItems   []string
 }
 
 func (c *Criteria) len() int {
 	totalLength := len(c.defaultItems)
 	for _, items := range c.digestItems {
+		totalLength += len(items)
+	}
+	for _, items := range c.componentItems {
 		totalLength += len(items)
 	}
 	return totalLength
@@ -64,12 +70,20 @@ func (c *Criteria) addArray(key string, values []string) {
 	}
 }
 
-// This accepts an image ref with digest
-// and looks up the image url and digest separately.
-func (c *Criteria) get(key string) []string {
-	ref, err := name.ParseReference(key)
+func (c *Criteria) addComponentItem(componentName, value string) {
+	if c.componentItems == nil {
+		c.componentItems = make(map[string][]string)
+	}
+	c.componentItems[componentName] = append(c.componentItems[componentName], value)
+}
+
+// This accepts an image ref with digest and optional component name,
+// and looks up the image url, digest, and component name separately.
+func (c *Criteria) get(imageRef string, componentName string) []string {
+	ref, err := name.ParseReference(imageRef)
 	if err != nil {
-		log.Debugf("error parsing target image url: %q", key)
+		log.Debugf("error parsing target image url: %q", imageRef)
+		// Return only global defaults if image ref is invalid
 		return c.defaultItems
 	}
 
@@ -85,6 +99,13 @@ func (c *Criteria) get(key string) []string {
 	var items []string
 	for _, k := range keys {
 		items = append(items, c.getWithKey(k)...)
+	}
+
+	// Add component-specific items if component name is provided
+	if componentName != "" {
+		if componentItems, ok := c.componentItems[componentName]; ok {
+			items = append(items, componentItems...)
+		}
 	}
 
 	// Add any exceptions that pertain to all images.
@@ -158,6 +179,10 @@ func collectVolatileConfigItems(items *Criteria, volatileCriteria []ecc.Volatile
 				items.addItem(c.ImageUrl, c.Value)
 			} else if c.ImageDigest != "" {
 				items.addItem(c.ImageDigest, c.Value)
+			} else if len(c.ComponentNames) > 0 {
+				for _, componentName := range c.ComponentNames {
+					items.addComponentItem(string(componentName), c.Value)
+				}
 			} else {
 				items.addItem("", c.Value)
 			}

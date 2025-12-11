@@ -139,3 +139,204 @@ deny contains result if {
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 }
+
+func TestConftestEvaluatorIntegrationWithComponentNames(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a temporary directory for the test
+	tmpDir := t.TempDir()
+	policyDir := filepath.Join(tmpDir, "policy")
+	err := os.MkdirAll(policyDir, 0o755)
+	require.NoError(t, err)
+
+	// Create policies that will be filtered by ComponentNames
+	policyContent := `package test
+
+import rego.v1
+
+# METADATA
+# title: Check A
+# custom:
+#   short_name: check_a
+deny contains result if {
+	result := {
+		"code": "test.check_a",
+		"msg": "Check A always fails"
+	}
+}
+
+# METADATA
+# title: Check B
+# custom:
+#   short_name: check_b
+deny contains result if {
+	result := {
+		"code": "test.check_b",
+		"msg": "Check B always fails"
+	}
+}
+`
+	err = os.WriteFile(filepath.Join(policyDir, "policy.rego"), []byte(policyContent), 0o600)
+	require.NoError(t, err)
+
+	// Create policy source
+	policySource := &source.PolicyUrl{
+		Url:  "file://" + policyDir,
+		Kind: source.PolicyKind,
+	}
+
+	// Create config provider with ComponentNames filter
+	configProvider := &mockConfigProvider{}
+	configProvider.On("EffectiveTime").Return(time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC))
+	configProvider.On("SigstoreOpts").Return(policy.SigstoreOpts{}, nil)
+	configProvider.On("Spec").Return(ecc.EnterpriseContractPolicySpec{
+		Sources: []ecc.Source{
+			{
+				Policy: []string{"file://" + policyDir},
+			},
+		},
+	})
+
+	// Create evaluator with VolatileConfig that excludes check_a for comp1
+	evaluator, err := NewConftestEvaluator(ctx, []source.PolicySource{policySource}, configProvider, ecc.Source{
+		VolatileConfig: &ecc.VolatileSourceConfig{
+			Exclude: []ecc.VolatileCriteria{
+				{
+					Value:          "test.check_a",
+					ComponentNames: []ecc.ComponentName{"comp1"},
+					EffectiveOn:    "2024-01-01T00:00:00Z",
+					EffectiveUntil: "2025-01-01T00:00:00Z",
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	defer evaluator.Destroy()
+
+	// Debug: Check exclude criteria
+	conftestEval := evaluator.(conftestEvaluator)
+	t.Logf("Exclude componentItems: %+v", conftestEval.exclude.componentItems)
+	t.Logf("Exclude defaultItems: %+v", conftestEval.exclude.defaultItems)
+	t.Logf("Exclude digestItems: %+v", conftestEval.exclude.digestItems)
+
+	// Create test input
+	inputData := map[string]interface{}{
+		"test": "value",
+	}
+	inputBytes, err := json.Marshal(inputData)
+	require.NoError(t, err)
+	inputPath := filepath.Join(tmpDir, "input.json")
+	err = os.WriteFile(inputPath, inputBytes, 0o600)
+	require.NoError(t, err)
+
+	// Test comp1 - check_a should be excluded
+	target1 := EvaluationTarget{
+		Inputs:        []string{inputPath},
+		Target:        "quay.io/repo/img@sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+		ComponentName: "comp1",
+	}
+
+	result1, err := evaluator.Evaluate(ctx, target1)
+	require.NoError(t, err)
+	require.NotNil(t, result1)
+
+	// Debug: Print all failures
+	t.Logf("comp1 results: %d outcomes", len(result1))
+	for i, outcome := range result1 {
+		t.Logf("  Outcome %d: %d failures, %d successes", i, len(outcome.Failures), len(outcome.Successes))
+		for _, failure := range outcome.Failures {
+			t.Logf("    Failure: %s", failure.Metadata["code"])
+		}
+		for _, success := range outcome.Successes {
+			t.Logf("    Success: %s", success.Metadata["code"])
+		}
+	}
+
+	// Verify check_a is excluded, check_b is not
+	hasCheckA := false
+	hasCheckB := false
+	for _, outcome := range result1 {
+		for _, failure := range outcome.Failures {
+			if codeStr, ok := failure.Metadata["code"].(string); ok {
+				if codeStr == "test.check_a" {
+					hasCheckA = true
+				}
+				if codeStr == "test.check_b" {
+					hasCheckB = true
+				}
+			}
+		}
+	}
+	assert.False(t, hasCheckA, "Expected check_a to be excluded for comp1")
+	assert.True(t, hasCheckB, "Expected check_b to be evaluated for comp1")
+
+	// Test comp2 - check_a should NOT be excluded
+	target2 := EvaluationTarget{
+		Inputs:        []string{inputPath},
+		Target:        "quay.io/repo/img@sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+		ComponentName: "comp2",
+	}
+
+	result2, err := evaluator.Evaluate(ctx, target2)
+	require.NoError(t, err)
+	require.NotNil(t, result2)
+
+	// Verify both checks are evaluated for comp2
+	hasCheckA2 := false
+	hasCheckB2 := false
+	for _, outcome := range result2 {
+		for _, failure := range outcome.Failures {
+			if codeStr, ok := failure.Metadata["code"].(string); ok {
+				if codeStr == "test.check_a" {
+					hasCheckA2 = true
+				}
+				if codeStr == "test.check_b" {
+					hasCheckB2 = true
+				}
+			}
+		}
+	}
+	assert.True(t, hasCheckA2, "Expected check_a to be evaluated for comp2")
+	assert.True(t, hasCheckB2, "Expected check_b to be evaluated for comp2")
+
+	// Test same image with different components - monorepo scenario
+	sameImage := "quay.io/monorepo@sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+
+	target3 := EvaluationTarget{
+		Inputs:        []string{inputPath},
+		Target:        sameImage,
+		ComponentName: "comp1",
+	}
+
+	result3, err := evaluator.Evaluate(ctx, target3)
+	require.NoError(t, err)
+
+	hasCheckA3 := false
+	for _, outcome := range result3 {
+		for _, failure := range outcome.Failures {
+			if codeStr, ok := failure.Metadata["code"].(string); ok && codeStr == "test.check_a" {
+				hasCheckA3 = true
+			}
+		}
+	}
+	assert.False(t, hasCheckA3, "Expected check_a excluded for comp1 even with different image")
+
+	target4 := EvaluationTarget{
+		Inputs:        []string{inputPath},
+		Target:        sameImage,
+		ComponentName: "comp2",
+	}
+
+	result4, err := evaluator.Evaluate(ctx, target4)
+	require.NoError(t, err)
+
+	hasCheckA4 := false
+	for _, outcome := range result4 {
+		for _, failure := range outcome.Failures {
+			if codeStr, ok := failure.Metadata["code"].(string); ok && codeStr == "test.check_a" {
+				hasCheckA4 = true
+			}
+		}
+	}
+	assert.True(t, hasCheckA4, "Expected check_a evaluated for comp2 with same image")
+}

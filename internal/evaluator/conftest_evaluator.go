@@ -646,7 +646,7 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 
 		// Filter results using the unified filter
 		filteredResults, updatedMissingIncludes := unifiedFilter.FilterResults(
-			allResults, allRules, target.Target, missingIncludes, effectiveTime)
+			allResults, allRules, target.Target, target.ComponentName, missingIncludes, effectiveTime)
 
 		// Update missing includes
 		missingIncludes = updatedMissingIncludes
@@ -661,7 +661,7 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		result.Skipped = skipped
 
 		// Replace the placeholder successes slice with the actual successes.
-		result.Successes = c.computeSuccesses(result, rules, target.Target, missingIncludes, unifiedFilter)
+		result.Successes = c.computeSuccesses(result, rules, target.Target, target.ComponentName, missingIncludes, unifiedFilter)
 
 		totalRules += len(result.Warnings) + len(result.Failures) + len(result.Successes)
 
@@ -798,7 +798,8 @@ func toRules(results []output.Result) []Result {
 func (c conftestEvaluator) computeSuccesses(
 	result Outcome,
 	rules policyRules,
-	target string,
+	imageRef string,
+	componentName string,
 	missingIncludes map[string]bool,
 	unifiedFilter PostEvaluationFilter,
 ) []Result {
@@ -857,7 +858,7 @@ func (c conftestEvaluator) computeSuccesses(
 		if unifiedFilter != nil {
 			// Use the unified filter to check if this success should be included
 			filteredResults, _ := unifiedFilter.FilterResults(
-				[]Result{success}, rules, target, missingIncludes, time.Now())
+				[]Result{success}, rules, imageRef, componentName, missingIncludes, time.Now())
 
 			if len(filteredResults) == 0 {
 				log.Debugf("Skipping result success: %#v", success)
@@ -865,7 +866,7 @@ func (c conftestEvaluator) computeSuccesses(
 			}
 		} else {
 			// Fallback to legacy filtering for backward compatibility
-			if !c.isResultIncluded(success, target, missingIncludes) {
+			if !c.isResultIncluded(success, imageRef, componentName, missingIncludes) {
 				log.Debugf("Skipping result success: %#v", success)
 				continue
 			}
@@ -1120,10 +1121,10 @@ func isResultEffective(failure Result, now time.Time) bool {
 // isResultIncluded returns whether or not the result should be included or
 // discarded based on the policy configuration.
 // 'missingIncludes' is a list of include directives that gets pruned if the result is matched
-func (c conftestEvaluator) isResultIncluded(result Result, target string, missingIncludes map[string]bool) bool {
+func (c conftestEvaluator) isResultIncluded(result Result, imageRef string, componentName string, missingIncludes map[string]bool) bool {
 	ruleMatchers := LegacyMakeMatchers(result)
-	includeScore := LegacyScoreMatches(ruleMatchers, c.include.get(target), missingIncludes)
-	excludeScore := LegacyScoreMatches(ruleMatchers, c.exclude.get(target), map[string]bool{})
+	includeScore := LegacyScoreMatches(ruleMatchers, c.include.get(imageRef, componentName), missingIncludes)
+	excludeScore := LegacyScoreMatches(ruleMatchers, c.exclude.get(imageRef, componentName), map[string]bool{})
 	return includeScore > excludeScore
 }
 

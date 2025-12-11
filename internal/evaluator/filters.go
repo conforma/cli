@@ -71,7 +71,8 @@ type PostEvaluationFilter interface {
 	FilterResults(
 		results []Result,
 		rules policyRules,
-		target string,
+		imageRef string,
+		componentName string,
 		missingIncludes map[string]bool,
 		effectiveTime time.Time,
 	) ([]Result, map[string]bool)
@@ -533,7 +534,7 @@ func (r *basePolicyResolver) baseResolvePolicy(rules policyRules, target string,
 	result := NewPolicyResolutionResult()
 
 	// Initialize missing includes with all include criteria
-	for _, include := range r.include.get(target) {
+	for _, include := range r.include.get(target, "") {
 		result.MissingIncludes[include] = true
 	}
 
@@ -589,10 +590,10 @@ func (r *basePolicyResolver) baseEvaluateRuleInclusion(ruleID string, ruleInfo r
 	matchers := r.createRuleMatchers(ruleID, ruleInfo)
 
 	// Score against include criteria
-	includeScore := LegacyScoreMatches(matchers, r.include.get(target), result.MissingIncludes)
+	includeScore := LegacyScoreMatches(matchers, r.include.get(target, ""), result.MissingIncludes)
 
 	// Score against exclude criteria
-	excludeScore := LegacyScoreMatches(matchers, r.exclude.get(target), make(map[string]bool))
+	excludeScore := LegacyScoreMatches(matchers, r.exclude.get(target, ""), make(map[string]bool))
 
 	// Debug: Log rule scoring
 	log.Debugf("[evaluateRuleInclusion] Rule: %s, includeScore: %d, excludeScore: %d, matchers: %v", ruleID, includeScore, excludeScore, matchers)
@@ -608,7 +609,7 @@ func (r *basePolicyResolver) baseEvaluateRuleInclusion(ruleID string, ruleInfo r
 		log.Debugf("[evaluateRuleInclusion] Rule: %s EXCLUDED", ruleID)
 	} else {
 		// No explicit criteria, check default behavior
-		if len(r.include.get(target)) == 0 || (len(r.include.get(target)) == 1 && r.include.get(target)[0] == "*") {
+		if len(r.include.get(target, "")) == 0 || (len(r.include.get(target, "")) == 1 && r.include.get(target, "")[0] == "*") {
 			result.IncludedRules[ruleID] = true
 			result.Explanations[ruleID] = "included by default (no explicit includes)"
 			log.Debugf("[evaluateRuleInclusion] Rule: %s INCLUDED by default", ruleID)
@@ -785,10 +786,10 @@ func GetIncludeExcludePolicyResolution(source ecc.Source, p ConfigProvider, rule
 
 // LegacyIsResultIncluded determines whether a result should be included based on
 // include/exclude criteria and scoring logic. This is the legacy filtering function.
-func LegacyIsResultIncluded(result Result, target string, missingIncludes map[string]bool, include *Criteria, exclude *Criteria) bool {
+func LegacyIsResultIncluded(result Result, imageRef string, componentName string, missingIncludes map[string]bool, include *Criteria, exclude *Criteria) bool {
 	ruleMatchers := LegacyMakeMatchers(result)
-	includeScore := LegacyScoreMatches(ruleMatchers, include.get(target), missingIncludes)
-	excludeScore := LegacyScoreMatches(ruleMatchers, exclude.get(target), map[string]bool{})
+	includeScore := LegacyScoreMatches(ruleMatchers, include.get(imageRef, componentName), missingIncludes)
+	excludeScore := LegacyScoreMatches(ruleMatchers, exclude.get(imageRef, componentName), map[string]bool{})
 	return includeScore > excludeScore
 }
 
@@ -941,7 +942,8 @@ func NewLegacyPostEvaluationFilter(source ecc.Source, p ConfigProvider) PostEval
 func (f *LegacyPostEvaluationFilter) FilterResults(
 	results []Result,
 	rules policyRules,
-	target string,
+	imageRef string,
+	componentName string,
 	missingIncludes map[string]bool,
 	effectiveTime time.Time,
 ) ([]Result, map[string]bool) {
@@ -950,7 +952,7 @@ func (f *LegacyPostEvaluationFilter) FilterResults(
 	for _, result := range results {
 		// Check if this result should be included using legacy logic
 		// Results without codes are handled by LegacyIsResultIncluded using wildcard matchers
-		if LegacyIsResultIncluded(result, target, missingIncludes, f.include, f.exclude) {
+		if LegacyIsResultIncluded(result, imageRef, componentName, missingIncludes, f.include, f.exclude) {
 			filteredResults = append(filteredResults, result)
 		}
 	}
@@ -1021,7 +1023,8 @@ func (f *LegacyPostEvaluationFilter) CategorizeResults(
 func (f *UnifiedPostEvaluationFilter) FilterResults(
 	results []Result,
 	rules policyRules,
-	target string,
+	imageRef string,
+	componentName string,
 	missingIncludes map[string]bool,
 	effectiveTime time.Time,
 ) ([]Result, map[string]bool) {
@@ -1029,7 +1032,7 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 	// vs IncludeExcludePolicyResolver (which doesn't)
 	if ecResolver, ok := f.policyResolver.(*ECPolicyResolver); ok {
 		// Use policy resolution for ECPolicyResolver to handle pipeline intentions
-		policyResolution := ecResolver.ResolvePolicy(rules, target)
+		policyResolution := ecResolver.ResolvePolicy(rules, imageRef)
 
 		var filteredResults []Result
 		for _, result := range results {
@@ -1068,7 +1071,7 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 		}
 
 		// Use legacy filtering logic for all results
-		if LegacyIsResultIncluded(result, target, missingIncludes, f.policyResolver.Includes(), f.policyResolver.Excludes()) {
+		if LegacyIsResultIncluded(result, imageRef, componentName, missingIncludes, f.policyResolver.Includes(), f.policyResolver.Excludes()) {
 			filteredResults = append(filteredResults, result)
 		}
 	}
