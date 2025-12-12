@@ -1261,3 +1261,28 @@ Feature: evaluate enterprise contract
     Then the exit status should be 1
      And the output should match the snapshot
      And the "${TMPDIR}/output.json" file should match the snapshot
+
+  Scenario: SLSA v1 attestation support
+    Given a key pair named "known"
+      And an image named "acceptance/slsa-v1-test"
+      And a valid image signature of "acceptance/slsa-v1-test" image signed by the "known" key
+      And a valid Rekor entry for image signature of "acceptance/slsa-v1-test"
+      And a valid slsa v1 attestation of "acceptance/slsa-v1-test" signed by the "known" key
+      And a valid Rekor entry for attestation of "acceptance/slsa-v1-test"
+      And a git repository named "sigstore-v1-policy" with
+      | main.rego | examples/sigstore.rego |
+      And policy configuration named "ec-policy" with specification
+    """
+    {
+      "sources": [
+        {
+          "policy": [
+            "git::https://${GITHOST}/git/sigstore-v1-policy.git"
+          ]
+        }
+      ]
+    }
+    """
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/slsa-v1-test --policy acceptance/ec-policy --public-key ${known_PUBLIC_KEY} --rekor-url ${REKOR} --show-successes --output json"
+    Then the exit status should be 0
+     And the output should match the snapshot

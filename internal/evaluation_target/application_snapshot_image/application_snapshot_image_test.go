@@ -37,6 +37,7 @@ import (
 	"github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/common"
 	v02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
+	slsav1 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v1"
 	app "github.com/konflux-ci/application-api/api/v1alpha1"
 	"github.com/secure-systems-lab/go-securesystemslib/dsse"
 	"github.com/sigstore/cosign/v2/pkg/cosign"
@@ -755,4 +756,367 @@ kind: ClusterServiceVersion`),
 	require.Equal(t, map[string]json.RawMessage{
 		"manifests/csv.yaml": json.RawMessage(`{"apiVersion":"operators.coreos.com/v1alpha1","kind":"ClusterServiceVersion"}`),
 	}, a.files)
+}
+
+func TestValidateImageAccess(t *testing.T) {
+	ref := name.MustParseReference("registry.io/repository/image:tag")
+
+	cases := []struct {
+		name      string
+		response  any
+		err       error
+		expectErr bool
+		errMsg    string
+	}{
+		{
+			name:      "successful access",
+			response:  &v1.Descriptor{},
+			expectErr: false,
+		},
+		{
+			name:      "access error",
+			err:       errors.New("failed to access image"),
+			expectErr: true,
+			errMsg:    "failed to access image",
+		},
+		{
+			name:      "nil response",
+			response:  nil,
+			expectErr: true,
+			errMsg:    "no response received",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := ApplicationSnapshotImage{reference: ref}
+
+			client := fake.FakeClient{}
+			client.On("Head", ref).Return(tc.response, tc.err)
+
+			ctx := o.WithClient(context.Background(), &client)
+
+			err := a.ValidateImageAccess(ctx)
+			if tc.expectErr {
+				assert.Error(t, err)
+				if tc.errMsg != "" {
+					assert.Equal(t, tc.errMsg, err.Error())
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestAttestationDataMarshalJSON(t *testing.T) {
+	cases := []struct {
+		name       string
+		statement  json.RawMessage
+		signatures []signature.EntitySignature
+		expected   string
+	}{
+		{
+			name:      "with signatures",
+			statement: json.RawMessage(`{"type":"test"}`),
+			signatures: []signature.EntitySignature{
+				{KeyID: "key1", Signature: "sig1"},
+			},
+			expected: `{"statement":{"type":"test"},"signatures":[{"keyid":"key1","sig":"sig1"}]}`,
+		},
+		{
+			name:       "without signatures",
+			statement:  json.RawMessage(`{"type":"test"}`),
+			signatures: []signature.EntitySignature{},
+			expected:   `{"statement":{"type":"test"}}`,
+		},
+		{
+			name:       "nil signatures",
+			statement:  json.RawMessage(`{"type":"test"}`),
+			signatures: nil,
+			expected:   `{"statement":{"type":"test"}}`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			data := attestationData{
+				Statement:  tc.statement,
+				Signatures: tc.signatures,
+			}
+			result, err := data.MarshalJSON()
+			require.NoError(t, err)
+			assert.JSONEq(t, tc.expected, string(result))
+		})
+	}
+}
+
+// createDSSESignature creates a test signature with a DSSE envelope containing the given statement
+func createDSSESignature(t *testing.T, statement any) oci.Signature {
+	t.Helper()
+
+	statementJSON, err := json.Marshal(statement)
+	require.NoError(t, err)
+
+	encodedStatement := base64.StdEncoding.EncodeToString(statementJSON)
+
+	dsseEnvelope := dsse.Envelope{
+		Payload:     encodedStatement,
+		PayloadType: "application/vnd.in-toto+json",
+	}
+
+	payload, err := json.Marshal(dsseEnvelope)
+	require.NoError(t, err)
+
+	sig, err := static.NewSignature(
+		payload,
+		"test-signature",
+		static.WithLayerMediaType(types.MediaType(cosignTypes.DssePayloadType)),
+		static.WithCertChain(
+			signature.ChainguardReleaseCert,
+			signature.SigstoreChainCert,
+		),
+	)
+	require.NoError(t, err)
+
+	return sig
+}
+
+func TestValidateAttestationSignature(t *testing.T) {
+	ref := name.MustParseReference("registry.io/repository/image:tag")
+
+	// Create valid SLSA v0.2 statement
+	slsaV02Statement := in_toto.ProvenanceStatementSLSA02{
+		StatementHeader: in_toto.StatementHeader{
+			Type:          in_toto.StatementInTotoV01,
+			PredicateType: v02.PredicateSLSAProvenance,
+			Subject: []in_toto.Subject{
+				{
+					Name: "test-image",
+					Digest: common.DigestSet{
+						"sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+					},
+				},
+			},
+		},
+		Predicate: v02.ProvenancePredicate{
+			BuildType: pipelineRunBuildType,
+			Builder: common.ProvenanceBuilder{
+				ID: "https://tekton.dev/chains/v2",
+			},
+		},
+	}
+
+	// Create valid SLSA v1.0 statement
+	slsaV1Statement := in_toto.ProvenanceStatementSLSA1{
+		StatementHeader: in_toto.StatementHeader{
+			Type:          in_toto.StatementInTotoV01,
+			PredicateType: "https://slsa.dev/provenance/v1",
+			Subject: []in_toto.Subject{
+				{
+					Name: "test-image",
+					Digest: common.DigestSet{
+						"sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+					},
+				},
+			},
+		},
+		Predicate: slsav1.ProvenancePredicate{
+			BuildDefinition: slsav1.ProvenanceBuildDefinition{
+				BuildType:          "https://tekton.dev/attestations/chains/pipelinerun@v2",
+				ExternalParameters: json.RawMessage(`{}`),
+			},
+			RunDetails: slsav1.ProvenanceRunDetails{
+				Builder: slsav1.Builder{
+					ID: "https://tekton.dev/chains/v2",
+				},
+			},
+		},
+	}
+
+	// Create valid SPDX statement
+	spdxStatement := in_toto.Statement{
+		StatementHeader: in_toto.StatementHeader{
+			Type:          in_toto.StatementInTotoV01,
+			PredicateType: "https://spdx.dev/Document",
+			Subject: []in_toto.Subject{
+				{
+					Name: "test-image",
+					Digest: common.DigestSet{
+						"sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+					},
+				},
+			},
+		},
+		Predicate: json.RawMessage(`{"spdxVersion":"SPDX-2.3"}`),
+	}
+
+	// Create statement with unknown predicate type
+	unknownStatement := in_toto.Statement{
+		StatementHeader: in_toto.StatementHeader{
+			Type:          in_toto.StatementInTotoV01,
+			PredicateType: "https://example.com/unknown/v1",
+			Subject: []in_toto.Subject{
+				{
+					Name: "test-image",
+					Digest: common.DigestSet{
+						"sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+					},
+				},
+			},
+		},
+		Predicate: json.RawMessage(`{"custom":"data"}`),
+	}
+
+	// Create invalid SLSA v0.2 statement (missing builder ID)
+	invalidSLSAV02Statement := in_toto.ProvenanceStatementSLSA02{
+		StatementHeader: in_toto.StatementHeader{
+			Type:          in_toto.StatementInTotoV01,
+			PredicateType: v02.PredicateSLSAProvenance,
+			Subject: []in_toto.Subject{
+				{
+					Name: "test-image",
+					Digest: common.DigestSet{
+						"sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+					},
+				},
+			},
+		},
+		Predicate: v02.ProvenancePredicate{
+			BuildType: pipelineRunBuildType,
+			Builder: common.ProvenanceBuilder{
+				ID: "invalid-not-a-uri",
+			},
+		},
+	}
+
+	// Create invalid SLSA v1.0 statement (missing required fields)
+	invalidSLSAV1Statement := in_toto.ProvenanceStatementSLSA1{
+		StatementHeader: in_toto.StatementHeader{
+			Type:          in_toto.StatementInTotoV01,
+			PredicateType: "https://slsa.dev/provenance/v1",
+			Subject: []in_toto.Subject{
+				{
+					Name: "test-image",
+					Digest: common.DigestSet{
+						"sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+					},
+				},
+			},
+		},
+		Predicate: slsav1.ProvenancePredicate{
+			BuildDefinition: slsav1.ProvenanceBuildDefinition{
+				BuildType:          "https://tekton.dev/attestations/chains/pipelinerun@v2",
+				ExternalParameters: json.RawMessage(`{}`),
+			},
+			RunDetails: slsav1.ProvenanceRunDetails{
+				Builder: slsav1.Builder{
+					ID: "invalid-not-a-uri",
+				},
+			},
+		},
+	}
+
+	cases := []struct {
+		name              string
+		signatures        []oci.Signature
+		verifyErr         error
+		expectErr         bool
+		errContains       string
+		expectedAttCount  int
+		expectedPredTypes []string
+	}{
+		{
+			name:             "no attestations",
+			signatures:       []oci.Signature{},
+			expectedAttCount: 0,
+		},
+		{
+			name:              "single SLSA v0.2 attestation",
+			signatures:        []oci.Signature{createDSSESignature(t, slsaV02Statement)},
+			expectedAttCount:  1,
+			expectedPredTypes: []string{v02.PredicateSLSAProvenance},
+		},
+		{
+			name:              "single SLSA v1.0 attestation",
+			signatures:        []oci.Signature{createDSSESignature(t, slsaV1Statement)},
+			expectedAttCount:  1,
+			expectedPredTypes: []string{"https://slsa.dev/provenance/v1"},
+		},
+		{
+			name:              "single SPDX attestation",
+			signatures:        []oci.Signature{createDSSESignature(t, spdxStatement)},
+			expectedAttCount:  1,
+			expectedPredTypes: []string{"https://spdx.dev/Document"},
+		},
+		{
+			name:              "single unknown attestation",
+			signatures:        []oci.Signature{createDSSESignature(t, unknownStatement)},
+			expectedAttCount:  1,
+			expectedPredTypes: []string{"https://example.com/unknown/v1"},
+		},
+		{
+			name: "multiple mixed attestations",
+			signatures: []oci.Signature{
+				createDSSESignature(t, slsaV02Statement),
+				createDSSESignature(t, slsaV1Statement),
+				createDSSESignature(t, spdxStatement),
+				createDSSESignature(t, unknownStatement),
+			},
+			expectedAttCount: 4,
+			expectedPredTypes: []string{
+				v02.PredicateSLSAProvenance,
+				"https://slsa.dev/provenance/v1",
+				"https://spdx.dev/Document",
+				"https://example.com/unknown/v1",
+			},
+		},
+		{
+			name:        "verify attestations error",
+			verifyErr:   errors.New("failed to verify attestations"),
+			expectErr:   true,
+			errContains: "failed to verify attestations",
+		},
+		{
+			name:        "invalid SLSA v0.2 fails schema validation",
+			signatures:  []oci.Signature{createDSSESignature(t, invalidSLSAV02Statement)},
+			expectErr:   true,
+			errContains: "unable to parse as SLSA v0.2",
+		},
+		{
+			name:        "invalid SLSA v1.0 fails schema validation",
+			signatures:  []oci.Signature{createDSSESignature(t, invalidSLSAV1Statement)},
+			expectErr:   true,
+			errContains: "unable to parse as SLSA v1",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := ApplicationSnapshotImage{reference: ref}
+
+			client := fake.FakeClient{}
+			client.On("VerifyImageAttestations", ref, mock.Anything).Return(tc.signatures, false, tc.verifyErr)
+
+			ctx := o.WithClient(context.Background(), &client)
+
+			err := a.ValidateAttestationSignature(ctx)
+
+			if tc.expectErr {
+				require.Error(t, err)
+				if tc.errContains != "" {
+					assert.Contains(t, err.Error(), tc.errContains)
+				}
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tc.expectedAttCount, len(a.attestations))
+
+				if tc.expectedPredTypes != nil {
+					for i, expectedType := range tc.expectedPredTypes {
+						assert.Equal(t, expectedType, a.attestations[i].PredicateType())
+					}
+				}
+			}
+		})
+	}
 }

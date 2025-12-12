@@ -26,9 +26,16 @@ import (
 //go:embed slsa_provenance_v0.2.json
 var slsa_provenance_v0_2_json string
 
+//go:embed slsa_provenance_v1.json
+var slsa_provenance_v1_json string
+
 var SLSA_Provenance_v0_2 *jsonschema.Schema
 
+var SLSA_Provenance_v1 *jsonschema.Schema
+
 var SLSA_Provenance_v0_2_URI = "https://slsa.dev/provenance/v0.2"
+
+var SLSA_Provenance_v1_URI = "https://slsa.dev/provenance/v1"
 
 func init() {
 	compiler := jsonschema.NewCompiler()
@@ -38,4 +45,9 @@ func init() {
 		panic(err)
 	}
 	SLSA_Provenance_v0_2 = compiler.MustCompile(SLSA_Provenance_v0_2_URI)
+
+	if err := compiler.AddResource(SLSA_Provenance_v1_URI, strings.NewReader(slsa_provenance_v1_json)); err != nil {
+		panic(err)
+	}
+	SLSA_Provenance_v1 = compiler.MustCompile(SLSA_Provenance_v1_URI)
 }

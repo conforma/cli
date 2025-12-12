@@ -46,6 +46,7 @@ import (
 
 var attestationSchemas = map[string]*jsonschema.Schema{
 	"https://slsa.dev/provenance/v0.2": schema.SLSA_Provenance_v0_2,
+	"https://slsa.dev/provenance/v1":   schema.SLSA_Provenance_v1,
 }
 
 // ApplicationSnapshotImage represents the structure needed to evaluate an Application Snapshot Image
@@ -189,6 +190,14 @@ func (a *ApplicationSnapshotImage) ValidateAttestationSignature(ctx context.Cont
 			sp, err := attestation.SLSAProvenanceFromSignature(sig)
 			if err != nil {
 				return fmt.Errorf("unable to parse as SLSA v0.2: %w", err)
+			}
+			a.attestations = append(a.attestations, sp)
+
+		case attestation.PredicateSLSAProvenanceV1:
+			// SLSA Provenance v1.0
+			sp, err := attestation.SLSAProvenanceFromSignatureV1(sig)
+			if err != nil {
+				return fmt.Errorf("unable to parse as SLSA v1: %w", err)
 			}
 			a.attestations = append(a.attestations, sp)
 

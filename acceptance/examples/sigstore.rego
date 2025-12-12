@@ -80,7 +80,8 @@ _errors contains error if {
 	info := ec.sigstore.verify_attestation(_image_ref, _sigstore_opts)
 	some att in info.attestations
 
-	att.statement.predicateType != "https://slsa.dev/provenance/v0.2"
+	# Support both SLSA v0.2 and v1 predicate types
+	not _is_supported_slsa_predicate(att.statement.predicateType)
 	error := sprintf("unexpected statement predicate: %s", [att.statement.predicateType])
 }
 
@@ -115,5 +116,18 @@ valid_signature(sig) if {
 }
 
 _builder_id(att) := value if {
+	# SLSA v0.2: predicate.builder.id
 	value := att.statement.predicate.builder.id
+} else := value if {
+	# SLSA v1: predicate.runDetails.builder.id
+	value := att.statement.predicate.runDetails.builder.id
 } else := "MISSING"
+
+# Helper to check if predicate type is a supported SLSA version
+_is_supported_slsa_predicate(predicate_type) if {
+	predicate_type == "https://slsa.dev/provenance/v0.2"
+}
+
+_is_supported_slsa_predicate(predicate_type) if {
+	predicate_type == "https://slsa.dev/provenance/v1"
+}

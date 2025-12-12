@@ -166,19 +166,3 @@ func (p provenance) Signatures() []signature.EntitySignature {
 func (p provenance) Subject() []in_toto.Subject {
 	return p.statement.Subject
 }
-
-// Todo: It seems odd that this does not contain the statement.
-// (See also the equivalent method in slsa_provenance_02.go)
-func (p provenance) MarshalJSON() ([]byte, error) {
-	val := struct {
-		Type          string                      `json:"type"`
-		PredicateType string                      `json:"predicateType"`
-		Signatures    []signature.EntitySignature `json:"signatures"`
-	}{
-		Type:          p.Type(),
-		PredicateType: p.PredicateType(),
-		Signatures:    p.Signatures(),
-	}
-
-	return json.Marshal(val)
-}

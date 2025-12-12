@@ -21,7 +21,7 @@ import (
 	"fmt"
 
 	"github.com/in-toto/in-toto-golang/in_toto"
-	v02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
+	v1 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v1"
 	"github.com/sigstore/cosign/v2/pkg/oci"
 
 	"github.com/conforma/cli/internal/signature"
@@ -30,13 +30,13 @@ import (
 
 const (
 	// Make it visible elsewhere
-	PredicateSLSAProvenance = v02.PredicateSLSAProvenance
+	PredicateSLSAProvenanceV1 = v1.PredicateSLSAProvenance
 )
 
-// SLSAProvenanceFromSignature parses the SLSA Provenance v0.2 from the provided OCI
+// SLSAProvenanceFromSignatureV1 parses the SLSA Provenance v1 from the provided OCI
 // layer. Expects that the layer contains DSSE JSON with the embedded SLSA
-// Provenance v0.2 payload.
-func SLSAProvenanceFromSignature(sig oci.Signature) (Attestation, error) {
+// Provenance v1 payload.
+func SLSAProvenanceFromSignatureV1(sig oci.Signature) (Attestation, error) {
 	payload, err := payloadFromSig(sig)
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func SLSAProvenanceFromSignature(sig oci.Signature) (Attestation, error) {
 		return nil, err
 	}
 
-	var statement in_toto.ProvenanceStatementSLSA02
+	var statement in_toto.ProvenanceStatementSLSA1
 	if err := json.Unmarshal(embedded, &statement); err != nil {
 		return nil, fmt.Errorf("malformed attestation data: %w", err)
 	}
@@ -56,7 +56,7 @@ func SLSAProvenanceFromSignature(sig oci.Signature) (Attestation, error) {
 		return nil, fmt.Errorf("unsupported attestation type: %s", statement.Type)
 	}
 
-	if statement.PredicateType != v02.PredicateSLSAProvenance {
+	if statement.PredicateType != v1.PredicateSLSAProvenance {
 		return nil, fmt.Errorf("unsupported attestation predicate type: %s", statement.PredicateType)
 	}
 
@@ -65,44 +65,44 @@ func SLSAProvenanceFromSignature(sig oci.Signature) (Attestation, error) {
 		return nil, fmt.Errorf("cannot create signed entity: %w", err)
 	}
 
-	// Validate against SLSA v0.2 schema
+	// Validate against SLSA v1 schema
 	var schemaValidation any
 	if err := json.Unmarshal(embedded, &schemaValidation); err == nil {
-		if err := schema.SLSA_Provenance_v0_2.Validate(schemaValidation); err != nil {
-			return nil, fmt.Errorf("attestation does not conform to SLSA v0.2 schema: %w", err)
+		if err := schema.SLSA_Provenance_v1.Validate(schemaValidation); err != nil {
+			return nil, fmt.Errorf("attestation does not conform to SLSA v1.0 schema: %w", err)
 		}
 	}
 
-	return slsaProvenance{statement: statement, data: embedded, signatures: signatures}, nil
+	return slsaProvenanceV1{statement: statement, data: embedded, signatures: signatures}, nil
 }
 
-type slsaProvenance struct {
-	statement  in_toto.ProvenanceStatementSLSA02
+type slsaProvenanceV1 struct {
+	statement  in_toto.ProvenanceStatementSLSA1
 	data       []byte
 	signatures []signature.EntitySignature
 }
 
-func (a slsaProvenance) Type() string {
+func (a slsaProvenanceV1) Type() string {
 	return in_toto.StatementInTotoV01
 }
 
-func (a slsaProvenance) PredicateType() string {
-	return v02.PredicateSLSAProvenance
+func (a slsaProvenanceV1) PredicateType() string {
+	return v1.PredicateSLSAProvenance
 }
 
 // This returns the raw json, not the content of a.statement
-func (a slsaProvenance) Statement() []byte {
+func (a slsaProvenanceV1) Statement() []byte {
 	return a.data
 }
 
-func (a slsaProvenance) PredicateBuildType() string {
-	return a.statement.Predicate.BuildType
+func (a slsaProvenanceV1) PredicateBuildType() string {
+	return a.statement.Predicate.BuildDefinition.BuildType
 }
 
-func (a slsaProvenance) Signatures() []signature.EntitySignature {
+func (a slsaProvenanceV1) Signatures() []signature.EntitySignature {
 	return a.signatures
 }
 
-func (a slsaProvenance) Subject() []in_toto.Subject {
+func (a slsaProvenanceV1) Subject() []in_toto.Subject {
 	return a.statement.Subject
 }

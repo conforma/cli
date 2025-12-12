@@ -20,7 +20,6 @@ package attestation
 
 import (
 	"crypto/x509"
-	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -274,101 +273,6 @@ func TestProvenance_Subject(t *testing.T) {
 			p := provenance{statement: tt.statement}
 			result := p.Subject()
 			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestProvenance_MarshalJSON(t *testing.T) {
-	mockSig1 := signature.EntitySignature{
-		KeyID:     "key1",
-		Signature: "sig1",
-	}
-	mockSig2 := signature.EntitySignature{
-		KeyID:     "key2",
-		Signature: "sig2",
-	}
-
-	tests := []struct {
-		name        string
-		provenance  provenance
-		expectedErr bool
-		validate    func(*testing.T, []byte)
-	}{
-		{
-			name: "marshals successfully with single signature",
-			provenance: provenance{
-				statement: in_toto.Statement{
-					StatementHeader: in_toto.StatementHeader{
-						PredicateType: "https://example.com/predicate/v1",
-					},
-				},
-				signatures: []signature.EntitySignature{mockSig1},
-			},
-			expectedErr: false,
-			validate: func(t *testing.T, data []byte) {
-				var result map[string]interface{}
-				err := json.Unmarshal(data, &result)
-				assert.NoError(t, err)
-				assert.Equal(t, "https://in-toto.io/Statement/v0.1", result["type"])
-				assert.Equal(t, "https://example.com/predicate/v1", result["predicateType"])
-				assert.Len(t, result["signatures"], 1)
-			},
-		},
-		{
-			name: "marshals successfully with multiple signatures",
-			provenance: provenance{
-				statement: in_toto.Statement{
-					StatementHeader: in_toto.StatementHeader{
-						PredicateType: "https://example.com/predicate/v2",
-					},
-				},
-				signatures: []signature.EntitySignature{mockSig1, mockSig2},
-			},
-			expectedErr: false,
-			validate: func(t *testing.T, data []byte) {
-				var result map[string]interface{}
-				err := json.Unmarshal(data, &result)
-				assert.NoError(t, err)
-				assert.Equal(t, "https://in-toto.io/Statement/v0.1", result["type"])
-				assert.Equal(t, "https://example.com/predicate/v2", result["predicateType"])
-				assert.Len(t, result["signatures"], 2)
-			},
-		},
-		{
-			name: "marshals successfully with empty signatures",
-			provenance: provenance{
-				statement: in_toto.Statement{
-					StatementHeader: in_toto.StatementHeader{
-						PredicateType: "https://example.com/predicate/v3",
-					},
-				},
-				signatures: []signature.EntitySignature{},
-			},
-			expectedErr: false,
-			validate: func(t *testing.T, data []byte) {
-				var result map[string]interface{}
-				err := json.Unmarshal(data, &result)
-				assert.NoError(t, err)
-				assert.Equal(t, "https://in-toto.io/Statement/v0.1", result["type"])
-				assert.Equal(t, "https://example.com/predicate/v3", result["predicateType"])
-				assert.Len(t, result["signatures"], 0)
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			data, err := tt.provenance.MarshalJSON()
-
-			if tt.expectedErr {
-				assert.Error(t, err)
-				return
-			}
-
-			assert.NoError(t, err)
-			if tt.validate != nil {
-				tt.validate(t, data)
-			}
 		})
 	}
 }

@@ -19,19 +19,14 @@
 package attestation
 
 import (
-	"bytes"
-	"crypto/x509"
-	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"testing"
 
 	"github.com/gkampitakis/go-snaps/snaps"
-	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/in-toto/in-toto-golang/in_toto"
-	"github.com/sigstore/cosign/v2/pkg/cosign/bundle"
+	v1 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v1"
 	ct "github.com/sigstore/cosign/v2/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -40,101 +35,13 @@ import (
 	"github.com/conforma/cli/internal/signature"
 )
 
-type mockSignature struct {
-	*mock.Mock
-}
-
-func (l mockSignature) Annotations() (map[string]string, error) {
-	args := l.Called()
-
-	return args.Get(0).(map[string]string), args.Error(1)
-}
-
-func (l mockSignature) Payload() ([]byte, error) {
-	args := l.Called()
-
-	return args.Get(0).([]byte), args.Error(1)
-}
-
-func (l mockSignature) Signature() ([]byte, error) {
-	args := l.Called()
-
-	return args.Get(0).([]byte), args.Error(1)
-}
-
-func (l mockSignature) Base64Signature() (string, error) {
-	args := l.Called()
-
-	return args.Get(0).(string), args.Error(1)
-}
-
-func (l mockSignature) Cert() (*x509.Certificate, error) {
-	args := l.Called()
-
-	return args.Get(0).(*x509.Certificate), args.Error(1)
-}
-
-func (l mockSignature) Chain() ([]*x509.Certificate, error) {
-	args := l.Called()
-
-	return args.Get(0).([]*x509.Certificate), args.Error(1)
-}
-
-func (l mockSignature) Bundle() (*bundle.RekorBundle, error) {
-	args := l.Called()
-
-	return args.Get(0).(*bundle.RekorBundle), args.Error(1)
-}
-
-func (l mockSignature) RFC3161Timestamp() (*bundle.RFC3161Timestamp, error) {
-	args := l.Called()
-
-	return args.Get(0).(*bundle.RFC3161Timestamp), args.Error(1)
-}
-
-func (l mockSignature) Digest() (v1.Hash, error) {
-	args := l.Called()
-
-	return args.Get(0).(v1.Hash), args.Error(1)
-}
-
-func (l mockSignature) DiffID() (v1.Hash, error) {
-	args := l.Called()
-
-	return args.Get(0).(v1.Hash), args.Error(1)
-}
-
-func (l mockSignature) Compressed() (io.ReadCloser, error) {
-	args := l.Called()
-
-	return args.Get(0).(io.ReadCloser), args.Error(1)
-}
-
-func (l mockSignature) Uncompressed() (io.ReadCloser, error) {
-	args := l.Called()
-
-	return args.Get(0).(io.ReadCloser), args.Error(1)
-}
-
-func (l mockSignature) Size() (int64, error) {
-	args := l.Called()
-
-	return args.Get(0).(int64), args.Error(1)
-}
-
-func (l mockSignature) MediaType() (types.MediaType, error) {
-	args := l.Called()
-
-	return args.Get(0).(types.MediaType), args.Error(1)
-}
-
-func TestSLSAProvenanceFromSignatureNilSignature(t *testing.T) {
-	sp, err := SLSAProvenanceFromSignature(nil)
+func TestSLSAProvenanceFromSignatureV1NilSignature(t *testing.T) {
+	sp, err := SLSAProvenanceFromSignatureV1(nil)
 	assert.True(t, assert.ErrorContains(t, err, "no attestation found"), "Expecting `%v` to be alike: `%v`", err, "no attestation found")
 	assert.Nil(t, sp)
 }
 
-func TestSLSAProvenanceFromSignature(t *testing.T) {
+func TestSLSAProvenanceFromSignatureV1(t *testing.T) {
 	cases := []struct {
 		name  string
 		setup func(l *mockSignature)
@@ -166,7 +73,7 @@ func TestSLSAProvenanceFromSignature(t *testing.T) {
 			name: "no payload JSON",
 			setup: func(l *mockSignature) {
 				l.On("MediaType").Return(types.MediaType(ct.DssePayloadType), nil)
-				l.On("Uncompressed").Return(io.NopCloser(&bytes.Buffer{}), nil)
+				l.On("Uncompressed").Return(buffy(""), nil)
 			},
 			err: errors.New("malformed attestation data: EOF"),
 		},
@@ -174,7 +81,7 @@ func TestSLSAProvenanceFromSignature(t *testing.T) {
 			name: "empty payload JSON",
 			data: "{}",
 			setup: func(l *mockSignature) {
-				payload := base64.StdEncoding.EncodeToString([]byte("{}"))
+				payload := encode("{}")
 				l.On("MediaType").Return(types.MediaType(ct.DssePayloadType), nil)
 				l.On("Uncompressed").Return(buffy(fmt.Sprintf(`{"payload":"%s"}`, payload)), nil)
 			},
@@ -207,8 +114,8 @@ func TestSLSAProvenanceFromSignature(t *testing.T) {
 				sig1 := `{"keyid": "key-id-1", "sig": "sig-1"}`
 				payload := encode(`{{
 					"_type": "https://in-toto.io/Statement/v0.1",
-					"predicateType":"https://slsa.dev/provenance/v0.2",
-					"predicate":{} }
+					"predicateType":"https://slsa.dev/provenance/v1",
+					"predicate":{"buildDefinition":{"buildType":"https://my.build.type","externalParameters":{}},"runDetails":{"builder":{"id":"https://my.builder"}}} }
 				}`)
 				l.On("MediaType").Return(types.MediaType(ct.DssePayloadType), nil)
 				l.On("Uncompressed").Return(buffy(
@@ -237,48 +144,76 @@ func TestSLSAProvenanceFromSignature(t *testing.T) {
 			setup: func(l *mockSignature) {
 				payload := encode(`{
 					"_type": "https://in-toto.io/Statement/v0.1",
-					"predicateType": "https://slsa.dev/provenance/v0.2",
-					"predicate": {"builder": {"id": "https://my.builder"}, "buildType": "https://my.build.type"}
+					"predicateType": "https://slsa.dev/provenance/v1",
+					"predicate": {
+						"buildDefinition": {
+							"buildType": "https://my.build.type",
+							"externalParameters": {}
+						},
+						"runDetails": {
+							"builder": {"id": "https://my.builder"}
+						}
+					}
 				}`)
 				l.On("MediaType").Return(types.MediaType(ct.DssePayloadType), nil)
 				l.On("Uncompressed").Return(buffy(fmt.Sprintf(`{"payload":"%s"}`, payload)), nil)
 				l.On("Base64Signature").Return("", nil)
-				l.On("Cert").Return(&x509.Certificate{}, nil)
-				l.On("Chain").Return([]*x509.Certificate{}, nil)
+				l.On("Cert").Return(signature.ParseChainguardReleaseCert(), nil)
+				l.On("Chain").Return(signature.ParseSigstoreChainCert(), nil)
 			},
-			err: errors.New("attestation does not conform to SLSA v0.2 schema: jsonschema: '' does not validate with https://slsa.dev/provenance/v0.2#/required: missing properties: 'subject'"),
+			err: errors.New("attestation does not conform to SLSA v1.0 schema: jsonschema: '' does not validate with https://slsa.dev/provenance/v1#/required: missing properties: 'subject'"),
 		},
 		{
-			name: "schema validation fails - missing builder",
+			name: "schema validation fails - missing buildDefinition",
 			setup: func(l *mockSignature) {
 				payload := encode(`{
 					"_type": "https://in-toto.io/Statement/v0.1",
 					"subject": [{"name": "example.com/test", "digest": {"sha256": "abc123"}}],
-					"predicateType": "https://slsa.dev/provenance/v0.2",
-					"predicate": {"buildType": "https://my.build.type"}
+					"predicateType": "https://slsa.dev/provenance/v1",
+					"predicate": {
+						"runDetails": {
+							"builder": {"id": "https://my.builder"}
+						}
+					}
 				}`)
 				l.On("MediaType").Return(types.MediaType(ct.DssePayloadType), nil)
 				l.On("Uncompressed").Return(buffy(fmt.Sprintf(`{"payload":"%s"}`, payload)), nil)
 				l.On("Base64Signature").Return("", nil)
-				l.On("Cert").Return(&x509.Certificate{}, nil)
-				l.On("Chain").Return([]*x509.Certificate{}, nil)
+				l.On("Cert").Return(signature.ParseChainguardReleaseCert(), nil)
+				l.On("Chain").Return(signature.ParseSigstoreChainCert(), nil)
 			},
-			err: errors.New("attestation does not conform to SLSA v0.2 schema: jsonschema: '/predicate' does not validate with https://slsa.dev/provenance/v0.2#/properties/predicate/required: missing properties: 'builder'"),
+			err: errors.New("attestation does not conform to SLSA v1.0 schema: jsonschema: '/predicate' does not validate with https://slsa.dev/provenance/v1#/properties/predicate/required: missing properties: 'buildDefinition'"),
 		},
 		{
 			name: "cannot create entity signature",
 			data: `{
 				"_type": "https://in-toto.io/Statement/v0.1",
 				"subject": [{"name": "example.com/test", "digest": {"sha256": "abc123"}}],
-				"predicateType": "https://slsa.dev/provenance/v0.2",
-				"predicate": {"builder": {"id": "https://my.builder"}, "buildType": "https://my.build.type"}
+				"predicateType": "https://slsa.dev/provenance/v1",
+				"predicate": {
+					"buildDefinition": {
+						"buildType": "https://my.build.type",
+						"externalParameters": {}
+					},
+					"runDetails": {
+						"builder": {"id": "https://my.builder"}
+					}
+				}
 			}`,
 			setup: func(l *mockSignature) {
 				payload := encode(`{
 					"_type": "https://in-toto.io/Statement/v0.1",
 					"subject": [{"name": "example.com/test", "digest": {"sha256": "abc123"}}],
-					"predicateType": "https://slsa.dev/provenance/v0.2",
-					"predicate": {"builder": {"id": "https://my.builder"}, "buildType":"https://my.build.type"}
+					"predicateType": "https://slsa.dev/provenance/v1",
+					"predicate": {
+						"buildDefinition": {
+							"buildType": "https://my.build.type",
+							"externalParameters": {}
+						},
+						"runDetails": {
+							"builder": {"id": "https://my.builder"}
+						}
+					}
 				}`)
 				l.On("MediaType").Return(types.MediaType(ct.DssePayloadType), nil)
 				l.On("Uncompressed").Return(buffy(fmt.Sprintf(`{"payload":"%s"}`, payload)), nil)
@@ -291,8 +226,16 @@ func TestSLSAProvenanceFromSignature(t *testing.T) {
 			data: `{
 				"_type": "https://in-toto.io/Statement/v0.1",
 				"subject": [{"name": "example.com/test", "digest": {"sha256": "abc123"}}],
-				"predicateType": "https://slsa.dev/provenance/v0.2",
-				"predicate": {"builder": {"id": "https://my.builder"}, "buildType": "https://my.build.type"}
+				"predicateType": "https://slsa.dev/provenance/v1",
+				"predicate": {
+					"buildDefinition": {
+						"buildType": "https://my.build.type",
+						"externalParameters": {}
+					},
+					"runDetails": {
+						"builder": {"id": "https://my.builder"}
+					}
+				}
 			}`,
 			setup: func(l *mockSignature) {
 				sig1 := `{"keyid": "key-id-1", "sig": "sig-1"}`
@@ -300,40 +243,22 @@ func TestSLSAProvenanceFromSignature(t *testing.T) {
 				payload := encode(`{
 					"_type": "https://in-toto.io/Statement/v0.1",
 					"subject": [{"name": "example.com/test", "digest": {"sha256": "abc123"}}],
-					"predicateType": "https://slsa.dev/provenance/v0.2",
-					"predicate": {"builder": {"id": "https://my.builder"}, "buildType": "https://my.build.type"}
+					"predicateType": "https://slsa.dev/provenance/v1",
+					"predicate": {
+						"buildDefinition": {
+							"buildType": "https://my.build.type",
+							"externalParameters": {}
+						},
+						"runDetails": {
+							"builder": {"id": "https://my.builder"}
+						}
+					}
 				}`)
 				l.On("MediaType").Return(types.MediaType(ct.DssePayloadType), nil)
 				l.On("Uncompressed").Return(buffy(
 					fmt.Sprintf(`{"payload": "%s", "signatures": [%s, %s]}`, payload, sig1, sig2),
 				), nil)
 				l.On("Base64Signature").Return("", nil)
-				l.On("Cert").Return(&x509.Certificate{}, nil)
-				l.On("Chain").Return([]*x509.Certificate{}, nil)
-			},
-		},
-		{
-			name: "valid with signature from certificate",
-			data: `{
-				"_type": "https://in-toto.io/Statement/v0.1",
-				"subject": [{"name": "example.com/test", "digest": {"sha256": "abc123"}}],
-				"predicateType": "https://slsa.dev/provenance/v0.2",
-				"predicate": {"builder": {"id": "https://my.builder"}, "buildType": "https://my.build.type"}
-			}`,
-			setup: func(l *mockSignature) {
-				sig1 := `{"keyid": "ignored-1", "sig": "ignored-1"}`
-				sig2 := `{"keyid": "ignored-2", "sig": "ignored-2"}`
-				payload := encode(`{
-					"_type": "https://in-toto.io/Statement/v0.1",
-					"subject": [{"name": "example.com/test", "digest": {"sha256": "abc123"}}],
-					"predicateType": "https://slsa.dev/provenance/v0.2",
-					"predicate": {"builder": {"id": "https://my.builder"}, "buildType": "https://my.build.type"}
-				}`)
-				l.On("MediaType").Return(types.MediaType(ct.DssePayloadType), nil)
-				l.On("Uncompressed").Return(buffy(
-					fmt.Sprintf(`{"payload": "%s", "signatures": [%s, %s]}`, payload, sig1, sig2),
-				), nil)
-				l.On("Base64Signature").Return("sig-from-cert", nil)
 				l.On("Cert").Return(signature.ParseChainguardReleaseCert(), nil)
 				l.On("Chain").Return(signature.ParseSigstoreChainCert(), nil)
 			},
@@ -348,7 +273,7 @@ func TestSLSAProvenanceFromSignature(t *testing.T) {
 				c.setup(&sig)
 			}
 
-			sp, err := SLSAProvenanceFromSignature(sig)
+			sp, err := SLSAProvenanceFromSignatureV1(sig)
 			if c.err == nil {
 				require.Nil(t, err)
 				require.NotNil(t, sp)
@@ -368,15 +293,7 @@ func TestSLSAProvenanceFromSignature(t *testing.T) {
 	}
 }
 
-func encode(payload string) string {
-	return base64.StdEncoding.EncodeToString([]byte(payload))
-}
-
-func buffy(data string) io.ReadCloser {
-	return io.NopCloser(bytes.NewBufferString(data))
-}
-
-func TestSLSAProvenance_Subject(t *testing.T) {
+func TestSLSAProvenanceV1_Subject(t *testing.T) {
 	mockSubject1 := in_toto.Subject{
 		Name: "registry.io/example/image@sha256:abc123",
 		Digest: map[string]string{
@@ -393,13 +310,13 @@ func TestSLSAProvenance_Subject(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		statement in_toto.ProvenanceStatementSLSA02
+		statement in_toto.ProvenanceStatementSLSA1
 		expected  []in_toto.Subject
 		wantPanic bool
 	}{
 		{
 			name: "returns single subject successfully",
-			statement: in_toto.ProvenanceStatementSLSA02{
+			statement: in_toto.ProvenanceStatementSLSA1{
 				StatementHeader: in_toto.StatementHeader{
 					Subject: []in_toto.Subject{mockSubject1},
 				},
@@ -408,7 +325,7 @@ func TestSLSAProvenance_Subject(t *testing.T) {
 		},
 		{
 			name: "returns multiple subjects successfully",
-			statement: in_toto.ProvenanceStatementSLSA02{
+			statement: in_toto.ProvenanceStatementSLSA1{
 				StatementHeader: in_toto.StatementHeader{
 					Subject: []in_toto.Subject{mockSubject1, mockSubject2},
 				},
@@ -417,7 +334,7 @@ func TestSLSAProvenance_Subject(t *testing.T) {
 		},
 		{
 			name: "returns empty slice when no subjects",
-			statement: in_toto.ProvenanceStatementSLSA02{
+			statement: in_toto.ProvenanceStatementSLSA1{
 				StatementHeader: in_toto.StatementHeader{
 					Subject: []in_toto.Subject{},
 				},
@@ -436,7 +353,7 @@ func TestSLSAProvenance_Subject(t *testing.T) {
 				}()
 			}
 
-			slsa := slsaProvenance{statement: tt.statement}
+			slsa := slsaProvenanceV1{statement: tt.statement}
 			result := slsa.Subject()
 
 			if !tt.wantPanic {
@@ -449,4 +366,105 @@ func TestSLSAProvenance_Subject(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSLSAProvenanceV1_Type(t *testing.T) {
+	slsa := slsaProvenanceV1{
+		statement: in_toto.ProvenanceStatementSLSA1{
+			StatementHeader: in_toto.StatementHeader{
+				Type:          in_toto.StatementInTotoV01,
+				PredicateType: PredicateSLSAProvenanceV1,
+			},
+		},
+	}
+
+	result := slsa.Type()
+	assert.Equal(t, in_toto.StatementInTotoV01, result)
+}
+
+func TestSLSAProvenanceV1_PredicateType(t *testing.T) {
+	slsa := slsaProvenanceV1{
+		statement: in_toto.ProvenanceStatementSLSA1{
+			StatementHeader: in_toto.StatementHeader{
+				Type:          in_toto.StatementInTotoV01,
+				PredicateType: PredicateSLSAProvenanceV1,
+			},
+		},
+	}
+
+	result := slsa.PredicateType()
+	assert.Equal(t, v1.PredicateSLSAProvenance, result)
+}
+
+func TestSLSAProvenanceV1_PredicateBuildType(t *testing.T) {
+	tests := []struct {
+		name      string
+		buildType string
+	}{
+		{
+			name:      "returns buildType from buildDefinition",
+			buildType: "https://tekton.dev/chains/v2/slsa-tekton",
+		},
+		{
+			name:      "returns empty buildType",
+			buildType: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			slsa := slsaProvenanceV1{
+				statement: in_toto.ProvenanceStatementSLSA1{
+					StatementHeader: in_toto.StatementHeader{
+						Type:          in_toto.StatementInTotoV01,
+						PredicateType: PredicateSLSAProvenanceV1,
+					},
+					Predicate: v1.ProvenancePredicate{
+						BuildDefinition: v1.ProvenanceBuildDefinition{
+							BuildType:          tt.buildType,
+							ExternalParameters: map[string]interface{}{},
+						},
+						RunDetails: v1.ProvenanceRunDetails{
+							Builder: v1.Builder{
+								ID: "https://my.builder",
+							},
+						},
+					},
+				},
+			}
+
+			result := slsa.PredicateBuildType()
+			assert.Equal(t, tt.buildType, result)
+		})
+	}
+}
+
+func TestSLSAProvenanceV1_Statement(t *testing.T) {
+	expectedData := []byte(`{"test":"data"}`)
+	slsa := slsaProvenanceV1{
+		data: expectedData,
+	}
+
+	result := slsa.Statement()
+	assert.Equal(t, expectedData, result)
+}
+
+func TestSLSAProvenanceV1_Signatures(t *testing.T) {
+	expectedSigs := []signature.EntitySignature{
+		{
+			Signature: "sig1",
+			KeyID:     "key1",
+		},
+		{
+			Signature: "sig2",
+			KeyID:     "key2",
+		},
+	}
+
+	slsa := slsaProvenanceV1{
+		signatures: expectedSigs,
+	}
+
+	result := slsa.Signatures()
+	assert.Equal(t, expectedSigs, result)
 }

@@ -38,6 +38,7 @@ const (
 	PredicateBuilderID   = "https://tekton.dev/chains/v2"
 	PredicateBuilderType = "https://tekton.dev/attestations/chains/pipelinerun@v2"
 	PredicateType        = "slsaprovenance"
+	PredicateTypeV1      = "slsaprovenance1"
 )
 
 // CreateStatementFor creates an empty statement that can be further customized
@@ -70,9 +71,44 @@ func CreateStatementFor(imageName string, image v1.Image) (*in_toto.ProvenanceSt
 	return nil, fmt.Errorf("received statement of unsupported type: %v", obj)
 }
 
+// CreateV1StatementFor creates an empty SLSA v1.0 statement that can be further customized
+// and subsequently signed by SignStatement.
+func CreateV1StatementFor(imageName string, image v1.Image) (*in_toto.ProvenanceStatementSLSA1, error) {
+	digest, err := image.Digest()
+	if err != nil {
+		return nil, err
+	}
+
+	obj, err := attestation.GenerateStatement(attestation.GenerateOpts{
+		Predicate: bytes.NewReader([]byte(fmt.Sprintf(`{
+			"buildDefinition": {
+				"buildType": "%s",
+				"externalParameters": {}
+			},
+			"runDetails": {
+				"builder": {
+					"id": "%s"
+				}
+			}
+		}`, PredicateBuilderType, PredicateBuilderID))),
+		Type:   PredicateTypeV1,
+		Digest: digest.Hex,
+		Repo:   imageName,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if statement, ok := obj.(in_toto.ProvenanceStatementSLSA1); ok {
+		return &statement, nil
+	}
+
+	return nil, fmt.Errorf("received statement of unsupported type: %v", obj)
+}
+
 // SignStatement signs the provided statement with the named key. The key needs
 // to be previously generated with the functionality from the crypto package.
-func SignStatement(ctx context.Context, keyName string, statement in_toto.ProvenanceStatementSLSA02) ([]byte, error) {
+func SignStatement(ctx context.Context, keyName string, statement any) ([]byte, error) {
 	payload, err := json.Marshal(statement)
 	if err != nil {
 		return nil, err

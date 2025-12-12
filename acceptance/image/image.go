@@ -222,7 +222,7 @@ func CreateAndPushImageSignature(ctx context.Context, imageName string, keyName 
 // image, same as `cosign attest` or Tekton Chains would, and pushes it to the stub
 // registry as a new tag for that image akin to how cosign and Tekton Chains do it
 func CreateAndPushAttestation(ctx context.Context, imageName, keyName string) (context.Context, error) {
-	return createAndPushAttestationWithPatches(ctx, imageName, keyName, nil)
+	return createAndPushAttestationInternal(ctx, imageName, keyName, nil, false)
 }
 
 // createAndPushAttestation for a named image in the Context creates an attestation
@@ -231,6 +231,11 @@ func CreateAndPushAttestation(ctx context.Context, imageName, keyName string) (c
 // it; this variant applies additional JSON Patch patches to the SLSA provenance
 // statement as required by the tests
 func createAndPushAttestationWithPatches(ctx context.Context, imageName, keyName string, patches *godog.Table) (context.Context, error) {
+	return createAndPushAttestationInternal(ctx, imageName, keyName, patches, false)
+}
+
+// createAndPushAttestationInternal is the internal implementation that supports both SLSA v0.2 and v1
+func createAndPushAttestationInternal(ctx context.Context, imageName, keyName string, patches *godog.Table, useV1 bool) (context.Context, error) {
 	var state *imageState
 	ctx, err := testenv.SetupState(ctx, &state)
 	if err != nil {
@@ -247,22 +252,28 @@ func createAndPushAttestationWithPatches(ctx context.Context, imageName, keyName
 		return ctx, err
 	}
 
-	// generates a mostly-empty statement, but with the required fields already filled in
-	// at this point we could add more data to the statement but the minimum works, we'll
-	// need to add more data to the attestation in more elaborate tests so:
-	// TODO: create a hook to add more data to the attestation
-	statement, err := attestation.CreateStatementFor(imageName, image)
-	if err != nil {
-		return ctx, err
+	var statement any
+
+	if useV1 {
+		// SLSA v1.0
+		statement, err = attestation.CreateV1StatementFor(imageName, image)
+		if err != nil {
+			return ctx, err
+		}
+	} else {
+		// SLSA v0.2
+		v02Statement, err := attestation.CreateStatementFor(imageName, image)
+		if err != nil {
+			return ctx, err
+		}
+
+		statement, err = applyPatches(v02Statement, patches)
+		if err != nil {
+			return ctx, err
+		}
 	}
 
-	statement, err = applyPatches(statement, patches)
-	if err != nil {
-		return ctx, err
-	}
-
-	// signs the attestation with the named key
-	signedAttestation, err := attestation.SignStatement(ctx, keyName, *statement)
+	signedAttestation, err := attestation.SignStatement(ctx, keyName, statement)
 	if err != nil {
 		return ctx, err
 	}
@@ -324,6 +335,12 @@ func createAndPushAttestationWithPatches(ctx context.Context, imageName, keyName
 	state.Attestations[imageName] = ref.String()
 
 	return ctx, nil
+}
+
+// CreateAndPushV1Attestation for a named image creates a SLSA v1.0 attestation
+// and pushes it to the stub registry
+func CreateAndPushV1Attestation(ctx context.Context, imageName, keyName string) (context.Context, error) {
+	return createAndPushAttestationInternal(ctx, imageName, keyName, nil, true)
 }
 
 // CreateAndPushImageWithParent creates a parent image and a test image for the given imageName.
@@ -990,6 +1007,7 @@ func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step(`^a valid image signature of "([^"]*)" image signed by the "([^"]*)" key$`, CreateAndPushImageSignature)
 	sc.Step(`^a valid attestation of "([^"]*)" signed by the "([^"]*)" key$`, CreateAndPushAttestation)
 	sc.Step(`^a valid attestation of "([^"]*)" signed by the "([^"]*)" key, patched with$`, createAndPushAttestationWithPatches)
+	sc.Step(`^a valid slsa v1 attestation of "([^"]*)" signed by the "([^"]*)" key$`, CreateAndPushV1Attestation)
 	sc.Step(`^a signed and attested keyless image named "([^"]*)"$`, createAndPushKeylessImage)
 	sc.Step(`^a OCI policy bundle named "([^"]*)" with$`, createAndPushPolicyBundle)
 	sc.Step(`^an image named "([^"]*)" with signature from "([^"]*)"$`, steal("sig"))

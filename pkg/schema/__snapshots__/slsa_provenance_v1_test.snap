@@ -1,0 +1,380 @@
+
+[TestV1TypeMustBeInToto/case_0 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#] [S#/required] missing properties: '_type'
+---
+
+[TestV1TypeMustBeInToto/case_1 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/_type] [S#/properties/_type/const] value must be "https://in-toto.io/Statement/v0.1"
+---
+
+[TestV1TypeMustBeInToto/case_2 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/_type] [S#/properties/_type/const] value must be "https://in-toto.io/Statement/v0.1"
+---
+
+[TestV1TypeMustBeInToto/case_3 - 1]
+nil
+---
+
+[TestV1SubjectMustBeProvided/case_0 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#] [S#/required] missing properties: 'subject'
+---
+
+[TestV1SubjectMustBeProvided/case_1 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/subject] [S#/properties/subject/minItems] minimum 1 items required, but found 0 items
+---
+
+[TestV1SubjectMustBeProvided/case_2 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/subject/0] [S#/properties/subject/items/required] missing properties: 'name', 'digest'
+---
+
+[TestV1SubjectMustBeProvided/case_3 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/subject/0] [S#/properties/subject/items/required] missing properties: 'digest'
+  [I#/subject/0/name] [S#/properties/subject/items/properties/name/minLength] length must be >= 1, but got 0
+---
+
+[TestV1SubjectMustBeProvided/case_4 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/subject/0/digest] [S#/properties/subject/items/properties/digest/$ref] doesn't validate with '/$defs/DigestSet'
+    [I#/subject/0/digest/foo] [S#/$defs/DigestSet/propertyNames/enum] value must be one of "sha256", "sha224", "sha384", "sha512", "sha512_224", "sha512_256", "sha3_224", "sha3_256", "sha3_384", "sha3_512", "shake128", "shake256", "blake2b", "blake2s", "ripemd160", "sm3", "gost", "sha1", "md5", "gitCommit"
+---
+
+[TestV1SubjectMustBeProvided/case_5 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/subject/0/digest] [S#/properties/subject/items/properties/digest/$ref] doesn't validate with '/$defs/DigestSet'
+    [I#/subject/0/digest/sha256] [S#/$defs/DigestSet/additionalProperties/pattern] does not match pattern '^[a-f0-9]+$'
+---
+
+[TestV1SubjectMustBeProvided/case_6 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/subject/0/digest] [S#/properties/subject/items/properties/digest/$ref] doesn't validate with '/$defs/DigestSet'
+    [I#/subject/0/digest/sha256] [S#/$defs/DigestSet/additionalProperties/pattern] does not match pattern '^[a-f0-9]+$'
+---
+
+[TestV1PredicateTypeMustBeSLSAProvenancev1/case_0 - 1]
+nil
+---
+
+[TestV1PredicateTypeMustBeSLSAProvenancev1/case_1 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicateType] [S#/properties/predicateType/const] value must be "https://slsa.dev/provenance/v1"
+---
+
+[TestV1PredicateTypeMustBeSLSAProvenancev1/case_2 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicateType] [S#/properties/predicateType/const] value must be "https://slsa.dev/provenance/v1"
+---
+
+[TestV1PredicateTypeMustBeSLSAProvenancev1/case_3 - 1]
+nil
+---
+
+[TestV1BuildDefinitionBuildType/case_0 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/buildDefinition] [S#/properties/predicate/properties/buildDefinition/required] missing properties: 'buildType'
+---
+
+[TestV1BuildDefinitionBuildType/case_1 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/buildDefinition/buildType] [S#/properties/predicate/properties/buildDefinition/properties/buildType/minLength] length must be >= 1, but got 0
+---
+
+[TestV1BuildDefinitionBuildType/case_2 - 1]
+nil
+---
+
+[TestV1BuildDefinitionBuildType/case_3 - 1]
+nil
+---
+
+[TestV1BuildDefinitionExternalParameters/case_0 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/buildDefinition] [S#/properties/predicate/properties/buildDefinition/required] missing properties: 'externalParameters'
+---
+
+[TestV1BuildDefinitionExternalParameters/case_1 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/buildDefinition/externalParameters] [S#/properties/predicate/properties/buildDefinition/properties/externalParameters/type] expected object, but got number
+---
+
+[TestV1BuildDefinitionExternalParameters/case_2 - 1]
+nil
+---
+
+[TestV1BuildDefinitionExternalParameters/case_3 - 1]
+nil
+---
+
+[TestV1BuildDefinitionInternalParameters/case_0 - 1]
+nil
+---
+
+[TestV1BuildDefinitionInternalParameters/case_1 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/buildDefinition/internalParameters] [S#/properties/predicate/properties/buildDefinition/properties/internalParameters/type] expected object, but got number
+---
+
+[TestV1BuildDefinitionInternalParameters/case_2 - 1]
+nil
+---
+
+[TestV1BuildDefinitionInternalParameters/case_3 - 1]
+nil
+---
+
+[TestV1BuildDefinitionResolvedDependencies/case_0 - 1]
+nil
+---
+
+[TestV1BuildDefinitionResolvedDependencies/case_1 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/buildDefinition/resolvedDependencies] [S#/properties/predicate/properties/buildDefinition/properties/resolvedDependencies/type] expected array, but got number
+---
+
+[TestV1BuildDefinitionResolvedDependencies/case_2 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/buildDefinition/resolvedDependencies] [S#/properties/predicate/properties/buildDefinition/properties/resolvedDependencies/type] expected array, but got object
+---
+
+[TestV1BuildDefinitionResolvedDependencies/case_3 - 1]
+nil
+---
+
+[TestV1BuildDefinitionResolvedDependencies/case_4 - 1]
+nil
+---
+
+[TestV1BuildDefinitionResolvedDependenciesUri/case_0 - 1]
+nil
+---
+
+[TestV1BuildDefinitionResolvedDependenciesUri/case_1 - 1]
+nil
+---
+
+[TestV1BuildDefinitionResolvedDependenciesUri/case_2 - 1]
+nil
+---
+
+[TestV1BuildDefinitionResolvedDependenciesUri/case_3 - 1]
+nil
+---
+
+[TestV1BuildDefinitionResolvedDependenciesDigest/case_0 - 1]
+nil
+---
+
+[TestV1BuildDefinitionResolvedDependenciesDigest/case_1 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/buildDefinition/resolvedDependencies/0] [S#/properties/predicate/properties/buildDefinition/properties/resolvedDependencies/items/$ref] doesn't validate with '/$defs/ResourceDescriptor'
+    [I#/predicate/buildDefinition/resolvedDependencies/0/digest] [S#/$defs/ResourceDescriptor/properties/digest/$ref] doesn't validate with '/$defs/DigestSet'
+      [I#/predicate/buildDefinition/resolvedDependencies/0/digest/foo] [S#/$defs/DigestSet/propertyNames/enum] value must be one of "sha256", "sha224", "sha384", "sha512", "sha512_224", "sha512_256", "sha3_224", "sha3_256", "sha3_384", "sha3_512", "shake128", "shake256", "blake2b", "blake2s", "ripemd160", "sm3", "gost", "sha1", "md5", "gitCommit"
+---
+
+[TestV1BuildDefinitionResolvedDependenciesDigest/case_2 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/buildDefinition/resolvedDependencies/0] [S#/properties/predicate/properties/buildDefinition/properties/resolvedDependencies/items/$ref] doesn't validate with '/$defs/ResourceDescriptor'
+    [I#/predicate/buildDefinition/resolvedDependencies/0/digest] [S#/$defs/ResourceDescriptor/properties/digest/$ref] doesn't validate with '/$defs/DigestSet'
+      [I#/predicate/buildDefinition/resolvedDependencies/0/digest/sha256] [S#/$defs/DigestSet/additionalProperties/pattern] does not match pattern '^[a-f0-9]+$'
+---
+
+[TestV1BuildDefinitionResolvedDependenciesDigest/case_3 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/buildDefinition/resolvedDependencies/0] [S#/properties/predicate/properties/buildDefinition/properties/resolvedDependencies/items/$ref] doesn't validate with '/$defs/ResourceDescriptor'
+    [I#/predicate/buildDefinition/resolvedDependencies/0/digest] [S#/$defs/ResourceDescriptor/properties/digest/$ref] doesn't validate with '/$defs/DigestSet'
+      [I#/predicate/buildDefinition/resolvedDependencies/0/digest/sha256] [S#/$defs/DigestSet/additionalProperties/pattern] does not match pattern '^[a-f0-9]+$'
+---
+
+[TestV1BuildDefinitionResolvedDependenciesDigest/case_4 - 1]
+nil
+---
+
+[TestV1RunDetailsBuilder/case_0 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails] [S#/properties/predicate/properties/runDetails/required] missing properties: 'builder'
+---
+
+[TestV1RunDetailsBuilder/case_1 - 1]
+nil
+---
+
+[TestV1RunDetailsBuilder/case_2 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/builder] [S#/properties/predicate/properties/runDetails/properties/builder/required] missing properties: 'id'
+---
+
+[TestV1RunDetailsBuilder/case_3 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/builder/id] [S#/properties/predicate/properties/runDetails/properties/builder/properties/id/format] '' is not valid 'uri'
+---
+
+[TestV1RunDetailsBuilder/case_4 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/builder/id] [S#/properties/predicate/properties/runDetails/properties/builder/properties/id/format] 'not_uri' is not valid 'uri'
+---
+
+[TestV1RunDetailsBuilder/case_5 - 1]
+nil
+---
+
+[TestV1RunDetailsMetadata/case_0 - 1]
+nil
+---
+
+[TestV1RunDetailsMetadata/case_1 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/metadata] [S#/properties/predicate/properties/runDetails/properties/metadata/type] expected object, but got number
+---
+
+[TestV1RunDetailsMetadata/case_2 - 1]
+nil
+---
+
+[TestV1RunDetailsMetadata/case_3 - 1]
+nil
+---
+
+[TestV1RunDetailsMetadataInvocationId/case_0 - 1]
+nil
+---
+
+[TestV1RunDetailsMetadataInvocationId/case_1 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/metadata/invocationId] [S#/properties/predicate/properties/runDetails/properties/metadata/properties/invocationId/minLength] length must be >= 1, but got 0
+---
+
+[TestV1RunDetailsMetadataInvocationId/case_2 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/metadata/invocationId] [S#/properties/predicate/properties/runDetails/properties/metadata/properties/invocationId/type] expected string, but got number
+---
+
+[TestV1RunDetailsMetadataInvocationId/case_3 - 1]
+nil
+---
+
+[TestV1RunDetailsMetadataStartedOn/case_0 - 1]
+nil
+---
+
+[TestV1RunDetailsMetadataStartedOn/case_1 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/metadata/startedOn] [S#/properties/predicate/properties/runDetails/properties/metadata/properties/startedOn/$ref] doesn't validate with '/$defs/Timestamp'
+    [I#/predicate/runDetails/metadata/startedOn] [S#/$defs/Timestamp/format] '' is not valid 'date-time'
+    [I#/predicate/runDetails/metadata/startedOn] [S#/$defs/Timestamp/pattern] does not match pattern 'Z$'
+---
+
+[TestV1RunDetailsMetadataStartedOn/case_2 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/metadata/startedOn] [S#/properties/predicate/properties/runDetails/properties/metadata/properties/startedOn/$ref] doesn't validate with '/$defs/Timestamp'
+    [I#/predicate/runDetails/metadata/startedOn] [S#/$defs/Timestamp/type] expected string, but got number
+---
+
+[TestV1RunDetailsMetadataStartedOn/case_3 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/metadata/startedOn] [S#/properties/predicate/properties/runDetails/properties/metadata/properties/startedOn/$ref] doesn't validate with '/$defs/Timestamp'
+    [I#/predicate/runDetails/metadata/startedOn] [S#/$defs/Timestamp/pattern] does not match pattern 'Z$'
+---
+
+[TestV1RunDetailsMetadataStartedOn/case_4 - 1]
+nil
+---
+
+[TestV1RunDetailsMetadataFinishedOn/case_0 - 1]
+nil
+---
+
+[TestV1RunDetailsMetadataFinishedOn/case_1 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/metadata/finishedOn] [S#/properties/predicate/properties/runDetails/properties/metadata/properties/finishedOn/$ref] doesn't validate with '/$defs/Timestamp'
+    [I#/predicate/runDetails/metadata/finishedOn] [S#/$defs/Timestamp/format] '' is not valid 'date-time'
+    [I#/predicate/runDetails/metadata/finishedOn] [S#/$defs/Timestamp/pattern] does not match pattern 'Z$'
+---
+
+[TestV1RunDetailsMetadataFinishedOn/case_2 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/metadata/finishedOn] [S#/properties/predicate/properties/runDetails/properties/metadata/properties/finishedOn/$ref] doesn't validate with '/$defs/Timestamp'
+    [I#/predicate/runDetails/metadata/finishedOn] [S#/$defs/Timestamp/type] expected string, but got number
+---
+
+[TestV1RunDetailsMetadataFinishedOn/case_3 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/metadata/finishedOn] [S#/properties/predicate/properties/runDetails/properties/metadata/properties/finishedOn/$ref] doesn't validate with '/$defs/Timestamp'
+    [I#/predicate/runDetails/metadata/finishedOn] [S#/$defs/Timestamp/pattern] does not match pattern 'Z$'
+---
+
+[TestV1RunDetailsMetadataFinishedOn/case_4 - 1]
+nil
+---
+
+[TestV1RunDetailsByproducts/case_0 - 1]
+nil
+---
+
+[TestV1RunDetailsByproducts/case_1 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/byproducts] [S#/properties/predicate/properties/runDetails/properties/byproducts/type] expected array, but got number
+---
+
+[TestV1RunDetailsByproducts/case_2 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/byproducts] [S#/properties/predicate/properties/runDetails/properties/byproducts/type] expected array, but got object
+---
+
+[TestV1RunDetailsByproducts/case_3 - 1]
+nil
+---
+
+[TestV1RunDetailsByproducts/case_4 - 1]
+nil
+---
+
+[TestV1RunDetailsByproductsUri/case_0 - 1]
+nil
+---
+
+[TestV1RunDetailsByproductsUri/case_1 - 1]
+nil
+---
+
+[TestV1RunDetailsByproductsUri/case_2 - 1]
+nil
+---
+
+[TestV1RunDetailsByproductsUri/case_3 - 1]
+nil
+---
+
+[TestV1RunDetailsByproductsDigest/case_0 - 1]
+nil
+---
+
+[TestV1RunDetailsByproductsDigest/case_1 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/byproducts/0] [S#/properties/predicate/properties/runDetails/properties/byproducts/items/$ref] doesn't validate with '/$defs/ResourceDescriptor'
+    [I#/predicate/runDetails/byproducts/0/digest] [S#/$defs/ResourceDescriptor/properties/digest/$ref] doesn't validate with '/$defs/DigestSet'
+      [I#/predicate/runDetails/byproducts/0/digest/foo] [S#/$defs/DigestSet/propertyNames/enum] value must be one of "sha256", "sha224", "sha384", "sha512", "sha512_224", "sha512_256", "sha3_224", "sha3_256", "sha3_384", "sha3_512", "shake128", "shake256", "blake2b", "blake2s", "ripemd160", "sm3", "gost", "sha1", "md5", "gitCommit"
+---
+
+[TestV1RunDetailsByproductsDigest/case_2 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/byproducts/0] [S#/properties/predicate/properties/runDetails/properties/byproducts/items/$ref] doesn't validate with '/$defs/ResourceDescriptor'
+    [I#/predicate/runDetails/byproducts/0/digest] [S#/$defs/ResourceDescriptor/properties/digest/$ref] doesn't validate with '/$defs/DigestSet'
+      [I#/predicate/runDetails/byproducts/0/digest/sha256] [S#/$defs/DigestSet/additionalProperties/pattern] does not match pattern '^[a-f0-9]+$'
+---
+
+[TestV1RunDetailsByproductsDigest/case_3 - 1]
+[I#] [S#] doesn't validate with https://slsa.dev/provenance/v1#
+  [I#/predicate/runDetails/byproducts/0] [S#/properties/predicate/properties/runDetails/properties/byproducts/items/$ref] doesn't validate with '/$defs/ResourceDescriptor'
+    [I#/predicate/runDetails/byproducts/0/digest] [S#/$defs/ResourceDescriptor/properties/digest/$ref] doesn't validate with '/$defs/DigestSet'
+      [I#/predicate/runDetails/byproducts/0/digest/sha256] [S#/$defs/DigestSet/additionalProperties/pattern] does not match pattern '^[a-f0-9]+$'
+---
+
+[TestV1RunDetailsByproductsDigest/case_4 - 1]
+nil
+---
