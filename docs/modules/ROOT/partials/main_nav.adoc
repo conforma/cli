@@ -1,6 +1,7 @@
 * xref:index.adoc[Home]
 * xref:configuration.adoc[Configuration]
 * xref:policy_input.adoc[Policy Input]
+* xref:types-of-attestations-and-manifests.adoc[Types of Attestations and Manifests]
 * xref:signing.adoc[Signing]
 * xref:release-process.adoc[Release Process]
 * xref:troubleshooting.adoc[Troubleshooting]
