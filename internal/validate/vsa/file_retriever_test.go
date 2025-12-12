@@ -18,6 +18,7 @@ package vsa
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -301,13 +302,13 @@ func TestFileVSARetriever_RetrieveVSA_ErrorCases(t *testing.T) {
 			name:        "file with invalid JSON",
 			identifier:  "invalid.json",
 			expectError: true,
-			errorMsg:    "failed to unmarshal DSSE envelope",
+			errorMsg:    "content is neither valid DSSE envelope nor valid JSON predicate",
 		},
 		{
 			name:        "file with invalid DSSE structure",
 			identifier:  "invalid-dsse.json",
 			expectError: true,
-			errorMsg:    "DSSE envelope missing payloadType",
+			errorMsg:    "content does not appear to be a VSA predicate (missing 'policy' field)",
 		},
 	}
 
@@ -398,4 +399,47 @@ func TestFileVSARetriever_parseDSSEEnvelope_ErrorCases(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFileVSARetriever_RawPredicateSupport(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	retriever := &FileVSARetriever{fs: fs}
+
+	// Create a raw VSA predicate (unsigned format)
+	rawPredicate := map[string]interface{}{
+		"policy": map[string]interface{}{
+			"sources": []map[string]interface{}{
+				{"uri": "https://github.com/test/policy"},
+			},
+		},
+		"timestamp":  "2023-01-01T00:00:00Z",
+		"components": []map[string]interface{}{},
+	}
+
+	rawPredicateJSON, err := json.Marshal(rawPredicate)
+	require.NoError(t, err)
+	err = afero.WriteFile(fs, "raw-vsa.json", rawPredicateJSON, 0600)
+	require.NoError(t, err)
+
+	// Test that raw predicate can be retrieved successfully
+	result, err := retriever.RetrieveVSA(context.Background(), "raw-vsa.json")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Should have DSSE envelope structure but with empty signatures
+	assert.Equal(t, "application/vnd.in-toto+json", result.PayloadType)
+	assert.NotEmpty(t, result.Payload)
+	assert.Empty(t, result.Signatures) // No signatures for unsigned VSA
+
+	// The payload should be base64 encoded version of our raw predicate
+	decodedPayload, err := base64.StdEncoding.DecodeString(result.Payload)
+	require.NoError(t, err)
+
+	var decodedPredicate map[string]interface{}
+	err = json.Unmarshal(decodedPayload, &decodedPredicate)
+	require.NoError(t, err)
+
+	// Should match our original raw predicate
+	assert.Equal(t, rawPredicate["timestamp"], decodedPredicate["timestamp"])
+	assert.NotNil(t, decodedPredicate["policy"])
 }
