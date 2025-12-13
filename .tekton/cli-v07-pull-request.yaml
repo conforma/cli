@@ -521,7 +521,7 @@ spec:
         - name: name
           value: rpms-signature-scan
         - name: bundle
-          value: quay.io/konflux-ci/konflux-vanguard/task-rpms-signature-scan:0.2@sha256:6fbbfadb934283fdd22e13cdf6636d6c61b33f8bcc9771aae4ba490ef5c5f28c
+          value: quay.io/konflux-ci/tekton-catalog/task-rpms-signature-scan:0.2@sha256:20eb21c60522a12198205f70b9c58cb5d71db561a255a3ba1ced56ae7b4af270
         - name: kind
           value: task
         resolver: bundles
