@@ -85,32 +85,15 @@ jobs:
       - name: Test
         run: make test
 
-      - name: Upload unit test coverage report
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test coverage artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
         with:
-          files: ./coverage-unit.out
-          disable_search: true
-          flags: unit
-
-      - name: Upload generative test coverage report
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        with:
-          files: ./coverage-generative.out
-          disable_search: true
-          flags: generative
-
-      - name: Upload integration test coverage report
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        with:
-          files: ./coverage-integration.out
-          disable_search: true
-          flags: integration
+          name: coverage-test
+          path: |
+            ./coverage-unit.out
+            ./coverage-generative.out
+            ./coverage-integration.out
+          retention-days: 1
 
   Acceptance:
     runs-on: ubuntu-latest
@@ -149,12 +132,75 @@ jobs:
         id: acceptance_test
         run: E2E_INSTRUMENTATION=true make acceptance
 
-      - name: Upload coverage report
+      - name: Upload acceptance coverage artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        with:
+          name: coverage-acceptance
+          path: ./coverage-acceptance.out
+          retention-days: 1
+
+  Upload:
+    name: "Upload Coverage Statistics"
+    runs-on: ubuntu-latest
+    needs: [Test, Acceptance]
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        with:
+          egress-policy: audit
+          disable-telemetry: true
+
+        # checkout is required for codecov to map the coverage data back to files in the repo
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - name: Download test coverage artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: coverage-test
+          path: ./coverage
+
+      - name: Download acceptance coverage artifact
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: coverage-acceptance
+          path: ./coverage
+
+      - name: Upload unit test coverage report
         uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          files: ./coverage-acceptance.out
+          files: ./coverage/coverage-unit.out
+          disable_search: true
+          flags: unit
+
+      - name: Upload generative test coverage report
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          files: ./coverage/coverage-generative.out
+          disable_search: true
+          flags: generative
+
+      - name: Upload integration test coverage report
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          files: ./coverage/coverage-integration.out
+          disable_search: true
+          flags: integration
+
+      - name: Upload acceptance test coverage report
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          files: ./coverage/coverage-acceptance.out
           disable_search: true
           flags: acceptance
 
