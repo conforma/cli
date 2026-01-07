@@ -70,6 +70,10 @@ dist-container: clean
 	  --platform $(BUILD_LOCAL_PLATFORM) \
 	  --build-arg BUILD_SUFFIX=local \
 	  --build-arg BUILD_LIST=$(BUILD_LOCAL_ARCH) \
+	  --volume "$(GOCACHE_DIR)":/go/cache:Z \
+	  --volume "$(GOMODCACHE_DIR)":/go/mod:Z \
+	  --env GOCACHE=/go/cache \
+	  --env GOMODCACHE=/go/mod \
 	  .
 
 # For local debugging of the above
