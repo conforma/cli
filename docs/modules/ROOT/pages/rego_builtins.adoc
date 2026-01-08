@@ -18,6 +18,8 @@ information.
 |Fetch an Image Index from an OCI registry.
 |xref:ec_oci_image_manifest.adoc[ec.oci.image_manifest]
 |Fetch an Image Manifest from an OCI registry.
+|xref:ec_oci_image_manifests.adoc[ec.oci.image_manifests]
+|Fetch Image Manifests from an OCI registry in parallel.
 |xref:ec_purl_is_valid.adoc[ec.purl.is_valid]
 |Determine whether or not a given PURL is valid.
 |xref:ec_purl_parse.adoc[ec.purl.parse]

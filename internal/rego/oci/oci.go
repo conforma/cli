@@ -27,6 +27,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
+	"sync"
+	"sync/atomic"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -35,6 +38,8 @@ import (
 	"github.com/open-policy-agent/opa/v1/topdown/builtins"
 	"github.com/open-policy-agent/opa/v1/types"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/singleflight"
 	"k8s.io/client-go/util/retry"
 
 	"github.com/conforma/cli/internal/fetchers/oci/files"
@@ -42,11 +47,12 @@ import (
 )
 
 const (
-	ociBlobName          = "ec.oci.blob"
-	ociDescriptorName    = "ec.oci.descriptor"
-	ociImageManifestName = "ec.oci.image_manifest"
-	ociImageFilesName    = "ec.oci.image_files"
-	ociImageIndexName    = "ec.oci.image_index"
+	ociBlobName                = "ec.oci.blob"
+	ociDescriptorName          = "ec.oci.descriptor"
+	ociImageManifestName       = "ec.oci.image_manifest"
+	ociImageManifestsBatchName = "ec.oci.image_manifests"
+	ociImageFilesName          = "ec.oci.image_files"
+	ociImageIndexName          = "ec.oci.image_index"
 )
 
 func registerOCIBlob() {
@@ -212,6 +218,78 @@ func registerOCIImageManifest() {
 	})
 }
 
+func registerOCIImageManifestsBatch() {
+	platform := types.NewObject(
+		[]*types.StaticProperty{
+			{Key: "architecture", Value: types.S},
+			{Key: "os", Value: types.S},
+			{Key: "os.version", Value: types.S},
+			{Key: "os.features", Value: types.NewArray([]types.Type{types.S}, nil)},
+			{Key: "variant", Value: types.S},
+			{Key: "features", Value: types.NewArray([]types.Type{types.S}, nil)},
+		},
+		nil,
+	)
+
+	annotations := types.NewObject(nil, types.NewDynamicProperty(types.S, types.S))
+
+	descriptor := types.NewObject(
+		[]*types.StaticProperty{
+			{Key: "mediaType", Value: types.S},
+			{Key: "size", Value: types.N},
+			{Key: "digest", Value: types.S},
+			{Key: "data", Value: types.S},
+			{Key: "urls", Value: types.NewArray(
+				[]types.Type{types.S}, nil,
+			)},
+			{Key: "annotations", Value: annotations},
+			{Key: "platform", Value: platform},
+			{Key: "artifactType", Value: types.S},
+		},
+		nil,
+	)
+
+	manifest := types.NewObject(
+		[]*types.StaticProperty{
+			{Key: "schemaVersion", Value: types.N},
+			{Key: "mediaType", Value: types.S},
+			{Key: "config", Value: descriptor},
+			{Key: "layers", Value: types.NewArray(
+				[]types.Type{descriptor}, nil,
+			)},
+			{Key: "annotations", Value: annotations},
+			{Key: "subject", Value: descriptor},
+		},
+		nil,
+	)
+
+	// Return type is an object mapping ref strings to manifests
+	resultType := types.NewObject(nil, types.NewDynamicProperty(
+		types.Named("ref", types.S).Description("the OCI image reference"),
+		types.Named("manifest", manifest).Description("the Image Manifest object"),
+	))
+
+	decl := rego.Function{
+		Name: ociImageManifestsBatchName,
+		Decl: types.NewFunction(
+			types.Args(
+				types.Named("refs", types.NewSet(types.S)).Description("set of OCI image references"),
+			),
+			types.Named("manifests", resultType).Description("object mapping refs to their Image Manifest objects"),
+		),
+		Memoize:          true,
+		Nondeterministic: true,
+	}
+
+	rego.RegisterBuiltin1(&decl, ociImageManifestsBatch)
+	ast.RegisterBuiltin(&ast.Builtin{
+		Name:             decl.Name,
+		Description:      "Fetch Image Manifests from an OCI registry in parallel.",
+		Decl:             decl.Decl,
+		Nondeterministic: decl.Nondeterministic,
+	})
+}
+
 func registerOCIImageFiles() {
 	filesObject := types.NewObject(
 		nil,
@@ -309,69 +387,93 @@ func ociBlob(bctx rego.BuiltinContext, a *ast.Term) (*ast.Term, error) {
 		logger.Error("input is not a string")
 		return nil, nil
 	}
-	logger = logger.WithField("ref", string(uri))
-	logger.Debug("Starting blob retrieval")
+	refStr := string(uri)
+	logger = logger.WithField("ref", refStr)
 
-	ref, err := name.NewDigest(string(uri))
-	if err != nil {
-		logger.WithFields(log.Fields{
-			"action": "new digest",
-			"error":  err,
-		}).Error("failed to create new digest")
-		return nil, nil
+	// Check cache first (fast path)
+	if cached, found := blobCache.Load(refStr); found {
+		logger.Debug("Blob served from cache")
+		return cached.(*ast.Term), nil
 	}
 
-	rawLayer, err := oci.NewClient(bctx.Context).Layer(ref)
-	if err != nil {
+	// Use singleflight to prevent thundering herd - only one goroutine fetches per key
+	result, err, _ := blobFlight.Do(refStr, func() (any, error) {
+		// Double-check cache inside singleflight (another goroutine may have populated it)
+		if cached, found := blobCache.Load(refStr); found {
+			logger.Debug("Blob served from cache (after singleflight)")
+			return cached, nil
+		}
+		logger.Debug("Starting blob retrieval")
+
+		ref, err := name.NewDigest(refStr)
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"action": "new digest",
+				"error":  err,
+			}).Error("failed to create new digest")
+			return nil, nil //nolint:nilerr // intentional: return nil to signal failure without OPA error
+		}
+
+		rawLayer, err := oci.NewClient(bctx.Context).Layer(ref)
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"action": "fetch layer",
+				"error":  err,
+			}).Error("failed to fetch OCI layer")
+			return nil, nil //nolint:nilerr
+		}
+
+		layer, err := rawLayer.Uncompressed()
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"action": "uncompress layer",
+				"error":  err,
+			}).Error("failed to uncompress OCI layer")
+			return nil, nil //nolint:nilerr
+		}
+		defer layer.Close()
+
+		// TODO: Other algorithms are technically supported, e.g. sha512. However, support for those is
+		// not complete in the go-containerregistry library, e.g. name.NewDigest throws an error if
+		// sha256 is not used. This is good for now, but may need revisiting later.
+		hasher := sha256.New()
+		reader := io.TeeReader(layer, hasher)
+
+		var blob bytes.Buffer
+		if _, err := io.Copy(&blob, reader); err != nil {
+			logger.WithFields(log.Fields{
+				"action": "copy buffer",
+				"error":  err,
+			}).Error("failed to copy data into buffer")
+			return nil, nil //nolint:nilerr
+		}
+
+		sum := fmt.Sprintf("sha256:%x", hasher.Sum(nil))
+		// io.LimitReader truncates the layer if it exceeds its limit. The condition below catches this
+		// scenario in order to avoid unexpected behavior caused by partial data being returned.
+		if sum != ref.DigestStr() {
+			logger.WithFields(log.Fields{
+				"action":          "verify digest",
+				"computed_digest": sum,
+				"expected_digest": ref.DigestStr(),
+			}).Error("computed digest does not match expected digest")
+			return nil, nil
+		}
+
 		logger.WithFields(log.Fields{
-			"action": "fetch layer",
-			"error":  err,
-		}).Error("failed to fetch OCI layer")
+			"action": "complete",
+			"digest": sum,
+		}).Debug("Successfully retrieved blob")
+
+		term := ast.StringTerm(blob.String())
+		blobCache.Store(refStr, term)
+		return term, nil
+	})
+
+	if err != nil || result == nil {
 		return nil, nil
 	}
-
-	layer, err := rawLayer.Uncompressed()
-	if err != nil {
-		logger.WithFields(log.Fields{
-			"action": "uncompress layer",
-			"error":  err,
-		}).Error("failed to uncompress OCI layer")
-		return nil, nil
-	}
-	defer layer.Close()
-
-	// TODO: Other algorithms are technically supported, e.g. sha512. However, support for those is
-	// not complete in the go-containerregistry library, e.g. name.NewDigest throws an error if
-	// sha256 is not used. This is good for now, but may need revisiting later.
-	hasher := sha256.New()
-	reader := io.TeeReader(layer, hasher)
-
-	var blob bytes.Buffer
-	if _, err := io.Copy(&blob, reader); err != nil {
-		logger.WithFields(log.Fields{
-			"action": "copy buffer",
-			"error":  err,
-		}).Error("failed to copy data into buffer")
-		return nil, nil
-	}
-
-	sum := fmt.Sprintf("sha256:%x", hasher.Sum(nil))
-	// io.LimitReader truncates the layer if it exceeds its limit. The condition below catches this
-	// scenario in order to avoid unexpected behavior caused by partial data being returned.
-	if sum != ref.DigestStr() {
-		logger.WithFields(log.Fields{
-			"action":          "verify digest",
-			"computed_digest": sum,
-			"expected_digest": ref.DigestStr(),
-		}).Error("computed digest does not match expected digest")
-		return nil, nil
-	}
-
-	logger.WithFields(log.Fields{
-		"action": "complete",
-		"digest": sum,
-	}).Debug("Successfully retrieved blob")
-	return ast.StringTerm(blob.String()), nil
+	return result.(*ast.Term), nil
 }
 
 func ociDescriptor(bctx rego.BuiltinContext, a *ast.Term) (*ast.Term, error) {
@@ -382,29 +484,52 @@ func ociDescriptor(bctx rego.BuiltinContext, a *ast.Term) (*ast.Term, error) {
 		logger.Error("input is not a string")
 		return nil, nil
 	}
-	logger = logger.WithField("input_ref", string(uriValue))
-	logger.Debug("Starting descriptor retrieval")
+	refStr := string(uriValue)
+	logger = logger.WithField("input_ref", refStr)
 
-	client := oci.NewClient(bctx.Context)
-
-	uri, ref, err := resolveIfNeeded(client, string(uriValue))
-	if err != nil {
-		logger.WithField("action", "resolveIfNeeded").Error(err)
-		return nil, nil
-	}
-	logger = logger.WithField("ref", uri)
-
-	descriptor, err := client.Head(ref)
-	if err != nil {
-		logger.WithFields(log.Fields{
-			"action": "fetch head",
-			"error":  err,
-		}).Error("failed to fetch image descriptor")
-		return nil, nil
+	// Check cache first (fast path)
+	if cached, found := descriptorCache.Load(refStr); found {
+		logger.Debug("Descriptor served from cache")
+		return cached.(*ast.Term), nil
 	}
 
-	logger.Debug("Successfully retrieved descriptor")
-	return newDescriptorTerm(*descriptor), nil
+	// Use singleflight to prevent thundering herd
+	result, err, _ := descriptorFlight.Do(refStr, func() (any, error) {
+		// Double-check cache inside singleflight
+		if cached, found := descriptorCache.Load(refStr); found {
+			logger.Debug("Descriptor served from cache (after singleflight)")
+			return cached, nil
+		}
+		logger.Debug("Starting descriptor retrieval")
+
+		client := oci.NewClient(bctx.Context)
+
+		uri, ref, err := resolveIfNeeded(client, refStr)
+		if err != nil {
+			logger.WithField("action", "resolveIfNeeded").Error(err)
+			return nil, nil //nolint:nilerr
+		}
+		logger.WithField("ref", uri).Debug("Resolved reference")
+
+		descriptor, err := client.Head(ref)
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"action": "fetch head",
+				"error":  err,
+			}).Error("failed to fetch image descriptor")
+			return nil, nil //nolint:nilerr
+		}
+
+		logger.Debug("Successfully retrieved descriptor")
+		term := newDescriptorTerm(*descriptor)
+		descriptorCache.Store(refStr, term)
+		return term, nil
+	})
+
+	if err != nil || result == nil {
+		return nil, nil
+	}
+	return result.(*ast.Term), nil
 }
 
 func ociImageManifest(bctx rego.BuiltinContext, a *ast.Term) (*ast.Term, error) {
@@ -415,64 +540,267 @@ func ociImageManifest(bctx rego.BuiltinContext, a *ast.Term) (*ast.Term, error) 
 		logger.Error("input is not a string")
 		return nil, nil
 	}
-	logger = logger.WithField("input_ref", string(uriValue))
-	logger.Debug("Starting image manifest retrieval")
+	refStr := string(uriValue)
+	logger = logger.WithField("input_ref", refStr)
 
-	client := oci.NewClient(bctx.Context)
+	// Check cache first (fast path)
+	if cached, found := manifestCache.Load(refStr); found {
+		logger.Debug("Image manifest served from cache")
+		return cached.(*ast.Term), nil
+	}
 
-	uri, ref, err := resolveIfNeeded(client, string(uriValue))
-	if err != nil {
-		logger.WithField("action", "resolveIfNeeded").Error(err)
+	// Use singleflight to prevent thundering herd
+	result, err, _ := manifestFlight.Do(refStr, func() (any, error) {
+		// Double-check cache inside singleflight
+		if cached, found := manifestCache.Load(refStr); found {
+			logger.Debug("Image manifest served from cache (after singleflight)")
+			return cached, nil
+		}
+		logger.Debug("Starting image manifest retrieval")
+
+		client := oci.NewClient(bctx.Context)
+
+		uri, ref, err := resolveIfNeeded(client, refStr)
+		if err != nil {
+			logger.WithField("action", "resolveIfNeeded").Error(err)
+			return nil, nil //nolint:nilerr
+		}
+		logger.WithField("ref", uri).Debug("Resolved reference")
+
+		var image v1.Image
+		err = retry.OnError(retry.DefaultRetry, func(_ error) bool { return true }, func() error {
+			image, err = client.Image(ref)
+			return err
+		})
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"action": "fetch image",
+				"error":  err,
+			}).Error("failed to fetch image")
+			return nil, nil //nolint:nilerr
+		}
+
+		manifest, err := image.Manifest()
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"action": "fetch manifest",
+				"error":  err,
+			}).Error("failed to fetch manifest")
+			return nil, nil //nolint:nilerr
+		}
+
+		if manifest == nil {
+			logger.Error("manifest is nil")
+			return nil, nil
+		}
+
+		layers := []*ast.Term{}
+		for _, layer := range manifest.Layers {
+			layers = append(layers, newDescriptorTerm(layer))
+		}
+
+		manifestTerms := [][2]*ast.Term{
+			ast.Item(ast.StringTerm("schemaVersion"), ast.NumberTerm(json.Number(fmt.Sprintf("%d", manifest.SchemaVersion)))),
+			ast.Item(ast.StringTerm("mediaType"), ast.StringTerm(string(manifest.MediaType))),
+			ast.Item(ast.StringTerm("config"), newDescriptorTerm(manifest.Config)),
+			ast.Item(ast.StringTerm("layers"), ast.ArrayTerm(layers...)),
+			ast.Item(ast.StringTerm("annotations"), newAnnotationsTerm(manifest.Annotations)),
+		}
+
+		if s := manifest.Subject; s != nil {
+			manifestTerms = append(manifestTerms, ast.Item(ast.StringTerm("subject"), newDescriptorTerm(*s)))
+		}
+
+		logger.Debug("Successfully retrieved image manifest")
+		term := ast.ObjectTerm(manifestTerms...)
+		manifestCache.Store(refStr, term)
+		return term, nil
+	})
+
+	if err != nil || result == nil {
 		return nil, nil
 	}
-	logger = logger.WithField("ref", uri)
+	return result.(*ast.Term), nil
+}
 
-	var image v1.Image
-	err = retry.OnError(retry.DefaultRetry, func(_ error) bool { return true }, func() error {
-		image, err = client.Image(ref)
-		return err
+// manifestResult holds the result of fetching a single manifest
+type manifestResult struct {
+	ref      string
+	manifest *ast.Term
+}
+
+// maxParallelManifestFetches limits concurrent manifest fetches to avoid overwhelming registries.
+// Defaults to GOMAXPROCS * 4, which provides good parallelism while being respectful of resources.
+var maxParallelManifestFetches = runtime.GOMAXPROCS(0) * 4
+
+// Package-level caches for OCI operations.
+// OPA's Memoize only works within a single Eval() call, but we validate multiple
+// images in separate Eval() calls. These caches persist for the lifetime of the process.
+// All caches are keyed by the ref string (or ref+paths for image files).
+//
+// We use singleflight.Group alongside sync.Map to prevent thundering herd:
+// - sync.Map stores the cached results
+// - singleflight.Group ensures only one goroutine fetches a given key at a time
+var (
+	blobCache        sync.Map           // map[string]*ast.Term - for ociBlob
+	blobFlight       singleflight.Group // deduplicates concurrent blob fetches
+	descriptorCache  sync.Map           // map[string]*ast.Term - for ociDescriptor
+	descriptorFlight singleflight.Group
+	manifestCache    sync.Map // map[string]*ast.Term - for ociImageManifest
+	manifestFlight   singleflight.Group
+	imageFilesCache  sync.Map // map[string]*ast.Term - for ociImageFiles (key: ref+pathsHash)
+	imageFilesFlight singleflight.Group
+	imageIndexCache  sync.Map // map[string]*ast.Term - for ociImageIndex
+	imageIndexFlight singleflight.Group
+)
+
+// batchCallCounter tracks how many times ociImageManifestsBatch is called (for debugging)
+var batchCallCounter uint64
+
+// ClearCaches clears all package-level caches. This is primarily used for testing
+// to ensure tests don't interfere with each other via cached values.
+func ClearCaches() {
+	blobCache = sync.Map{}
+	descriptorCache = sync.Map{}
+	manifestCache = sync.Map{}
+	imageFilesCache = sync.Map{}
+	imageIndexCache = sync.Map{}
+}
+
+func ociImageManifestsBatch(bctx rego.BuiltinContext, a *ast.Term) (*ast.Term, error) {
+	callNum := atomic.AddUint64(&batchCallCounter, 1)
+	logger := log.WithField("function", ociImageManifestsBatchName)
+
+	refsSet, err := builtins.SetOperand(a.Value, 1)
+	if err != nil {
+		logger.WithFields(log.Fields{
+			"action": "convert refs",
+			"error":  err,
+		}).Error("failed to convert refs to set operand")
+		return nil, nil
+	}
+
+	// Collect all ref terms and check cache
+	var uncachedTerms []*ast.Term
+	cachedResults := make(map[string]*ast.Term)
+
+	err = refsSet.Iter(func(refTerm *ast.Term) error {
+		refStr, ok := refTerm.Value.(ast.String)
+		if !ok {
+			return fmt.Errorf("ref is not a string: %#v", refTerm)
+		}
+		ref := string(refStr)
+
+		// Check cache first
+		if cached, found := manifestCache.Load(ref); found {
+			cachedResults[ref] = cached.(*ast.Term)
+		} else {
+			uncachedTerms = append(uncachedTerms, refTerm)
+		}
+		return nil
 	})
 	if err != nil {
 		logger.WithFields(log.Fields{
-			"action": "fetch image",
+			"action": "iterate refs",
 			"error":  err,
-		}).Error("failed to fetch image")
+		}).Error("failed iterating refs")
 		return nil, nil
 	}
 
-	manifest, err := image.Manifest()
-	if err != nil {
-		logger.WithFields(log.Fields{
-			"action": "fetch manifest",
-			"error":  err,
-		}).Error("failed to fetch manifest")
-		return nil, nil
+	totalRefs := len(cachedResults) + len(uncachedTerms)
+	logger.WithFields(log.Fields{
+		"call_number":   callNum,
+		"total_refs":    totalRefs,
+		"cached_refs":   len(cachedResults),
+		"uncached_refs": len(uncachedTerms),
+		"concurrency":   maxParallelManifestFetches,
+	}).Debug("Starting parallel image manifest retrieval with caching")
+
+	if totalRefs == 0 {
+		return ast.ObjectTerm(), nil
 	}
 
-	if manifest == nil {
-		logger.Error("manifest is nil")
-		return nil, nil
+	// Build result from cached entries
+	resultTerms := make([][2]*ast.Term, 0, totalRefs)
+	for ref, manifest := range cachedResults {
+		resultTerms = append(resultTerms, ast.Item(ast.StringTerm(ref), manifest))
 	}
 
-	layers := []*ast.Term{}
-	for _, layer := range manifest.Layers {
-		layers = append(layers, newDescriptorTerm(layer))
+	// If everything was cached, return early
+	if len(uncachedTerms) == 0 {
+		logger.WithField("success_count", len(resultTerms)).Debug("All manifests served from cache")
+		return ast.ObjectTerm(resultTerms...), nil
 	}
 
-	manifestTerms := [][2]*ast.Term{
-		ast.Item(ast.StringTerm("schemaVersion"), ast.NumberTerm(json.Number(fmt.Sprintf("%d", manifest.SchemaVersion)))),
-		ast.Item(ast.StringTerm("mediaType"), ast.StringTerm(string(manifest.MediaType))),
-		ast.Item(ast.StringTerm("config"), newDescriptorTerm(manifest.Config)),
-		ast.Item(ast.StringTerm("layers"), ast.ArrayTerm(layers...)),
-		ast.Item(ast.StringTerm("annotations"), newAnnotationsTerm(manifest.Annotations)),
+	// Fetch uncached refs in parallel
+	g, ctx := errgroup.WithContext(bctx.Context)
+	g.SetLimit(maxParallelManifestFetches)
+
+	results := make(chan manifestResult, len(uncachedTerms))
+
+	bctxWithCancel := rego.BuiltinContext{
+		Context:  ctx,
+		Cancel:   bctx.Cancel,
+		Runtime:  bctx.Runtime,
+		Time:     bctx.Time,
+		Seed:     bctx.Seed,
+		Metrics:  bctx.Metrics,
+		Location: bctx.Location,
+		Tracers:  bctx.Tracers,
 	}
 
-	if s := manifest.Subject; s != nil {
-		manifestTerms = append(manifestTerms, ast.Item(ast.StringTerm("subject"), newDescriptorTerm(*s)))
+	for _, refTerm := range uncachedTerms {
+		term := refTerm
+		g.Go(func() error {
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
+			}
+
+			ref := string(term.Value.(ast.String))
+			manifest, err := ociImageManifest(bctxWithCancel, term)
+			if err != nil {
+				logger.WithFields(log.Fields{
+					"ref":   ref,
+					"error": err,
+				}).Error("failed to fetch manifest in batch")
+				results <- manifestResult{ref: ref, manifest: nil}
+				return nil
+			}
+
+			// Store in cache (even nil results to avoid re-fetching failures)
+			if manifest != nil {
+				manifestCache.Store(ref, manifest)
+			}
+
+			results <- manifestResult{ref: ref, manifest: manifest}
+			return nil
+		})
 	}
 
-	logger.Debug("Successfully retrieved image manifest")
-	return ast.ObjectTerm(manifestTerms...), nil
+	go func() {
+		_ = g.Wait()
+		close(results)
+	}()
+
+	// Collect newly fetched results
+	var mu sync.Mutex
+	for result := range results {
+		if result.manifest != nil {
+			mu.Lock()
+			resultTerms = append(resultTerms, ast.Item(ast.StringTerm(result.ref), result.manifest))
+			mu.Unlock()
+		}
+	}
+
+	logger.WithFields(log.Fields{
+		"success_count": len(resultTerms),
+		"from_cache":    len(cachedResults),
+		"newly_fetched": len(resultTerms) - len(cachedResults),
+	}).Debug("Completed parallel image manifest retrieval")
+
+	return ast.ObjectTerm(resultTerms...), nil
 }
 
 func ociImageFiles(bctx rego.BuiltinContext, refTerm *ast.Term, pathsTerm *ast.Term) (*ast.Term, error) {
@@ -483,64 +811,96 @@ func ociImageFiles(bctx rego.BuiltinContext, refTerm *ast.Term, pathsTerm *ast.T
 		logger.Error("input ref is not a string")
 		return nil, nil
 	}
-	logger = logger.WithField("ref", string(uri))
-	logger.Debug("Starting image files extraction")
+	refStr := string(uri)
+	logger = logger.WithField("ref", refStr)
 
-	ref, err := name.NewDigest(string(uri))
-	if err != nil {
-		logger.WithFields(log.Fields{
-			"action": "new digest",
-			"error":  err,
-		}).Error("failed to create new digest")
+	if pathsTerm == nil {
+		logger.Error("paths term is nil")
 		return nil, nil
 	}
 
-	pathsArray, err := builtins.ArrayOperand(pathsTerm.Value, 1)
-	if err != nil {
-		logger.WithFields(log.Fields{
-			"action": "convert paths",
-			"error":  err,
-		}).Error("failed to convert paths to array operand")
-		return nil, nil
+	// Build cache key from ref + paths (hash the paths for a stable key)
+	pathsHash := fmt.Sprintf("%x", sha256.Sum256([]byte(pathsTerm.String())))[:12]
+	cacheKey := refStr + ":" + pathsHash
+
+	// Check cache first (fast path)
+	if cached, found := imageFilesCache.Load(cacheKey); found {
+		logger.Debug("Image files served from cache")
+		return cached.(*ast.Term), nil
 	}
 
-	var extractors []files.Extractor
-	err = pathsArray.Iter(func(pathTerm *ast.Term) error {
-		pathString, ok := pathTerm.Value.(ast.String)
-		if !ok {
-			return fmt.Errorf("path is not a string: %#v", pathTerm)
+	// Use singleflight to prevent thundering herd
+	result, err, _ := imageFilesFlight.Do(cacheKey, func() (any, error) {
+		// Double-check cache inside singleflight
+		if cached, found := imageFilesCache.Load(cacheKey); found {
+			logger.Debug("Image files served from cache (after singleflight)")
+			return cached, nil
 		}
-		extractors = append(extractors, files.PathExtractor{Path: string(pathString)})
-		return nil
+		logger.Debug("Starting image files extraction")
+
+		ref, err := name.NewDigest(refStr)
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"action": "new digest",
+				"error":  err,
+			}).Error("failed to create new digest")
+			return nil, nil //nolint:nilerr
+		}
+
+		pathsArray, err := builtins.ArrayOperand(pathsTerm.Value, 1)
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"action": "convert paths",
+				"error":  err,
+			}).Error("failed to convert paths to array operand")
+			return nil, nil //nolint:nilerr
+		}
+
+		var extractors []files.Extractor
+		err = pathsArray.Iter(func(pathTerm *ast.Term) error {
+			pathString, ok := pathTerm.Value.(ast.String)
+			if !ok {
+				return fmt.Errorf("path is not a string: %#v", pathTerm)
+			}
+			extractors = append(extractors, files.PathExtractor{Path: string(pathString)})
+			return nil
+		})
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"action": "iterate paths",
+				"error":  err,
+			}).Error("failed iterating paths")
+			return nil, nil //nolint:nilerr
+		}
+
+		filesResult, err := files.ImageFiles(bctx.Context, ref, extractors)
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"action": "extract files",
+				"error":  err,
+			}).Error("failed to extract image files")
+			return nil, nil //nolint:nilerr
+		}
+
+		filesValue, err := ast.InterfaceToValue(filesResult)
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"action": "convert files",
+				"error":  err,
+			}).Error("failed to convert files object to value")
+			return nil, nil //nolint:nilerr
+		}
+
+		logger.Debug("Successfully extracted image files")
+		term := ast.NewTerm(filesValue)
+		imageFilesCache.Store(cacheKey, term)
+		return term, nil
 	})
-	if err != nil {
-		logger.WithFields(log.Fields{
-			"action": "iterate paths",
-			"error":  err,
-		}).Error("failed iterating paths")
+
+	if err != nil || result == nil {
 		return nil, nil
 	}
-
-	files, err := files.ImageFiles(bctx.Context, ref, extractors)
-	if err != nil {
-		logger.WithFields(log.Fields{
-			"action": "extract files",
-			"error":  err,
-		}).Error("failed to extract image files")
-		return nil, nil
-	}
-
-	filesValue, err := ast.InterfaceToValue(files)
-	if err != nil {
-		logger.WithFields(log.Fields{
-			"action": "convert files",
-			"error":  err,
-		}).Error("failed to convert files object to value")
-		return nil, nil
-	}
-
-	logger.Debug("Successfully extracted image files")
-	return ast.NewTerm(filesValue), nil
+	return result.(*ast.Term), nil
 }
 
 func ociImageIndex(bctx rego.BuiltinContext, a *ast.Term) (*ast.Term, error) {
@@ -551,59 +911,82 @@ func ociImageIndex(bctx rego.BuiltinContext, a *ast.Term) (*ast.Term, error) {
 		logger.Error("input is not a string")
 		return nil, nil
 	}
-	logger = logger.WithField("input_ref", string(uriValue))
-	logger.Debug("Starting image index retrieval")
+	refStr := string(uriValue)
+	logger = logger.WithField("input_ref", refStr)
 
-	client := oci.NewClient(bctx.Context)
+	// Check cache first (fast path)
+	if cached, found := imageIndexCache.Load(refStr); found {
+		logger.Debug("Image index served from cache")
+		return cached.(*ast.Term), nil
+	}
 
-	uri, ref, err := resolveIfNeeded(client, string(uriValue))
-	if err != nil {
-		logger.WithField("action", "resolveIfNeeded").Error(err)
+	// Use singleflight to prevent thundering herd
+	result, err, _ := imageIndexFlight.Do(refStr, func() (any, error) {
+		// Double-check cache inside singleflight
+		if cached, found := imageIndexCache.Load(refStr); found {
+			logger.Debug("Image index served from cache (after singleflight)")
+			return cached, nil
+		}
+		logger.Debug("Starting image index retrieval")
+
+		client := oci.NewClient(bctx.Context)
+
+		uri, ref, err := resolveIfNeeded(client, refStr)
+		if err != nil {
+			logger.WithField("action", "resolveIfNeeded").Error(err)
+			return nil, nil //nolint:nilerr
+		}
+		logger.WithField("ref", uri).Debug("Resolved reference")
+
+		imageIndex, err := client.Index(ref)
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"action": "fetch image index",
+				"error":  err,
+			}).Error("failed to fetch image index")
+			return nil, nil //nolint:nilerr
+		}
+
+		indexManifest, err := imageIndex.IndexManifest()
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"action": "fetch index manifest",
+				"error":  err,
+			}).Error("failed to fetch index manifest")
+			return nil, nil //nolint:nilerr
+		}
+
+		if indexManifest == nil {
+			logger.Error("index manifest is nil")
+			return nil, nil
+		}
+
+		manifestTerms := []*ast.Term{}
+		for _, manifest := range indexManifest.Manifests {
+			manifestTerms = append(manifestTerms, newDescriptorTerm(manifest))
+		}
+
+		imageIndexTerms := [][2]*ast.Term{
+			ast.Item(ast.StringTerm("schemaVersion"), ast.NumberTerm(json.Number(fmt.Sprintf("%d", indexManifest.SchemaVersion)))),
+			ast.Item(ast.StringTerm("mediaType"), ast.StringTerm(string(indexManifest.MediaType))),
+			ast.Item(ast.StringTerm("manifests"), ast.ArrayTerm(manifestTerms...)),
+			ast.Item(ast.StringTerm("annotations"), newAnnotationsTerm(indexManifest.Annotations)),
+		}
+
+		if s := indexManifest.Subject; s != nil {
+			imageIndexTerms = append(imageIndexTerms, ast.Item(ast.StringTerm("subject"), newDescriptorTerm(*s)))
+		}
+
+		logger.Debug("Successfully retrieved image index")
+		term := ast.ObjectTerm(imageIndexTerms...)
+		imageIndexCache.Store(refStr, term)
+		return term, nil
+	})
+
+	if err != nil || result == nil {
 		return nil, nil
 	}
-	logger = logger.WithField("ref", uri)
-
-	imageIndex, err := client.Index(ref)
-	if err != nil {
-		logger.WithFields(log.Fields{
-			"action": "fetch image index",
-			"error":  err,
-		}).Error("failed to fetch image index")
-		return nil, nil
-	}
-
-	indexManifest, err := imageIndex.IndexManifest()
-	if err != nil {
-		logger.WithFields(log.Fields{
-			"action": "fetch index manifest",
-			"error":  err,
-		}).Error("failed to fetch index manifest")
-		return nil, nil
-	}
-
-	if indexManifest == nil {
-		logger.Error("index manifest is nil")
-		return nil, nil
-	}
-
-	manifestTerms := []*ast.Term{}
-	for _, manifest := range indexManifest.Manifests {
-		manifestTerms = append(manifestTerms, newDescriptorTerm(manifest))
-	}
-
-	imageIndexTerms := [][2]*ast.Term{
-		ast.Item(ast.StringTerm("schemaVersion"), ast.NumberTerm(json.Number(fmt.Sprintf("%d", indexManifest.SchemaVersion)))),
-		ast.Item(ast.StringTerm("mediaType"), ast.StringTerm(string(indexManifest.MediaType))),
-		ast.Item(ast.StringTerm("manifests"), ast.ArrayTerm(manifestTerms...)),
-		ast.Item(ast.StringTerm("annotations"), newAnnotationsTerm(indexManifest.Annotations)),
-	}
-
-	if s := indexManifest.Subject; s != nil {
-		imageIndexTerms = append(imageIndexTerms, ast.Item(ast.StringTerm("subject"), newDescriptorTerm(*s)))
-	}
-
-	logger.Debug("Successfully retrieved image index")
-	return ast.ObjectTerm(imageIndexTerms...), nil
+	return result.(*ast.Term), nil
 }
 
 func newPlatformTerm(p v1.Platform) *ast.Term {
@@ -702,5 +1085,6 @@ func init() {
 	registerOCIDescriptor()
 	registerOCIImageFiles()
 	registerOCIImageManifest()
+	registerOCIImageManifestsBatch()
 	registerOCIImageIndex()
 }

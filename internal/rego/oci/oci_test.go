@@ -21,6 +21,7 @@ package oci
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/gkampitakis/go-snaps/snaps"
@@ -39,6 +40,9 @@ import (
 )
 
 func TestOCIBlob(t *testing.T) {
+	t.Cleanup(ClearCaches)
+	ClearCaches() // Clear before test to avoid interference from previous tests
+
 	cases := []struct {
 		name      string
 		data      string
@@ -86,6 +90,8 @@ func TestOCIBlob(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			ClearCaches() // Clear cache before each subtest
+
 			client := fake.FakeClient{}
 			if c.remoteErr != nil {
 				client.On("Layer", mock.Anything, mock.Anything).Return(nil, c.remoteErr)
@@ -111,6 +117,9 @@ func TestOCIBlob(t *testing.T) {
 }
 
 func TestOCIDescriptorManifest(t *testing.T) {
+	t.Cleanup(ClearCaches)
+	ClearCaches()
+
 	cases := []struct {
 		name           string
 		ref            *ast.Term
@@ -224,6 +233,8 @@ func TestOCIDescriptorManifest(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			ClearCaches() // Clear cache before each subtest
+
 			client := fake.FakeClient{}
 			if c.headErr != nil {
 				client.On("Head", mock.Anything).Return(nil, c.headErr)
@@ -251,6 +262,9 @@ func TestOCIDescriptorManifest(t *testing.T) {
 }
 
 func TestOCIDescriptorErrors(t *testing.T) {
+	t.Cleanup(ClearCaches)
+	ClearCaches()
+
 	cases := []struct {
 		name string
 		ref  *ast.Term
@@ -271,6 +285,8 @@ func TestOCIDescriptorErrors(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			ClearCaches() // Clear cache before each subtest
+
 			client := fake.FakeClient{}
 			client.On("Head", mock.Anything, mock.Anything).Return(nil, errors.New("expected"))
 			ctx := oci.WithClient(context.Background(), &client)
@@ -284,6 +300,9 @@ func TestOCIDescriptorErrors(t *testing.T) {
 }
 
 func TestOCIImageManifest(t *testing.T) {
+	t.Cleanup(ClearCaches)
+	ClearCaches()
+
 	cases := []struct {
 		name           string
 		ref            *ast.Term
@@ -467,6 +486,8 @@ func TestOCIImageManifest(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			ClearCaches() // Clear cache before each subtest
+
 			client := fake.FakeClient{}
 			if c.imageErr != nil {
 				client.On("Image", mock.Anything, mock.Anything).Return(nil, c.imageErr)
@@ -495,7 +516,180 @@ func TestOCIImageManifest(t *testing.T) {
 	}
 }
 
+func TestOCIImageManifestsBatch(t *testing.T) {
+	t.Cleanup(ClearCaches)
+	ClearCaches()
+
+	minimalManifest := &v1.Manifest{
+		SchemaVersion: 2,
+		MediaType:     types.OCIManifestSchema1,
+		Config: v1.Descriptor{
+			MediaType: types.OCIConfigJSON,
+			Size:      123,
+			Digest: v1.Hash{
+				Algorithm: "sha256",
+				Hex:       "4e388ab32b10dc8dbc7e28144f552830adc74787c1e2c0824032078a79f227fb",
+			},
+		},
+		Layers: []v1.Descriptor{
+			{
+				MediaType: types.OCILayer,
+				Size:      9999,
+				Digest: v1.Hash{
+					Algorithm: "sha256",
+					Hex:       "325392e8dd2826a53a9a35b7a7f8d71683cd27ebc2c73fee85dab673bc909b67",
+				},
+			},
+		},
+	}
+
+	cases := []struct {
+		name        string
+		refs        *ast.Term
+		manifest    *v1.Manifest
+		manifestErr error
+		wantErr     bool
+		wantCount   int
+		wantKeys    []string
+	}{
+		{
+			name: "single ref success",
+			refs: ast.NewTerm(ast.NewSet(
+				ast.StringTerm("registry.local/spam:latest@sha256:01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"),
+			)),
+			manifest:  minimalManifest,
+			wantCount: 1,
+			wantKeys:  []string{"registry.local/spam:latest@sha256:01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"},
+		},
+		{
+			name: "multiple refs success",
+			refs: ast.NewTerm(ast.NewSet(
+				ast.StringTerm("registry.local/img1:latest@sha256:01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"),
+				ast.StringTerm("registry.local/img2:latest@sha256:01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"),
+				ast.StringTerm("registry.local/img3:latest@sha256:01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"),
+			)),
+			manifest:  minimalManifest,
+			wantCount: 3,
+		},
+		{
+			name:      "empty set",
+			refs:      ast.NewTerm(ast.NewSet()),
+			manifest:  minimalManifest,
+			wantCount: 0,
+		},
+		{
+			name:    "invalid input type",
+			refs:    ast.StringTerm("not-a-set"),
+			wantErr: true,
+		},
+		{
+			name: "non-string ref in set",
+			refs: ast.NewTerm(ast.NewSet(
+				ast.IntNumberTerm(42),
+			)),
+			wantErr: true,
+		},
+		{
+			name: "manifest fetch error excludes ref from result",
+			refs: ast.NewTerm(ast.NewSet(
+				ast.StringTerm("registry.local/spam:latest@sha256:01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"),
+			)),
+			manifestErr: errors.New("fetch error"),
+			wantCount:   0,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ClearCaches() // Clear cache before each subtest
+
+			client := fake.FakeClient{}
+			if c.manifestErr != nil {
+				imageManifest := v1fake.FakeImage{}
+				imageManifest.ManifestReturns(nil, c.manifestErr)
+				client.On("Image", mock.Anything, mock.Anything).Return(&imageManifest, nil)
+			} else {
+				imageManifest := v1fake.FakeImage{}
+				imageManifest.ManifestReturns(c.manifest, nil)
+				client.On("Image", mock.Anything, mock.Anything).Return(&imageManifest, nil)
+			}
+
+			ctx := oci.WithClient(context.Background(), &client)
+			bctx := rego.BuiltinContext{Context: ctx}
+
+			got, err := ociImageManifestsBatch(bctx, c.refs)
+			require.NoError(t, err)
+
+			if c.wantErr {
+				require.Nil(t, got)
+			} else {
+				require.NotNil(t, got)
+				obj, ok := got.Value.(ast.Object)
+				require.True(t, ok, "result should be an object")
+				require.Equal(t, c.wantCount, obj.Len(), "unexpected number of results")
+
+				if len(c.wantKeys) > 0 {
+					for _, key := range c.wantKeys {
+						val := obj.Get(ast.StringTerm(key))
+						require.NotNil(t, val, "expected key %s not found", key)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestOCIImageManifestsBatchConcurrency(t *testing.T) {
+	t.Cleanup(ClearCaches)
+	ClearCaches()
+
+	// Save and restore the original value
+	original := maxParallelManifestFetches
+	defer func() { maxParallelManifestFetches = original }()
+
+	// Set a low concurrency limit for testing
+	maxParallelManifestFetches = 2
+
+	minimalManifest := &v1.Manifest{
+		SchemaVersion: 2,
+		MediaType:     types.OCIManifestSchema1,
+		Config: v1.Descriptor{
+			MediaType: types.OCIConfigJSON,
+			Size:      123,
+			Digest: v1.Hash{
+				Algorithm: "sha256",
+				Hex:       "4e388ab32b10dc8dbc7e28144f552830adc74787c1e2c0824032078a79f227fb",
+			},
+		},
+		Layers: []v1.Descriptor{},
+	}
+
+	// Create more refs than the concurrency limit to test bounded concurrency
+	refsSet := ast.NewSet()
+	for i := 0; i < 10; i++ {
+		refsSet.Add(ast.StringTerm(fmt.Sprintf("registry.local/img%d:latest@sha256:01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b", i)))
+	}
+
+	client := fake.FakeClient{}
+	imageManifest := v1fake.FakeImage{}
+	imageManifest.ManifestReturns(minimalManifest, nil)
+	client.On("Image", mock.Anything, mock.Anything).Return(&imageManifest, nil)
+
+	ctx := oci.WithClient(context.Background(), &client)
+	bctx := rego.BuiltinContext{Context: ctx}
+
+	got, err := ociImageManifestsBatch(bctx, ast.NewTerm(refsSet))
+	require.NoError(t, err)
+	require.NotNil(t, got)
+
+	obj, ok := got.Value.(ast.Object)
+	require.True(t, ok)
+	require.Equal(t, 10, obj.Len(), "all refs should be processed")
+}
+
 func TestOCIImageFiles(t *testing.T) {
+	t.Cleanup(ClearCaches)
+	ClearCaches()
 
 	image, err := crane.Image(map[string][]byte{
 		"autoexec.bat":              []byte(`@ECHO OFF`),
@@ -549,6 +743,8 @@ func TestOCIImageFiles(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			ClearCaches() // Clear cache before each subtest
+
 			client := fake.FakeClient{}
 			if c.remoteErr != nil {
 				client.On("Image", mock.Anything).Return(nil, c.remoteErr)
@@ -572,6 +768,9 @@ func TestOCIImageFiles(t *testing.T) {
 }
 
 func TestOCIImageIndex(t *testing.T) {
+	t.Cleanup(ClearCaches)
+	ClearCaches()
+
 	cases := []struct {
 		name             string
 		ref              *ast.Term
@@ -728,6 +927,8 @@ func TestOCIImageIndex(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			ClearCaches() // Clear cache before each subtest
+
 			client := fake.FakeClient{}
 
 			if c.indexErr != nil {
@@ -765,6 +966,7 @@ func TestFunctionsRegistered(t *testing.T) {
 		ociDescriptorName,
 		ociImageFilesName,
 		ociImageManifestName,
+		ociImageManifestsBatchName,
 		ociImageIndexName,
 	}
 	for _, name := range names {

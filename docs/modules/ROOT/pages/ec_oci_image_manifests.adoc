@@ -1,0 +1,20 @@
+= ec.oci.image_manifests
+
+Fetch Image Manifests from an OCI registry in parallel.
+
+== Usage
+
+  manifests = ec.oci.image_manifests(refs: set[string])
+
+== Parameters
+
+* `refs` (`set[string]`): set of OCI image references
+
+== Return
+
+`manifests` (`object`): object mapping refs to their Image Manifest objects
+
+The object contains dynamic attributes.
+The attributes are of `string` type and represent the OCI image reference.
+The values are of `object<annotations: object[string: string], config: object<annotations: object[string: string], artifactType: string, data: string, digest: string, mediaType: string, platform: object<architecture: string, features: array<string>, os: string, os.features: array<string>, os.version: string, variant: string>, size: number, urls: array<string>>, layers: array<object<annotations: object[string: string], artifactType: string, data: string, digest: string, mediaType: string, platform: object<architecture: string, features: array<string>, os: string, os.features: array<string>, os.version: string, variant: string>, size: number, urls: array<string>>>, mediaType: string, schemaVersion: number, subject: object<annotations: object[string: string], artifactType: string, data: string, digest: string, mediaType: string, platform: object<architecture: string, features: array<string>, os: string, os.features: array<string>, os.version: string, variant: string>, size: number, urls: array<string>>>` type and hold the Image Manifest object.
+
