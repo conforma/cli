@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,6 +29,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"sigs.k8s.io/yaml"
+
+	embeddedRego "github.com/conforma/cli/internal/embedded/rego"
 )
 
 // CreateWorkDir creates the working directory in tmp and some subdirectories
@@ -161,4 +164,56 @@ func anyEnvSet(varNames []string) bool {
 		}
 	}
 	return false
+}
+
+// WriteEmbeddedRego writes embedded rego files to the specified policy directory.
+// This follows the same pattern as external policy sources, where each source
+// gets its own subdirectory. Embedded rego files are placed in an "embedded"
+// subdirectory to match the uniqueDestination pattern used for external sources.
+func WriteEmbeddedRego(ctx context.Context, afs afero.Fs, policyDir string) error {
+	// Create the embedded subdirectory (follows pattern where each source gets its own subdir)
+	embeddedDir := filepath.Join(policyDir, "embedded")
+	if err := afs.MkdirAll(embeddedDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create embedded rego directory: %w", err)
+	}
+
+	// Walk through all embedded rego files and write them to the filesystem
+	return fs.WalkDir(embeddedRego.EmbeddedRego, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("failed to walk embedded rego file %s: %w", path, err)
+		}
+
+		// Skip directories
+		if d.IsDir() {
+			return nil
+		}
+
+		// Only process .rego files
+		if !strings.HasSuffix(path, ".rego") {
+			return nil
+		}
+
+		// Read the embedded file content
+		content, err := fs.ReadFile(embeddedRego.EmbeddedRego, path)
+		if err != nil {
+			return fmt.Errorf("failed to read embedded rego file %s: %w", path, err)
+		}
+
+		// Write to the target location, maintaining directory structure
+		targetPath := filepath.Join(embeddedDir, path)
+		targetDir := filepath.Dir(targetPath)
+
+		// Ensure target directory exists
+		if err := afs.MkdirAll(targetDir, 0o755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", targetDir, err)
+		}
+
+		// Write the file
+		if err := afero.WriteFile(afs, targetPath, content, 0o644); err != nil {
+			return fmt.Errorf("failed to write embedded rego file to %s: %w", targetPath, err)
+		}
+
+		log.Debugf("Wrote embedded rego file: %s", targetPath)
+		return nil
+	})
 }
