@@ -43,7 +43,7 @@ require (
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.11.1
 	github.com/stuart-warren/yamlfmt v0.2.0
-	github.com/tektoncd/pipeline v0.66.0
+	github.com/tektoncd/pipeline v0.70.0
 	github.com/testcontainers/testcontainers-go v0.34.1-0.20241204123437-72be13940122 // using unreleased version that contains the fix in https://github.com/testcontainers/testcontainers-go/pull/2899
 	github.com/testcontainers/testcontainers-go/modules/registry v0.34.0
 	golang.org/x/benchmarks v0.0.0-20241115175113-a2b48b605b42
@@ -380,7 +380,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/api v0.34.3 // indirect
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397 // indirect
-	knative.dev/pkg v0.0.0-20240815051656-89743d9bbf7c // indirect
+	knative.dev/pkg v0.0.0-20250117084104-c43477f0052b // indirect
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 	sigs.k8s.io/controller-runtime v0.19.0 // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
