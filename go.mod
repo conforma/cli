@@ -60,10 +60,9 @@ require (
 )
 
 // use forked version until we can get the fixes merged see https://github.com/conforma/go-containerregistry/blob/main/hack/ec-patches.sh for a list of patches we carry
-replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry v0.20.7-0.20250703195040-6f40a3734728
+replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry v0.20.7-0.20251103083939-3459088e4bae
 
 require (
-	github.com/cucumber/godog v0.15.1
 	github.com/go-openapi/runtime v0.28.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	golang.org/x/text v0.29.0
@@ -170,8 +169,6 @@ require (
 	github.com/coreos/go-oidc/v3 v3.11.0 // indirect
 	github.com/cpuguy83/dockercfg v0.3.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
-	github.com/cucumber/gherkin/go/v26 v26.2.0 // indirect
-	github.com/cucumber/messages/go/v21 v21.0.1 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20231217050601-ba74d44ecf5f // indirect
 	github.com/cyphar/filepath-securejoin v0.4.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
@@ -218,7 +215,6 @@ require (
 	github.com/go-openapi/validate v0.24.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.3.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
-	github.com/gofrs/uuid v4.3.1+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
@@ -240,13 +236,10 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-getter v1.8.1 // indirect
-	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
-	github.com/hashicorp/go-memdb v1.3.4 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/hashicorp/go-safetemp v1.0.0 // indirect
 	github.com/hashicorp/go-version v1.7.0 // indirect
-	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-5 // indirect
 	github.com/hashicorp/hcl/v2 v2.23.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
