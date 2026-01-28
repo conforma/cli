@@ -129,7 +129,7 @@ spec:
       type: string
       description: >
         Merge additional Rego variables into the policy data. Syntax:
-        key=val,key2=val2
+        key=val,key2=val2. Note: pipeline_intention=release is always included.
       default: ""
 
     - name: TIMEOUT
@@ -345,6 +345,7 @@ spec:
         - "--show-successes"
         - "--effective-time=$(params.EFFECTIVE_TIME)"
         - "--extra-rule-data=pipeline_intention=release"
+        - "--extra-rule-data=$(params.EXTRA_RULE_DATA)"
         - "--retry-max-wait"
         - "$(params.RETRY_MAX_WAIT)"
         - "--retry-max-retry"
