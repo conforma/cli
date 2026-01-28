@@ -28,6 +28,7 @@ import (
 	"strings"
 	"testing"
 
+	ecc "github.com/conforma/crds/api/v1alpha1"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -204,6 +205,48 @@ func TestWriteInputFile(t *testing.T) {
 							GitSource: &app.GitSource{
 								URL:      "git.local/repository",
 								Revision: "main",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "component name in input",
+			snapshot: ApplicationSnapshotImage{
+				reference: name.MustParseReference("registry.io/repository/image:tag"),
+				component: app.SnapshotComponent{
+					Name:           "my-component",
+					ContainerImage: "registry.io/repository/image:tag",
+				},
+			},
+		},
+		{
+			name: "policy spec with volatile config",
+			snapshot: ApplicationSnapshotImage{
+				reference: name.MustParseReference("registry.io/repository/image:tag"),
+				component: app.SnapshotComponent{
+					Name:           "test-component",
+					ContainerImage: "registry.io/repository/image:tag",
+				},
+				policySpec: ecc.EnterpriseContractPolicySpec{
+					Sources: []ecc.Source{
+						{
+							Name: "test-source",
+							VolatileConfig: &ecc.VolatileSourceConfig{
+								Include: []ecc.VolatileCriteria{
+									{
+										Value:          "tasks.required_tasks_found:clamav-scan",
+										EffectiveOn:    "2024-01-01T00:00:00Z",
+										EffectiveUntil: "2025-12-31T23:59:59Z",
+									},
+								},
+								Exclude: []ecc.VolatileCriteria{
+									{
+										Value:       "test.rule",
+										ImageDigest: "sha256:abc123",
+									},
+								},
 							},
 						},
 					},

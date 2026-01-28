@@ -26,6 +26,7 @@ import (
 	"path"
 	"runtime/trace"
 
+	ecc "github.com/conforma/crds/api/v1alpha1"
 	"github.com/google/go-containerregistry/pkg/name"
 	app "github.com/konflux-ci/application-api/api/v1alpha1"
 	"github.com/santhosh-tekuri/jsonschema/v5"
@@ -62,6 +63,7 @@ type ApplicationSnapshotImage struct {
 	files            map[string]json.RawMessage
 	component        app.SnapshotComponent
 	snapshot         app.SnapshotSpec
+	policySpec       ecc.EnterpriseContractPolicySpec
 }
 
 // NewApplicationSnapshotImage returns an ApplicationSnapshotImage struct with reference, checkOpts, and evaluator ready to use.
@@ -71,9 +73,10 @@ func NewApplicationSnapshotImage(ctx context.Context, component app.SnapshotComp
 		return nil, err
 	}
 	a := &ApplicationSnapshotImage{
-		checkOpts: *opts,
-		component: component,
-		snapshot:  snap,
+		checkOpts:  *opts,
+		component:  component,
+		snapshot:   snap,
+		policySpec: p.Spec(),
 	}
 
 	if err := a.SetImageURL(component.ContainerImage); err != nil {
@@ -347,9 +350,11 @@ type image struct {
 }
 
 type Input struct {
-	Attestations []attestationData `json:"attestations"`
-	Image        image             `json:"image"`
-	AppSnapshot  app.SnapshotSpec  `json:"snapshot"`
+	Attestations  []attestationData                `json:"attestations"`
+	Image         image                            `json:"image"`
+	AppSnapshot   app.SnapshotSpec                 `json:"snapshot"`
+	ComponentName string                           `json:"component_name,omitempty"`
+	PolicySpec    ecc.EnterpriseContractPolicySpec `json:"policy_spec,omitempty"`
 }
 
 // WriteInputFile writes the JSON from the attestations to input.json in a random temp dir
@@ -373,7 +378,9 @@ func (a *ApplicationSnapshotImage) WriteInputFile(ctx context.Context) (string, 
 			Files:      a.files,
 			Source:     a.component.Source,
 		},
-		AppSnapshot: a.snapshot,
+		AppSnapshot:   a.snapshot,
+		ComponentName: a.component.Name,
+		PolicySpec:    a.policySpec,
 	}
 
 	if a.parentRef != nil {

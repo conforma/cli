@@ -2784,6 +2784,18 @@ ${__________known_PUBLIC_KEY}
       }
     ],
     "artifacts": {}
+  },
+  "component_name": "Unnamed",
+  "policy_spec": {
+    "sources": [
+      {
+        "policy": [
+          "git::${GITHOST}/git/policy-input-output-policy.git?ref=${LATEST_COMMIT}"
+        ]
+      }
+    ],
+    "rekorUrl": "${REKOR}",
+    "publicKey": "${known_PUBLIC_KEY}"
   }
 }
 ---
@@ -3147,6 +3159,17 @@ Error: success criteria not met
       }
     ],
     "artifacts": {}
+  },
+  "component_name": "Unnamed",
+  "policy_spec": {
+    "sources": [
+      {
+        "policy": [
+          "git::${GITHOST}/git/olm-manifests.git?ref=${LATEST_COMMIT}"
+        ]
+      }
+    ],
+    "publicKey": "${known_PUBLIC_KEY}"
   }
 }
 ---
@@ -5349,5 +5372,94 @@ Error: success criteria not met
 ---
 
 [SLSA v1 attestation support:stderr - 1]
+
+---
+
+[volatile config warnings schema contract:stdout - 1]
+{
+  "success": true,
+  "components": [
+    {
+      "name": "Unnamed",
+      "containerImage": "${REGISTRY}/acceptance/volatile-config-test@sha256:${REGISTRY_acceptance/volatile-config-test:latest_DIGEST}",
+      "source": {},
+      "warnings": [
+        {
+          "msg": "Volatile exclude rule 'test.component_scoped_rule' has no expiration date set"
+        },
+        {
+          "msg": "Volatile exclude rule 'test.component_scoped_rule' is scoped to component 'Unnamed'"
+        },
+        {
+          "msg": "Volatile exclude rule 'test.rule_expiring_soon' will expire (effective until: ${TIMESTAMP})"
+        },
+        {
+          "msg": "Volatile exclude rule 'test.rule_pending_activation' is pending activation (effective on: ${TIMESTAMP})"
+        },
+        {
+          "msg": "Volatile exclude rule 'test.rule_with_no_expiration' has no expiration date set"
+        }
+      ],
+      "success": true,
+      "signatures": [
+        {
+          "keyid": "",
+          "sig": "${IMAGE_SIGNATURE_acceptance/volatile-config-test}"
+        }
+      ],
+      "attestations": [
+        {
+          "type": "https://in-toto.io/Statement/v0.1",
+          "predicateType": "https://slsa.dev/provenance/v0.2",
+          "predicateBuildType": "https://tekton.dev/attestations/chains/pipelinerun@v2",
+          "signatures": [
+            {
+              "keyid": "",
+              "sig": "${ATTESTATION_SIGNATURE_acceptance/volatile-config-test}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "key": "${known_PUBLIC_KEY_JSON}",
+  "policy": {
+    "sources": [
+      {
+        "name": "volatile-test-source",
+        "policy": [
+          "git::${GITHOST}/git/volatile-config-policy.git?ref=${LATEST_COMMIT}"
+        ],
+        "volatileConfig": {
+          "exclude": [
+            {
+              "value": "test.rule_with_no_expiration"
+            },
+            {
+              "value": "test.rule_expiring_soon",
+              "effectiveUntil": "${TIMESTAMP}"
+            },
+            {
+              "value": "test.rule_pending_activation",
+              "effectiveOn": "${TIMESTAMP}"
+            },
+            {
+              "value": "test.component_scoped_rule",
+              "componentNames": [
+                "Unnamed"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "publicKey": "${known_PUBLIC_KEY}"
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[volatile config warnings schema contract:stderr - 1]
 
 ---

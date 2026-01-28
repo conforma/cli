@@ -958,6 +958,49 @@ Feature: evaluate enterprise contract
      And the output should match the snapshot
      And the "${TMPDIR}/input.json" file should match the snapshot
 
+  Scenario: volatile config warnings schema contract
+    Given a key pair named "known"
+    Given an image named "acceptance/volatile-config-test"
+    Given a valid image signature of "acceptance/volatile-config-test" image signed by the "known" key
+    Given a valid attestation of "acceptance/volatile-config-test" signed by the "known" key
+    Given a git repository named "volatile-config-policy" with
+      | main.rego | examples/volatile_config_warnings.rego |
+    Given policy configuration named "ec-policy" with specification
+    """
+    {
+      "sources": [
+        {
+          "name": "volatile-test-source",
+          "policy": [
+            "git::https://${GITHOST}/git/volatile-config-policy.git"
+          ],
+          "volatileConfig": {
+            "exclude": [
+              {
+                "value": "test.rule_with_no_expiration"
+              },
+              {
+                "value": "test.rule_expiring_soon",
+                "effectiveUntil": "2099-12-31T23:59:59Z"
+              },
+              {
+                "value": "test.rule_pending_activation",
+                "effectiveOn": "2099-01-01T00:00:00Z"
+              },
+              {
+                "value": "test.component_scoped_rule",
+                "componentNames": ["Unnamed"]
+              }
+            ]
+          }
+        }
+      ]
+    }
+    """
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/volatile-config-test --policy acceptance/ec-policy --public-key ${known_PUBLIC_KEY} --ignore-rekor --output json"
+    Then the exit status should be 0
+    Then the output should match the snapshot
+
   Scenario: Unsupported policies
     Given a key pair named "known"
     Given an image named "acceptance/image"
