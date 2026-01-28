@@ -117,7 +117,7 @@ func TestPullImage(t *testing.T) {
 	yaml := []byte("data: blah")
 
 	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
-	img = mutate.ConfigMediaType(img, unknownConfig)
+	img = mutate.ConfigMediaType(img, types.OCIConfigJSON)
 	img, err := mutate.Append(img, mutate.Addendum{
 		MediaType: openPolicyAgentData,
 		Layer:     static.NewLayer(yaml, openPolicyAgentData),
