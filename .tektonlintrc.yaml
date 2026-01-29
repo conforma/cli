@@ -33,11 +33,7 @@ rules: # error | warning | off
   no-latest-image: off
   prefer-beta: warning
   prefer-kebab-case: warning
-  # We have two intentionally unused params currently, TIMEOUT and
-  # WORKERS. This lint check should be renabled once those
-  # are removed. See https://issues.redhat.com/browse/EC-1371 and
-  # https://issues.redhat.com/browse/EC-1425
-  no-unused-param: off
+  no-unused-param: error
   no-missing-resource: error
   no-undefined-param: error
   prefer-when-expression: warning
