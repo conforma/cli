@@ -33,7 +33,6 @@ import (
 )
 
 const (
-	unknownConfig       = "application/vnd.unknown.config.v1+json"
 	openPolicyAgentData = "application/vnd.cncf.openpolicyagent.data.layer.v1+json"
 	title               = "org.opencontainers.image.title"
 	dataFileTitle       = "data/data/trusted_tekton_tasks.yml"
@@ -117,7 +116,7 @@ func PushImage(ctx context.Context, imageRef string, data []byte, invocation str
 	}
 
 	bundle := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
-	bundle = mutate.ConfigMediaType(bundle, unknownConfig)
+	bundle = mutate.ConfigMediaType(bundle, types.OCIConfigJSON)
 	if bundle, err = mutate.Append(bundle, mutate.Addendum{
 		History: v1.History{
 			CreatedBy: invocation,

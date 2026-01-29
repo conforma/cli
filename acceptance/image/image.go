@@ -72,7 +72,6 @@ const (
 )
 
 const (
-	unknownConfig       = "application/vnd.unknown.config.v1+json"
 	openPolicyAgentData = "application/vnd.cncf.openpolicyagent.data.layer.v1+json"
 	title               = "org.opencontainers.image.title"
 )
@@ -856,7 +855,7 @@ func createAndPushKeylessImage(ctx context.Context, imageName string) (context.C
 // layers
 func createAndPushPolicyBundle(ctx context.Context, imageName string, files *godog.Table) (context.Context, error) {
 	bundle := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
-	bundle = mutate.ConfigMediaType(bundle, unknownConfig)
+	bundle = mutate.ConfigMediaType(bundle, types.OCIConfigJSON)
 
 	// add each row as a layer to the bundle
 	for _, row := range files.Rows {
