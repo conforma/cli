@@ -10,8 +10,8 @@ require (
 	github.com/doiit/picocolors v1.0.1
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/gkampitakis/go-snaps v0.5.7
-	github.com/go-git/go-billy/v5 v5.6.0
-	github.com/go-git/go-git/v5 v5.13.0
+	github.com/go-git/go-billy/v5 v5.6.2
+	github.com/go-git/go-git/v5 v5.13.2
 	github.com/go-openapi/strfmt v0.23.0
 	github.com/google/go-containerregistry v0.20.7
 	github.com/in-toto/in-toto-golang v0.9.0
@@ -24,10 +24,10 @@ require (
 	github.com/secure-systems-lab/go-securesystemslib v0.9.0
 	github.com/sigstore/cosign/v2 v2.4.1
 	github.com/sigstore/rekor v1.3.6
-	github.com/sigstore/sigstore v1.8.9
+	github.com/sigstore/sigstore v1.8.15
 	github.com/stretchr/testify v1.11.1
 	github.com/tektoncd/cli v0.37.1
-	github.com/tektoncd/pipeline v0.66.0
+	github.com/tektoncd/pipeline v0.70.0
 	github.com/testcontainers/testcontainers-go v0.34.0
 	github.com/transparency-dev/merkle v0.0.2
 	github.com/wiremock/go-wiremock v1.11.0
@@ -49,7 +49,7 @@ replace github.com/google/go-containerregistry => github.com/conforma/go-contain
 
 require (
 	cel.dev/expr v0.24.0 // indirect
-	cloud.google.com/go/kms v1.20.1 // indirect
+	cloud.google.com/go/kms v1.20.5 // indirect
 	cloud.google.com/go/longrunning v0.6.2 // indirect
 	contrib.go.opencensus.io/exporter/ocagent v0.7.1-0.20200907061046-05415f1de66d // indirect
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2 // indirect
@@ -57,7 +57,7 @@ require (
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
-	github.com/ProtonMail/go-crypto v1.1.3 // indirect
+	github.com/ProtonMail/go-crypto v1.1.5 // indirect
 	github.com/alessio/shellescape v1.4.2 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
@@ -179,7 +179,7 @@ require (
 	github.com/pborman/uuid v1.2.1 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
-	github.com/pjbgf/sha1cd v0.3.0 // indirect
+	github.com/pjbgf/sha1cd v0.3.2 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect
@@ -194,7 +194,7 @@ require (
 	github.com/shibumi/go-pathspec v1.3.0 // indirect
 	github.com/shirou/gopsutil/v3 v3.24.5 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
-	github.com/sigstore/protobuf-specs v0.3.2 // indirect
+	github.com/sigstore/protobuf-specs v0.4.0 // indirect
 	github.com/sigstore/timestamp-authority v1.2.2 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/skeema/knownhosts v1.3.0 // indirect
@@ -246,7 +246,7 @@ require (
 	golang.org/x/text v0.28.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
-	google.golang.org/api v0.215.0 // indirect
+	google.golang.org/api v0.217.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250804133106-a7a43d27e69b // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
 	google.golang.org/grpc v1.76.0 // indirect
@@ -261,7 +261,7 @@ require (
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250710124328-f3f2b991d03b // indirect
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397 // indirect
-	knative.dev/pkg v0.0.0-20240815051656-89743d9bbf7c // indirect
+	knative.dev/pkg v0.0.0-20250117084104-c43477f0052b // indirect
 	sigs.k8s.io/controller-runtime v0.19.0 // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
