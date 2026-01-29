@@ -1,0 +1,20 @@
+
+[policy using embedded rego functions:stdout - 1]
+Success: false
+Result: FAILURE
+Violations: 1, Warnings: 0, Successes: 0
+Input File: pipeline_definition.json
+
+Results:
+✕ [Violation] main.embedded_test
+  FilePath: pipeline_definition.json
+  Reason: Hello, testy mctest! (from embedded rego)
+
+For more information about policy issues, see the policy documentation: https://conforma.dev/docs/policy/
+
+---
+
+[policy using embedded rego functions:stderr - 1]
+Error: success criteria not met
+
+---
