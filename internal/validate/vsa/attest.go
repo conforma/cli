@@ -42,7 +42,9 @@ const (
 )
 
 // LoadPrivateKey is aliased to allow easy testing.
-var LoadPrivateKey = cosign.LoadPrivateKey
+var LoadPrivateKey = func(key, pass []byte, defaultLoadOptions *[]signature.LoadOption) (signature.SignerVerifier, error) {
+	return cosign.LoadPrivateKey(key, pass, defaultLoadOptions)
+}
 
 type Attestor struct {
 	PredicatePath string  // path to the raw VSA (predicate) JSON
@@ -71,7 +73,7 @@ func NewSigner(ctx context.Context, keyRef string, fs afero.Fs) (*Signer, error)
 		return nil, fmt.Errorf("resolve private key password: %w", err)
 	}
 
-	signerVerifier, err := LoadPrivateKey(keyBytes, password)
+	signerVerifier, err := LoadPrivateKey(keyBytes, password, nil)
 	if err != nil {
 		return nil, fmt.Errorf("load private key %q: %w", keyRef, err)
 	}

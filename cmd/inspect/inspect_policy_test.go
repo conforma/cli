@@ -20,6 +20,7 @@ package inspect
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"testing"
 
@@ -29,7 +30,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"golang.org/x/net/context"
 
 	"github.com/conforma/cli/cmd/root"
 	"github.com/conforma/cli/internal/policy/source"

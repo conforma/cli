@@ -151,7 +151,7 @@ func TestNewSigner(t *testing.T) {
 			originalLoadPrivateKey := LoadPrivateKey
 			defer func() { LoadPrivateKey = originalLoadPrivateKey }()
 
-			LoadPrivateKey = func(keyBytes, password []byte) (signature.SignerVerifier, error) {
+			LoadPrivateKey = func(keyBytes, password []byte, defaultLoadOptions *[]signature.LoadOption) (signature.SignerVerifier, error) {
 				return &fakeSigner{}, nil
 			}
 
@@ -373,7 +373,7 @@ func TestNewSigner_Comprehensive(t *testing.T) {
 	originalLoadPrivateKey := LoadPrivateKey
 	defer func() { LoadPrivateKey = originalLoadPrivateKey }()
 
-	LoadPrivateKey = func(keyBytes, password []byte) (signature.SignerVerifier, error) {
+	LoadPrivateKey = func(keyBytes, password []byte, defaultLoadOptions *[]signature.LoadOption) (signature.SignerVerifier, error) {
 		return &fakeSigner{}, nil
 	}
 
