@@ -493,7 +493,7 @@ success: true
 ---
 
 [Initialize TUF succeeds:initialize-tuf - 1]
-{"level":"info","ts":${TIMESTAMP},"caller":"entrypoint/entrypointer.go:265","msg":"Step was skipped due to when expressions were evaluated to false."}
+${TIMESTAMP} INFO Step was skipped due to when expressions were evaluated to false.
 
 ---
 
@@ -544,7 +544,7 @@ success: true
 ---
 
 [Outputs are there:initialize-tuf - 1]
-{"level":"info","ts":${TIMESTAMP},"caller":"entrypoint/entrypointer.go:265","msg":"Step was skipped due to when expressions were evaluated to false."}
+${TIMESTAMP} INFO Step was skipped due to when expressions were evaluated to false.
 
 ---
 
