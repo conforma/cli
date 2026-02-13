@@ -956,6 +956,8 @@ github.com/tektoncd/cli v0.38.2 h1:TtQT4ywO1FNK10gg7+5mjLv54I9xOJDzBO9toDHCFLI=
 github.com/tektoncd/cli v0.38.2/go.mod h1:r605VFZjkn8ucTdZysqQODRLKA4Z2FlAyeOExWJ9LME=
 github.com/tektoncd/pipeline v0.66.0 h1:WLL98YEgWzblSAD2mPbpZN97tkOC50wiftaW+8+6zTY=
 github.com/tektoncd/pipeline v0.66.0/go.mod h1:V3cyfxxc7b3GLT2a13GX2mWA86qmxWhh4mOp4gfFQwQ=
+github.com/tektoncd/pipeline v0.70.0 h1:aJHIGuevkyLIVW0J1LEXSE6BQ+BYRs896sQGNSW4Xfs=
+github.com/tektoncd/pipeline v0.70.0/go.mod h1:sfoEd7VHC6w6PHhI7TD+6tLa7UuUO7FUC4CNHLMFlMw=
 github.com/tektoncd/triggers v0.29.0 h1:piRTJT1Sjq3xmGnR50V54oG0NlsszKETLxdCGhgSNQQ=
 github.com/tektoncd/triggers v0.29.0/go.mod h1:CHE2QhjYkECFCpvPLpiANhI/hIlJUxL03ulTNEgbT10=
 github.com/testcontainers/testcontainers-go v0.34.0 h1:5fbgF0vIN5u+nD3IWabQwRybuB4GY8G2HHgCkbMzMHo=
@@ -1519,6 +1521,8 @@ knative.dev/networking v0.0.0-20231017124814-2a7676e912b7 h1:6+1icZuxiZO1paFZ4d/
 knative.dev/networking v0.0.0-20231017124814-2a7676e912b7/go.mod h1:1gcHoIVG47ekQWjkddqRq+/7tWRh+CB9W4k/NAcdRbk=
 knative.dev/pkg v0.0.0-20240815051656-89743d9bbf7c h1:2crXVk4FG0dSG6WHaIT+WKbUzn7qG2wn0AfYmvA22zs=
 knative.dev/pkg v0.0.0-20240815051656-89743d9bbf7c/go.mod h1:cI2RPEEHZk+/dBpfHobs0aBdPA1mMZVUVWnGAc8NSzM=
+knative.dev/pkg v0.0.0-20250117084104-c43477f0052b h1:a+gP7Yzu5NmoX2w1p8nfTgmSKF+aHLKGzqYT82ijJTw=
+knative.dev/pkg v0.0.0-20250117084104-c43477f0052b/go.mod h1:bedSpkdLybR6JhL1J7XDLpd+JMKM/x8M5Apr80i5TeE=
 knative.dev/serving v0.39.0 h1:NVt8WthHmFFMWZ3qpBblXt47del8qqrbCegqwGBVSwk=
 knative.dev/serving v0.39.0/go.mod h1:0QIp5mvgWa1oUC2MxMf+Q/JWgG8JhAsSdJKc6iTRlvE=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
