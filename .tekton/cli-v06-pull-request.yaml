@@ -40,6 +40,8 @@ spec:
     value: quick-build-args.conf
   - name: hermetic
     value: "true"
+  - name: enable-cache-proxy
+    value: "true"
   pipelineSpec:
     description: |
       This pipeline is ideal for building container images from a Containerfile while maintaining trust after pipeline customization.
@@ -122,6 +124,10 @@ spec:
       description: Whether to enable privileged mode, should be used only with remote
         VMs
       name: privileged-nested
+      type: string
+    - default: "true"
+      description: Enable cache proxy
+      name: enable-cache-proxy
       type: string
     results:
     - description: ""
@@ -242,6 +248,8 @@ spec:
         value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
       - name: CACHI2_ARTIFACT
         value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
+      - name: ENABLE_CACHE_PROXY
+        value: $(params.enable-cache-proxy)
       runAfter:
       - prefetch-dependencies
       taskRef:
