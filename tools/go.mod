@@ -4,14 +4,14 @@ go 1.24.6
 
 require (
 	github.com/daixiang0/gci v0.13.7
-	github.com/golangci/golangci-lint v1.63.4
+	github.com/golangci/golangci-lint/v2 v2.10.1
 	github.com/google/addlicense v1.1.1
 	github.com/open-policy-agent/conftest v0.62.0
 	github.com/tektoncd/chains v0.22.3
 	github.com/tektoncd/cli v0.38.2
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	gotest.tools/gotestsum v1.12.3
-	helm.sh/helm/v3 v3.18.6
+	helm.sh/helm/v4 v4.1.1
 	k8s.io/kubernetes v1.34.3
 	sigs.k8s.io/kustomize/kustomize/v5 v5.7.1
 )
