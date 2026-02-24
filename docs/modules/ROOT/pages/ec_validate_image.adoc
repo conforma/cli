@@ -56,7 +56,7 @@ Return a non-zero status code on validation failure:
 
   ec validate image --image registry/name:tag
 
- 	Return a zero status code even if there are validation failures:
+Return a zero status code even if there are validation failures:
 
   ec validate image --image registry/name:tag --strict=false
 
