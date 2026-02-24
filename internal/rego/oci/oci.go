@@ -21,6 +21,7 @@
 package oci
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -28,7 +29,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -42,6 +45,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/singleflight"
 	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/yaml"
 
 	"github.com/conforma/cli/internal/fetchers/oci/files"
 	"github.com/conforma/cli/internal/utils/oci"
@@ -49,6 +53,7 @@ import (
 
 const (
 	ociBlobName                = "ec.oci.blob"
+	ociBlobFilesName           = "ec.oci.blob_files"
 	ociDescriptorName          = "ec.oci.descriptor"
 	ociImageManifestName       = "ec.oci.image_manifest"
 	ociImageManifestsBatchName = "ec.oci.image_manifests"
@@ -320,6 +325,35 @@ func registerOCIImageFiles() {
 	rego.RegisterBuiltin2(&decl, ociImageFiles)
 }
 
+func registerOCIBlobFiles() {
+	filesObject := types.NewObject(
+		nil,
+		types.NewDynamicProperty(
+			types.Named("path", types.S).Description("the full path of the file within the blob"),
+			types.Named("content", types.A).Description("the file contents"),
+		),
+	)
+
+	decl := rego.Function{
+		Name:        ociBlobFilesName,
+		Description: "Fetch structured files (YAML or JSON) from within a blob tar archive.",
+		Decl: types.NewFunction(
+			types.Args(
+				types.Named("ref", types.S).Description("OCI blob reference"),
+				types.Named("paths", types.NewArray([]types.Type{types.S}, nil)).Description("the list of paths"),
+			),
+			types.Named("files", filesObject).Description("object representing the extracted files"),
+		),
+		// As per the documentation, enable memoization to ensure function evaluation is
+		// deterministic. But also mark it as non-deterministic because it does rely on external
+		// entities, i.e. OCI registry. https://www.openpolicyagent.org/docs/latest/extensions/
+		Memoize:          true,
+		Nondeterministic: true,
+	}
+
+	rego.RegisterBuiltin2(&decl, ociBlobFiles)
+}
+
 func registerOCIImageIndex() {
 	platform := types.NewObject(
 		[]*types.StaticProperty{
@@ -381,6 +415,10 @@ func registerOCIImageIndex() {
 }
 
 func ociBlob(bctx rego.BuiltinContext, a *ast.Term) (*ast.Term, error) {
+	return ociBlobInternal(bctx, a, true)
+}
+
+func ociBlobInternal(bctx rego.BuiltinContext, a *ast.Term, verifyDigest bool) (*ast.Term, error) {
 	logger := log.WithField("function", ociBlobName)
 
 	uri, ok := a.Value.(ast.String)
@@ -454,21 +492,36 @@ func ociBlob(bctx rego.BuiltinContext, a *ast.Term) (*ast.Term, error) {
 			return nil, nil //nolint:nilerr
 		}
 
-		sum := fmt.Sprintf("sha256:%x", hasher.Sum(nil))
-		// io.LimitReader truncates the layer if it exceeds its limit. The condition below catches this
-		// scenario in order to avoid unexpected behavior caused by partial data being returned.
-		if sum != ref.DigestStr() {
-			logger.WithFields(log.Fields{
-				"action":          "verify digest",
-				"computed_digest": sum,
-				"expected_digest": ref.DigestStr(),
-			}).Error("computed digest does not match expected digest")
-			return nil, nil
+		// In the past we used io.LimitReader which might truncate the layer if it
+		// exceeds its limit. The condition below catches this scenario in order
+		// to avoid unexpected behavior caused by partial data being returned. We
+		// don't actually use io.LimitReader here any more, but it seems like a
+		// reasonable idea to keep this digest check anyhow. Todo: Consider if we
+		// could/should remove the digest check entirely now.
+		//
+		// For ociBlobFiles, we skip the digest verification because there's a
+		// good chance we'd be calculating the digest of the uncompressed layer
+		// data which would not match. It might be possible to calculate the
+		// checksum on the layer data before it is uncompressed, but I think
+		// that's not as easy as it sounds, since it may require another
+		// io.Copy which could be inefficient. For now let's just skip it.
+		//
+		expectedDigest := ref.DigestStr()
+		if verifyDigest {
+			computedDigest := fmt.Sprintf("sha256:%x", hasher.Sum(nil))
+			if computedDigest != expectedDigest {
+				logger.WithFields(log.Fields{
+					"action":          "verify digest",
+					"computed_digest": computedDigest,
+					"expected_digest": expectedDigest,
+				}).Error("computed digest does not match expected digest")
+				return nil, nil
+			}
 		}
 
 		logger.WithFields(log.Fields{
 			"action": "complete",
-			"digest": sum,
+			"digest": expectedDigest,
 		}).Debug("Successfully retrieved blob")
 
 		term := ast.StringTerm(blob.String())
@@ -950,6 +1003,186 @@ func ociImageFiles(bctx rego.BuiltinContext, refTerm *ast.Term, pathsTerm *ast.T
 	return result.(*ast.Term), nil
 }
 
+func ociBlobFiles(bctx rego.BuiltinContext, refTerm *ast.Term, pathsTerm *ast.Term) (*ast.Term, error) {
+	logger := log.WithField("function", ociBlobFilesName)
+
+	uri, ok := refTerm.Value.(ast.String)
+	if !ok {
+		logger.Error("input ref is not a string")
+		return nil, nil
+	}
+	refStr := string(uri)
+	logger = logger.WithField("ref", refStr)
+
+	if pathsTerm == nil {
+		logger.Error("paths term is nil")
+		return nil, nil
+	}
+
+	// Build cache key from ref + paths (hash the paths for a stable key)
+	pathsHash := fmt.Sprintf("%x", sha256.Sum256([]byte(pathsTerm.String())))[:12]
+	cacheKey := refStr + ":" + pathsHash
+
+	// Use component-scoped cache if available, otherwise fall back to global.
+	// Blob files data can be substantial and is unique per component.
+	cc := componentCacheFromContext(bctx.Context)
+
+	// Check cache first (fast path)
+	if cached, found := cc.imageFilesCache.Load(cacheKey); found {
+		logger.Debug("Blob files served from cache")
+		return cached.(*ast.Term), nil
+	}
+
+	// Use singleflight to prevent thundering herd
+	result, err, _ := cc.imageFilesFlight.Do(cacheKey, func() (any, error) {
+		// Double-check cache inside singleflight
+		if cached, found := cc.imageFilesCache.Load(cacheKey); found {
+			logger.Debug("Blob files served from cache (after singleflight)")
+			return cached, nil
+		}
+		logger.Debug("Starting blob files extraction")
+
+		// Get the blob content first (skip digest verification due to compressed/uncompressed mismatch)
+		blobTerm, err := ociBlobInternal(bctx, refTerm, false)
+		if err != nil || blobTerm == nil {
+			logger.WithFields(log.Fields{
+				"action": "fetch blob",
+				"error":  err,
+			}).Error("failed to fetch blob content")
+			return nil, nil //nolint:nilerr
+		}
+
+		blobContent, ok := blobTerm.Value.(ast.String)
+		if !ok {
+			logger.Error("blob content is not a string")
+			return nil, nil
+		}
+
+		pathsArray, err := builtins.ArrayOperand(pathsTerm.Value, 1)
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"action": "convert paths",
+				"error":  err,
+			}).Error("failed to convert paths to array operand")
+			return nil, nil //nolint:nilerr
+		}
+
+		// Collect target paths for exact file matching
+		var targetPaths []string
+		err = pathsArray.Iter(func(pathTerm *ast.Term) error {
+			pathString, ok := pathTerm.Value.(ast.String)
+			if !ok {
+				return fmt.Errorf("path is not a string: %#v", pathTerm)
+			}
+			targetPaths = append(targetPaths, string(pathString))
+			return nil
+		})
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"action": "iterate paths",
+				"error":  err,
+			}).Error("failed iterating paths")
+			return nil, nil //nolint:nilerr
+		}
+
+		if len(targetPaths) == 0 {
+			logger.Debug("No paths specified, returning empty result")
+			term := ast.NewTerm(ast.NewObject())
+			cc.imageFilesCache.Store(cacheKey, term)
+			return term, nil
+		}
+
+		// Create a tar reader from the blob content
+		blobReader := strings.NewReader(string(blobContent))
+		archive := tar.NewReader(blobReader)
+
+		// Create a set for fast lookup of target paths
+		targetPathSet := make(map[string]bool)
+		for _, path := range targetPaths {
+			targetPathSet[path] = true
+		}
+
+		extractedFiles := map[string]json.RawMessage{}
+		for {
+			header, err := archive.Next()
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				logger.WithFields(log.Fields{
+					"action": "read tar header",
+					"error":  err,
+				}).Error("failed to read tar archive")
+				return nil, nil //nolint:nilerr
+			}
+
+			// Check if this file matches any of our target paths
+			if !targetPathSet[header.Name] {
+				continue
+			}
+
+			// Check if the file has a supported extension or is explicitly requested
+			ext := path.Ext(header.Name)
+			supportedExt := false
+			for _, e := range []string{".yaml", ".yml", ".json"} {
+				if strings.EqualFold(ext, e) {
+					supportedExt = true
+					break
+				}
+			}
+
+			// If no supported extension, only process if file is explicitly in target paths
+			// This allows processing files without extensions that contain structured data
+			if !supportedExt {
+				logger.WithField("file", header.Name).Debug("file has no supported extension, attempting to parse anyway since it was explicitly requested")
+			}
+
+			// Read the file content
+			data, err := io.ReadAll(archive)
+			if err != nil {
+				logger.WithFields(log.Fields{
+					"action": "read file content",
+					"file":   header.Name,
+					"error":  err,
+				}).Error("failed to read file content")
+				return nil, nil //nolint:nilerr
+			}
+
+			// Convert YAML to JSON if needed
+			data, err = yaml.YAMLToJSON(data)
+			if err != nil {
+				logger.WithFields(log.Fields{
+					"action": "convert to json",
+					"file":   header.Name,
+					"error":  err,
+				}).Debug("unable to read file as JSON or YAML, ignoring")
+				continue
+			}
+
+			extractedFiles[header.Name] = data
+		}
+
+		filesValue, err := ast.InterfaceToValue(extractedFiles)
+		if err != nil {
+			logger.WithFields(log.Fields{
+				"action": "convert files",
+				"error":  err,
+			}).Error("failed to convert files object to value")
+			return nil, nil //nolint:nilerr
+		}
+
+		logger.WithField("file_count", len(extractedFiles)).Debug("Successfully extracted blob files")
+		term := ast.NewTerm(filesValue)
+		cc.imageFilesCache.Store(cacheKey, term)
+		return term, nil
+	})
+
+	if err != nil || result == nil {
+		return nil, nil
+	}
+	return result.(*ast.Term), nil
+}
+
 func ociImageIndex(bctx rego.BuiltinContext, a *ast.Term) (*ast.Term, error) {
 	logger := log.WithField("function", ociImageIndexName)
 
@@ -1129,6 +1362,7 @@ func parseReference(uri string) (name.Reference, error) {
 
 func init() {
 	registerOCIBlob()
+	registerOCIBlobFiles()
 	registerOCIDescriptor()
 	registerOCIImageFiles()
 	registerOCIImageManifest()

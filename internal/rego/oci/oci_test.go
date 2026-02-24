@@ -19,9 +19,13 @@
 package oci
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/gkampitakis/go-snaps/snaps"
@@ -112,6 +116,234 @@ func TestOCIBlob(t *testing.T) {
 				require.True(t, ok)
 				require.Equal(t, c.data, string(data))
 			}
+		})
+	}
+}
+
+func TestOCIBlobFiles(t *testing.T) {
+	t.Cleanup(ClearCaches)
+	ClearCaches() // Clear before test to avoid interference from previous tests
+
+	// Helper function to create a tar archive with test files and compute its digest
+	createTarArchiveWithDigest := func(files map[string]string) ([]byte, string) {
+		var buf bytes.Buffer
+		tw := tar.NewWriter(&buf)
+
+		for path, content := range files {
+			header := &tar.Header{
+				Name: path,
+				Size: int64(len(content)),
+			}
+			require.NoError(t, tw.WriteHeader(header))
+			_, err := tw.Write([]byte(content))
+			require.NoError(t, err)
+		}
+		require.NoError(t, tw.Close())
+
+		data := buf.Bytes()
+		digest := fmt.Sprintf("sha256:%x", sha256.Sum256(data))
+		return data, digest
+	}
+
+	cases := []struct {
+		name        string
+		tarFiles    map[string]string
+		paths       []string
+		expectedLen int
+		err         bool
+		remoteErr   error
+		invalidRef  bool
+		nilPaths    bool
+		invalidPath bool
+	}{
+		{
+			name: "success with yaml file",
+			tarFiles: map[string]string{
+				"task.yaml": `apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: example-task`,
+				"other.txt": "not a yaml file",
+			},
+			paths:       []string{"task.yaml"},
+			expectedLen: 1,
+		},
+		{
+			name: "success with multiple files",
+			tarFiles: map[string]string{
+				"task.yaml":     `{"apiVersion": "tekton.dev/v1beta1", "kind": "Task"}`,
+				"pipeline.json": `{"apiVersion": "tekton.dev/v1beta1", "kind": "Pipeline"}`,
+				"other.txt":     "not structured",
+			},
+			paths:       []string{"task.yaml", "pipeline.json"},
+			expectedLen: 2,
+		},
+		{
+			name: "no matching files",
+			tarFiles: map[string]string{
+				"other.txt": "not a yaml file",
+			},
+			paths:       []string{"task.yaml"},
+			expectedLen: 0,
+		},
+		{
+			name:       "invalid ref type",
+			tarFiles:   map[string]string{},
+			paths:      []string{"task.yaml"},
+			invalidRef: true,
+			err:        true,
+		},
+		{
+			name:     "nil paths term",
+			tarFiles: map[string]string{},
+			nilPaths: true,
+			err:      true,
+		},
+		{
+			name:      "remote error",
+			tarFiles:  map[string]string{},
+			paths:     []string{"task.yaml"},
+			remoteErr: errors.New("blob fetch failed"),
+			err:       true,
+		},
+		{
+			name: "invalid path type in array",
+			tarFiles: map[string]string{
+				"task.yaml": `{"apiVersion": "tekton.dev/v1beta1"}`,
+			},
+			invalidPath: true,
+			err:         true,
+		},
+		{
+			name: "invalid json file ignored",
+			tarFiles: map[string]string{
+				"task.yaml":    `{"apiVersion": "tekton.dev/v1beta1", "kind": "Task"}`,
+				"invalid.json": `{{{malformed content that can't be parsed as JSON or YAML`,
+				"valid.json":   `{"apiVersion": "tekton.dev/v1beta1", "kind": "Pipeline"}`,
+			},
+			paths:       []string{"task.yaml", "invalid.json", "valid.json"},
+			expectedLen: 2, // Only task.yaml and valid.json should be extracted, invalid.json is ignored
+		},
+		{
+			name: "empty paths array",
+			tarFiles: map[string]string{
+				"task.yaml": `{"apiVersion": "tekton.dev/v1beta1", "kind": "Task"}`,
+			},
+			paths:       []string{}, // Empty paths array
+			expectedLen: 0,          // Should return empty object
+		},
+		{
+			name: "file without supported extension",
+			tarFiles: map[string]string{
+				"config":     `{"apiVersion": "v1", "kind": "ConfigMap"}`, // No file extension but valid JSON
+				"task.yaml":  `{"apiVersion": "tekton.dev/v1beta1", "kind": "Task"}`,
+				"readme.txt": `This is just text, not structured data`,
+			},
+			paths:       []string{"config", "task.yaml"}, // Explicitly request the extensionless file
+			expectedLen: 2,                               // Both config and task.yaml should be extracted
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ClearCaches() // Clear cache before each subtest
+
+			// Create test data and compute digest dynamically
+			var refTerm *ast.Term
+			var pathsTerm *ast.Term
+
+			if c.invalidRef {
+				refTerm = ast.IntNumberTerm(42)
+			} else if c.nilPaths {
+				refTerm = ast.StringTerm("registry.local/bundle@sha256:dummy")
+				pathsTerm = nil
+			} else if c.invalidPath {
+				tarData, digest := createTarArchiveWithDigest(c.tarFiles)
+				refTerm = ast.StringTerm(fmt.Sprintf("registry.local/bundle@%s", digest))
+				pathsTerm = ast.ArrayTerm(ast.IntNumberTerm(123)) // invalid path type
+
+				client := fake.FakeClient{}
+				layer := static.NewLayer(tarData, types.OCIUncompressedLayer)
+				client.On("Layer", mock.Anything, mock.Anything).Return(layer, nil)
+				ctx := oci.WithClient(context.Background(), &client)
+				bctx := rego.BuiltinContext{Context: ctx}
+
+				result, err := ociBlobFiles(bctx, refTerm, pathsTerm)
+				require.NoError(t, err)
+				require.Nil(t, result)
+				return
+			} else {
+				// Normal test cases
+				tarData, digest := createTarArchiveWithDigest(c.tarFiles)
+				refTerm = ast.StringTerm(fmt.Sprintf("registry.local/bundle@%s", digest))
+
+				pathTerms := make([]*ast.Term, len(c.paths))
+				for i, path := range c.paths {
+					pathTerms[i] = ast.StringTerm(path)
+				}
+				pathsTerm = ast.ArrayTerm(pathTerms...)
+
+				client := fake.FakeClient{}
+				if c.remoteErr != nil {
+					client.On("Layer", mock.Anything, mock.Anything).Return(nil, c.remoteErr)
+				} else {
+					layer := static.NewLayer(tarData, types.OCIUncompressedLayer)
+					client.On("Layer", mock.Anything, mock.Anything).Return(layer, nil)
+				}
+				ctx := oci.WithClient(context.Background(), &client)
+				bctx := rego.BuiltinContext{Context: ctx}
+
+				result, err := ociBlobFiles(bctx, refTerm, pathsTerm)
+				require.NoError(t, err)
+
+				if c.err {
+					require.Nil(t, result)
+				} else {
+					require.NotNil(t, result)
+
+					// Verify the result is an object
+					obj, ok := result.Value.(ast.Object)
+					require.True(t, ok, "result should be an object")
+
+					// Check the number of extracted files
+					require.Equal(t, c.expectedLen, obj.Len(), "unexpected number of extracted files")
+
+					// For success cases with files, verify basic structure
+					if c.expectedLen > 0 {
+						// Iterate through the object using Keys() and Get()
+						keys := obj.Keys()
+						require.Len(t, keys, c.expectedLen, "unexpected number of keys")
+
+						for _, key := range keys {
+							keyStr, ok := key.Value.(ast.String)
+							require.True(t, ok, "file path should be a string")
+
+							// Verify it's one of the expected files
+							_, exists := c.tarFiles[string(keyStr)]
+							require.True(t, exists, "unexpected file: %s", string(keyStr))
+
+							// Get the value and verify it was parsed
+							value := obj.Get(key)
+							require.NotNil(t, value, "file content should not be nil")
+
+							// For structured files, just verify the content exists and was processed
+							if strings.HasSuffix(string(keyStr), ".yaml") || strings.HasSuffix(string(keyStr), ".yml") || strings.HasSuffix(string(keyStr), ".json") {
+								// The content should be present (exact type checking is complex with AST)
+								require.NotNil(t, value.Value, "structured file should have parsed content")
+							}
+						}
+					}
+				}
+				return
+			}
+
+			// Handle special cases (invalid ref, nil paths)
+			ctx := oci.WithClient(context.Background(), &fake.FakeClient{})
+			bctx := rego.BuiltinContext{Context: ctx}
+
+			result, err := ociBlobFiles(bctx, refTerm, pathsTerm)
+			require.NoError(t, err)
+			require.Nil(t, result)
 		})
 	}
 }
@@ -963,6 +1195,7 @@ func TestOCIImageIndex(t *testing.T) {
 func TestFunctionsRegistered(t *testing.T) {
 	names := []string{
 		ociBlobName,
+		ociBlobFilesName,
 		ociDescriptorName,
 		ociImageFilesName,
 		ociImageManifestName,

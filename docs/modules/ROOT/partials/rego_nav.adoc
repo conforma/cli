@@ -1,5 +1,6 @@
 * xref:rego_builtins.adoc[Rego Reference]
 ** xref:ec_oci_blob.adoc[ec.oci.blob]
+** xref:ec_oci_blob_files.adoc[ec.oci.blob_files]
 ** xref:ec_oci_descriptor.adoc[ec.oci.descriptor]
 ** xref:ec_oci_image_files.adoc[ec.oci.image_files]
 ** xref:ec_oci_image_index.adoc[ec.oci.image_index]
