@@ -47,22 +47,18 @@ func sigstoreInitializeCmd(f sigstoreInitializeFunc) *cobra.Command {
 			Any updated TUF repository will be written to $HOME/.sigstore/root/<mirror_url>.
 
 			Trusted keys and certificate used in ec verification (e.g. verifying Fulcio issued certificates
-			with Fulcio root CA) are pulled form the trusted metadata.
-
-			This command is mostly a wrapper around "cosign initialize".
+			with Fulcio root CA) are pulled from the trusted metadata.
 		`),
 
 		Example: hd.Doc(`
-			ec initialize -mirror <url> -out <file>
-
 			Initialize root with distributed root keys, default mirror, and default out path.
-			ec initialize
+			ec sigstore initialize
 
 			Initialize with an out-of-band root key file, using the default mirror.
-			ec initialize -root <url>
+			ec sigstore initialize --root <url>
 
 			Initialize with an out-of-band root key file and custom repository mirror.
-			ec initialize -mirror <url> -root <url>
+			ec sigstore initialize --mirror <url> --root <url>
 		`),
 
 		Args: cobra.NoArgs,

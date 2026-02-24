@@ -115,7 +115,7 @@ Use a regular expression to match certificate attributes.
 --certificate-identity:: URL of the certificate identity for keyless verification
 --certificate-identity-regexp:: Regular expression for the URL of the certificate identity for keyless verification
 --certificate-oidc-issuer:: URL of the certificate OIDC issuer for keyless verification
---certificate-oidc-issuer-regexp:: Regular expresssion for the URL of the certificate OIDC issuer for keyless verification
+--certificate-oidc-issuer-regexp:: Regular expression for the URL of the certificate OIDC issuer for keyless verification
 --color:: Enable color when using text output even when the current terminal does not support it (Default: false)
 --effective-time:: Run policy checks with the provided time. Useful for testing rules with
 effective dates in the future. The value can be "now" (default) - for

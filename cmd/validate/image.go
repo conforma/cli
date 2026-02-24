@@ -116,7 +116,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 
 			  ec validate image --image registry/name:tag
 
-		  	Return a zero status code even if there are validation failures:
+			Return a zero status code even if there are validation failures:
 
 			  ec validate image --image registry/name:tag --strict=false
 
@@ -502,7 +502,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 		"URL of the certificate OIDC issuer for keyless verification")
 
 	cmd.Flags().StringVar(&data.certificateOIDCIssuerRegExp, "certificate-oidc-issuer-regexp", data.certificateOIDCIssuerRegExp,
-		"Regular expresssion for the URL of the certificate OIDC issuer for keyless verification")
+		"Regular expression for the URL of the certificate OIDC issuer for keyless verification")
 
 	// Deprecated: images replaced this
 	cmd.Flags().StringVarP(&data.filePath, "file-path", "f", data.filePath,

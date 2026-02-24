@@ -31,6 +31,8 @@ import (
 	app "github.com/konflux-ci/application-api/api/v1alpha1"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"github.com/sigstore/cosign/v3/pkg/cosign"
+	cosignOCI "github.com/sigstore/cosign/v3/pkg/oci"
+	ociremote "github.com/sigstore/cosign/v3/pkg/oci/remote"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 
@@ -120,6 +122,12 @@ func (a *ApplicationSnapshotImage) SetImageURL(url string) error {
 	return nil
 }
 
+func (a *ApplicationSnapshotImage) hasBundles(ctx context.Context) bool {
+	regOpts := []ociremote.Option{ociremote.WithRemoteOptions(oci.CreateRemoteOptions(ctx)...)}
+	bundles, _, err := cosign.GetBundles(ctx, a.reference, regOpts)
+	return err == nil && len(bundles) > 0
+}
+
 func (a *ApplicationSnapshotImage) FetchImageConfig(ctx context.Context) error {
 	var err error
 	a.configJSON, err = config.FetchImageConfig(ctx, a.reference)
@@ -143,36 +151,56 @@ func (a *ApplicationSnapshotImage) FetchImageFiles(ctx context.Context) error {
 	return err
 }
 
-// ValidateImageSignature executes the cosign.VerifyImageSignature method on the ApplicationSnapshotImage image ref.
+// ValidateImageSignature verifies the image signature. For images with Sigstore
+// bundles (OCI referrers) the new bundle path is used; otherwise the legacy
+// tag-based path is used.
 func (a *ApplicationSnapshotImage) ValidateImageSignature(ctx context.Context) error {
-	// Set the ClaimVerifier on a shallow *copy* of CheckOpts to avoid unexpected side-effects
 	opts := a.checkOpts
-	opts.ClaimVerifier = cosign.SimpleClaimVerifier
-	signatures, _, err := oci.NewClient(ctx).VerifyImageSignatures(a.reference, &opts)
+	client := oci.NewClient(ctx)
+
+	var sigs []cosignOCI.Signature
+	var err error
+
+	if a.hasBundles(ctx) {
+		opts.NewBundleFormat = true
+		opts.ClaimVerifier = cosign.IntotoSubjectClaimVerifier
+		sigs, _, err = client.VerifyImageAttestations(a.reference, &opts)
+	} else {
+		opts.ClaimVerifier = cosign.SimpleClaimVerifier
+		sigs, _, err = client.VerifyImageSignatures(a.reference, &opts)
+	}
 	if err != nil {
 		return err
 	}
 
-	for _, s := range signatures {
+	for _, s := range sigs {
 		es, err := signature.NewEntitySignature(s)
 		if err != nil {
 			return err
 		}
 		a.signatures = append(a.signatures, es)
 	}
-
 	return nil
 }
 
-// ValidateAttestationSignature executes the cosign.VerifyImageAttestations method
+// ValidateAttestationSignature verifies and collects in-toto attestations
+// attached to the image.
 func (a *ApplicationSnapshotImage) ValidateAttestationSignature(ctx context.Context) error {
-	// Set the ClaimVerifier on a shallow *copy* of CheckOpts to avoid unexpected side-effects
 	opts := a.checkOpts
 	opts.ClaimVerifier = cosign.IntotoSubjectClaimVerifier
+
+	useBundles := a.hasBundles(ctx)
+	if useBundles {
+		opts.NewBundleFormat = true
+	}
 
 	layers, _, err := oci.NewClient(ctx).VerifyImageAttestations(a.reference, &opts)
 	if err != nil {
 		return err
+	}
+
+	if useBundles {
+		return a.parseAttestationsFromBundles(layers)
 	}
 
 	// Extract the signatures from the attestations here in order to also validate that
@@ -216,6 +244,40 @@ func (a *ApplicationSnapshotImage) ValidateAttestationSignature(ctx context.Cont
 			// It's some other kind of attestation
 			a.attestations = append(a.attestations, att)
 		}
+	}
+	return nil
+}
+
+// parseAttestationsFromBundles extracts attestations from Sigstore bundles.
+// Bundle-wrapped layers report an incorrect media type, so we unmarshal the
+// DSSE envelope from the raw payload directly.
+func (a *ApplicationSnapshotImage) parseAttestationsFromBundles(layers []cosignOCI.Signature) error {
+	for _, sig := range layers {
+		payload, err := sig.Payload()
+		if err != nil {
+			log.Debugf("Skipping bundle entry: cannot read payload: %v", err)
+			continue
+		}
+		var dsseEnvelope struct {
+			PayloadType string `json:"payloadType"`
+			Payload     string `json:"payload"`
+		}
+		if err := json.Unmarshal(payload, &dsseEnvelope); err != nil {
+			log.Debugf("Skipping bundle entry: not a valid DSSE envelope: %v", err)
+			continue
+		}
+		if dsseEnvelope.PayloadType != "application/vnd.in-toto+json" {
+			log.Debugf("Skipping bundle entry with payloadType: %s", dsseEnvelope.PayloadType)
+			continue
+		}
+
+		att, err := attestation.ProvenanceFromBundlePayload(payload)
+		if err != nil {
+			return fmt.Errorf("unable to parse bundle attestation: %w", err)
+		}
+		t := att.PredicateType()
+		log.Debugf("Found bundle attestation with predicateType: %s", t)
+		a.attestations = append(a.attestations, att)
 	}
 	return nil
 }
