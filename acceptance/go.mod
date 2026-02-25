@@ -27,13 +27,13 @@ require (
 	github.com/sigstore/sigstore v1.10.4
 	github.com/stretchr/testify v1.11.1
 	github.com/tektoncd/cli v0.37.1
-	github.com/tektoncd/pipeline v0.70.0
+	github.com/tektoncd/pipeline v1.9.1
 	github.com/testcontainers/testcontainers-go v0.34.0
 	github.com/transparency-dev/merkle v0.0.2
 	github.com/wiremock/go-wiremock v1.11.0
 	github.com/yudai/gojsondiff v1.0.0
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b
-	gopkg.in/go-jose/go-jose.v2 v2.6.3
+	gopkg.in/go-jose/go-jose.v4 v4.1.3
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0
