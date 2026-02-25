@@ -15,15 +15,23 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# This script attempts to reduce a snapshot to a single component
+# This script attempts to reduce a snapshot to a single component.
 # It determines the component via a custom resource's labels.
 # It requires that the following environment variables be defined:
 #
 # - SINGLE_COMPONENT: true if single component mode is enabled.
-# - SNAPSHOT: Path to Snapshot json file
-# - CUSTOM_RESOURCE: Custom Resource to query for built component in Snapshot
-# - CUSTOM_RESOURCE_NAMESPACE: Namespace where Custom Resource is found
-# - SNAPSHOT_PATH: Same path as SNAPSHOT. The reduced Snapshot will be stored here.
+# - SNAPSHOT: Path to a Snapshot JSON file, literal JSON/content, or a cluster
+#   reference. To fetch from the cluster use the "snapshot/<name>" prefix
+#   (e.g. snapshot/my-app); otherwise SNAPSHOT is a file path or literal.
+#   Cluster fetch uses the current kubectl context namespace only (no -n).
+#   The Snapshot CR must live in that same namespace (pipeline namespace in
+#   Tekton; local dev uses the context namespace). Snapshots in other
+#   namespaces are not supported for fetch.
+# - CUSTOM_RESOURCE: Custom resource kind used for label lookup (single-component).
+# - CUSTOM_RESOURCE_NAMESPACE: Namespace used for label lookup only; not used
+#   when fetching the Snapshot by name. If it differs from context namespace
+#   during a cluster fetch, the script warns (see guard below).
+# - SNAPSHOT_PATH: Where the reduced Snapshot will be stored.
 
 set -o errexit
 set -o nounset
@@ -36,7 +44,28 @@ set -o pipefail
 # the final output to SNAPSHOT_PATH (which may be the same file as SNAPSHOT).
 
 WORKING_SNAPSHOT="$(mktemp /tmp/snapshot.XXXXXX)"
-if [[ -f "$SNAPSHOT" ]]; then
+trap 'rm -f "${WORKING_SNAPSHOT:-}" "${REDUCED_SNAPSHOT:-}"' EXIT
+# Cluster fetch only when SNAPSHOT is explicitly "snapshot/<name>" (avoids
+# misclassifying short literal content as a CR name). Name must be DNS label, ≤63 chars.
+VALID_CR_NAME_PATTERN='^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+if [[ "$SNAPSHOT" =~ ^[sS]napshot/(.+)$ ]]; then
+  SNAPSHOT_NAME="${BASH_REMATCH[1]}"
+  if [[ ${#SNAPSHOT_NAME} -le 63 && "$SNAPSHOT_NAME" =~ $VALID_CR_NAME_PATTERN ]]; then
+    # Guard: warn if CUSTOM_RESOURCE_NAMESPACE is set and differs from context
+    # (Snapshot is always fetched from context namespace; mismatch can cause wrong/missing CR).
+    if [[ -n "${CUSTOM_RESOURCE_NAMESPACE:-}" ]]; then
+      CONTEXT_NS="$(kubectl config view --minify -o jsonpath='{.contexts[0].context.namespace}' 2>/dev/null || true)"
+      if [[ -n "$CONTEXT_NS" && "$CUSTOM_RESOURCE_NAMESPACE" != "$CONTEXT_NS" ]]; then
+        echo "Warning: Fetching Snapshot from context namespace \"$CONTEXT_NS\"; CUSTOM_RESOURCE_NAMESPACE is \"$CUSTOM_RESOURCE_NAMESPACE\" (not used for fetch). If the Snapshot lives in the latter, fetch may fail or be wrong."
+      fi
+    fi
+    kubectl get snapshot/"${SNAPSHOT_NAME}" -o json | jq .spec > "$WORKING_SNAPSHOT" || \
+      { echo "Failed to get Snapshot: $SNAPSHOT_NAME"; exit 1; }
+  else
+    echo "Invalid snapshot name after snapshot/ prefix: $SNAPSHOT_NAME (must be DNS label, ≤63 chars)"
+    exit 1
+  fi
+elif [[ -f "$SNAPSHOT" ]]; then
   cp "$SNAPSHOT" "$WORKING_SNAPSHOT"
 else
   printf "%s" "$SNAPSHOT" > "$WORKING_SNAPSHOT"
