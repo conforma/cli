@@ -16,7 +16,7 @@
 
 ## Build
 
-FROM docker.io/library/golang:1.26.0 AS build
+FROM docker.io/library/golang:1.25.7 AS build
 
 ARG TARGETOS
 ARG TARGETARCH

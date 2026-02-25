@@ -1,6 +1,6 @@
 module github.com/enterprise-contract/ec-cli/tools
 
-go 1.26.0
+go 1.25.7
 
 require (
 	github.com/daixiang0/gci v0.13.5
