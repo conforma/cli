@@ -3,49 +3,49 @@ module github.com/enterprise-contract/ec-cli
 go 1.24.6
 
 require (
-	cuelang.org/go v0.11.1
+	cuelang.org/go v0.15.4
 	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/Maldris/go-billy-afero v0.0.0-20200815120323-e9d3de59c99a
 	github.com/conforma/go-gather v1.0.2
 	github.com/enterprise-contract/enterprise-contract-controller/api v0.1.79
 	github.com/evanphx/json-patch v5.9.0+incompatible
 	github.com/gkampitakis/go-snaps v0.5.7
-	github.com/go-git/go-git/v5 v5.16.5
+	github.com/go-git/go-git/v5 v5.17.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/go-cmp v0.7.0
-	github.com/google/go-containerregistry v0.20.2
+	github.com/google/go-containerregistry v0.21.1
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
-	github.com/in-toto/in-toto-golang v0.9.0
+	github.com/in-toto/in-toto-golang v0.10.0
 	github.com/jstemmer/go-junit-report/v2 v2.1.0
-	github.com/konflux-ci/application-api v0.0.0-20240812090716-e7eb2ecfb409
+	github.com/konflux-ci/application-api 9ac61f5d7ca0
 	github.com/leanovate/gopter v0.2.11
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mitchellh/go-wordwrap v1.0.1
-	github.com/open-policy-agent/conftest v0.55.0
+	github.com/open-policy-agent/conftest v0.66.0
 	github.com/open-policy-agent/opa v0.70.0
 	github.com/package-url/packageurl-go v0.1.3
 	github.com/qri-io/jsonpointer v0.1.1
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
-	github.com/secure-systems-lab/go-securesystemslib v0.9.0
-	github.com/sigstore/cosign/v2 v2.4.1
-	github.com/sigstore/sigstore v1.8.15
+	github.com/secure-systems-lab/go-securesystemslib v0.10.0
+	github.com/sigstore/cosign/v2 v2.6.2
+	github.com/sigstore/sigstore v1.10.4
 	github.com/sirupsen/logrus v1.9.3
-	github.com/spf13/afero v1.11.0
-	github.com/spf13/cobra v1.9.1
+	github.com/spf13/afero v1.15.0
+	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.6
-	github.com/spf13/viper v1.19.0
+	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/stuart-warren/yamlfmt v0.2.0
 	github.com/tektoncd/pipeline v0.70.0
-	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f
-	golang.org/x/net v0.47.0
-	golang.org/x/sync v0.18.0
-	k8s.io/apiextensions-apiserver v0.34.2
-	k8s.io/apimachinery v0.34.2
-	k8s.io/client-go v0.34.2
+	golang.org/x/exp 3dfff04db8fa
+	golang.org/x/net v0.51.0
+	golang.org/x/sync v0.19.0
+	k8s.io/apiextensions-apiserver v0.35.1
+	k8s.io/apimachinery v0.35.1
+	k8s.io/client-go v0.35.1
 	k8s.io/klog/v2 v2.130.1
-	k8s.io/kube-openapi v0.0.0-20250710124328-f3f2b991d03b
-	oras.land/oras-go/v2 v2.5.0
+	k8s.io/kube-openapi a19766b6e2d4
+	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
