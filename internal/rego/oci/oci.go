@@ -59,7 +59,10 @@ const (
 	ociImageManifestsBatchName = "ec.oci.image_manifests"
 	ociImageFilesName          = "ec.oci.image_files"
 	ociImageIndexName          = "ec.oci.image_index"
+	maxTarEntrySizeConst       = 500 * 1024 * 1024 // 500MB
 )
+
+var maxTarEntrySize int64 = maxTarEntrySizeConst // Use var to allow override in tests
 
 func registerOCIBlob() {
 	decl := rego.Function{
@@ -1137,8 +1140,19 @@ func ociBlobFiles(bctx rego.BuiltinContext, refTerm *ast.Term, pathsTerm *ast.Te
 				logger.WithField("file", header.Name).Debug("file has no supported extension, attempting to parse anyway since it was explicitly requested")
 			}
 
-			// Read the file content
-			data, err := io.ReadAll(archive)
+			// Check file size to prevent memory exhaustion attacks
+			if header.Size > maxTarEntrySize {
+				logger.WithFields(log.Fields{
+					"file":    header.Name,
+					"size":    header.Size,
+					"maxSize": maxTarEntrySize,
+				}).Error("tar entry too large, skipping to prevent memory exhaustion")
+				continue
+			}
+
+			// Read the file content with size limit protection
+			limitedReader := io.LimitReader(archive, maxTarEntrySize)
+			data, err := io.ReadAll(limitedReader)
 			if err != nil {
 				logger.WithFields(log.Fields{
 					"action": "read file content",
@@ -1146,6 +1160,16 @@ func ociBlobFiles(bctx rego.BuiltinContext, refTerm *ast.Term, pathsTerm *ast.Te
 					"error":  err,
 				}).Error("failed to read file content")
 				return nil, nil //nolint:nilerr
+			}
+
+			// Verify we didn't hit the size limit (which would indicate truncation)
+			if int64(len(data)) == maxTarEntrySize && header.Size > maxTarEntrySize {
+				logger.WithFields(log.Fields{
+					"file":    header.Name,
+					"size":    header.Size,
+					"maxSize": maxTarEntrySize,
+				}).Error("tar entry was truncated due to size limit")
+				continue
 			}
 
 			// Convert YAML to JSON if needed

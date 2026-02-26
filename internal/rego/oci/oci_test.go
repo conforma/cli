@@ -155,6 +155,7 @@ func TestOCIBlobFiles(t *testing.T) {
 		invalidRef  bool
 		nilPaths    bool
 		invalidPath bool
+		oversized   bool
 	}{
 		{
 			name: "success with yaml file",
@@ -242,6 +243,16 @@ metadata:
 			paths:       []string{"config", "task.yaml"}, // Explicitly request the extensionless file
 			expectedLen: 2,                               // Both config and task.yaml should be extracted
 		},
+		{
+			name: "oversized tar entry skipped",
+			tarFiles: map[string]string{
+				"small.yaml": `{"ok": true}`,                                  // 12 bytes
+				"large.json": `{"data": "this will be considered oversized"}`, // 43 bytes, will be "too large" with limit set to 20 bytes
+			},
+			paths:       []string{"small.yaml", "large.json"},
+			expectedLen: 1, // Only small.yaml should be extracted, large.json should be skipped due to temp limit
+			oversized:   true,
+		},
 	}
 
 	for _, c := range cases {
@@ -271,6 +282,41 @@ metadata:
 				result, err := ociBlobFiles(bctx, refTerm, pathsTerm)
 				require.NoError(t, err)
 				require.Nil(t, result)
+				return
+			} else if c.oversized {
+				// Temporarily override the size limit to make the test feasible with small files
+				originalLimit := maxTarEntrySize
+				maxTarEntrySize = 20 // Set a very small limit of 20 bytes
+				defer func() {
+					maxTarEntrySize = originalLimit // Restore original limit
+				}()
+
+				// Create normal tar archive
+				tarData, digest := createTarArchiveWithDigest(c.tarFiles)
+				refTerm = ast.StringTerm(fmt.Sprintf("registry.local/bundle@%s", digest))
+
+				pathTerms := make([]*ast.Term, len(c.paths))
+				for i, path := range c.paths {
+					pathTerms[i] = ast.StringTerm(path)
+				}
+				pathsTerm = ast.ArrayTerm(pathTerms...)
+
+				client := fake.FakeClient{}
+				layer := static.NewLayer(tarData, types.OCIUncompressedLayer)
+				client.On("Layer", mock.Anything, mock.Anything).Return(layer, nil)
+				ctx := oci.WithClient(context.Background(), &client)
+				bctx := rego.BuiltinContext{Context: ctx}
+
+				result, err := ociBlobFiles(bctx, refTerm, pathsTerm)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+
+				// Verify the result is an object
+				obj, ok := result.Value.(ast.Object)
+				require.True(t, ok, "result should be an object")
+
+				// Check that only the small file was extracted (large file should be skipped)
+				require.Equal(t, c.expectedLen, obj.Len(), "unexpected number of extracted files")
 				return
 			} else {
 				// Normal test cases
