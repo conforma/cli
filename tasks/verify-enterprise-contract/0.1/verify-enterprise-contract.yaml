@@ -69,6 +69,20 @@ spec:
       description: Rekor host for transparency log lookups
       default: ""
 
+    - name: CERTIFICATE_IDENTITY
+      type: string
+      description: >-
+        Expected identity in the signing certificate for keyless verification.
+        This should be the email or URI that was used when signing.
+      default: ""
+
+    - name: CERTIFICATE_OIDC_ISSUER
+      type: string
+      description: >-
+        Expected OIDC issuer in the signing certificate for keyless verification.
+        This should match the issuer that provided the identity token used for signing.
+      default: ""
+
     - name: IGNORE_REKOR
       type: string
       description: >-
@@ -245,7 +259,20 @@ spec:
           "image"
           "--images" "/tekton/home/snapshot.json"
           "--policy" "$(params.POLICY_CONFIGURATION)"
-          "--public-key" "$(params.PUBLIC_KEY)"
+        )
+
+        if [ -n "$(params.CERTIFICATE_IDENTITY)" ] && [ -n "$(params.CERTIFICATE_OIDC_ISSUER)" ]; then
+          cmd_args+=(
+            "--certificate-identity" "$(params.CERTIFICATE_IDENTITY)"
+            "--certificate-oidc-issuer" "$(params.CERTIFICATE_OIDC_ISSUER)"
+          )
+        elif [ -n "$(params.PUBLIC_KEY)" ]; then
+          cmd_args+=(
+            "--public-key" "$(params.PUBLIC_KEY)"
+          )
+        fi
+
+        cmd_args+=(
           "--rekor-url" "$(params.REKOR_HOST)"
           "--ignore-rekor=$(params.IGNORE_REKOR)"
           "--workers" "$(params.WORKERS)"
