@@ -236,48 +236,41 @@ spec:
     - name: validate
       image: quay.io/conforma/cli:latest
       onError: continue # progress even if the step fails so we can see the debug logs
-      command: [ec]
-      args:
-        - validate
-        - image
-        - "--images"
-        - "/tekton/home/snapshot.json"
-        - "--policy"
-        - "$(params.POLICY_CONFIGURATION)"
-        - "--public-key"
-        - "$(params.PUBLIC_KEY)"
-        - "--rekor-url"
-        - "$(params.REKOR_HOST)"
-        - "--ignore-rekor=$(params.IGNORE_REKOR)"
-        - "--workers"
-        - "$(params.WORKERS)"
-        # NOTE: The syntax below is required to negate boolean parameters
-        - "--info=$(params.INFO)"
-        # Fresh versions of ec support "--timeout=0" to indicate no timeout, but this would break
-        # the task if it's used with an older version of ec. In an abundance of caution, let's set
-        # an arbitrary high value instead of using 0 here. In future we can change it to 0.
-        # (The reason to not use an explicit timeout for ec is so Tekton can handle the timeouts).
-        - "--timeout=100h"
-        - "--strict=false"
-        - "--show-successes"
-        - "--effective-time=$(params.EFFECTIVE_TIME)"
-        - "--extra-rule-data=$(params.EXTRA_RULE_DATA)"
-        - "--retry-max-wait"
-        - "$(params.RETRY_MAX_WAIT)"
-        - "--retry-max-retry"
-        - "$(params.RETRY_MAX_RETRY)"
-        - "--retry-duration"
-        - "$(params.RETRY_DURATION)"
-        - "--retry-factor"
-        - "$(params.RETRY_FACTOR)"
-        - "--retry-jitter"
-        - "$(params.RETRY_JITTER)"
-        - "--output"
-        - "text=$(params.HOMEDIR)/text-report.txt?show-successes=false"
-        - "--output"
-        - "appstudio=$(results.TEST_OUTPUT.path)"
-        - "--output"
-        - "json=$(params.HOMEDIR)/report-json.json"
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+
+        cmd_args=(
+          "validate"
+          "image"
+          "--images" "/tekton/home/snapshot.json"
+          "--policy" "$(params.POLICY_CONFIGURATION)"
+          "--public-key" "$(params.PUBLIC_KEY)"
+          "--rekor-url" "$(params.REKOR_HOST)"
+          "--ignore-rekor=$(params.IGNORE_REKOR)"
+          "--workers" "$(params.WORKERS)"
+          # NOTE: The syntax below is required to negate boolean parameters
+          "--info=$(params.INFO)"
+          # Fresh versions of ec support "--timeout=0" to indicate no timeout, but this would break
+          # the task if it's used with an older version of ec. In an abundance of caution, let's set
+          # an arbitrary high value instead of using 0 here. In future we can change it to 0.
+          # (The reason to not use an explicit timeout for ec is so Tekton can handle the timeouts).
+          "--timeout=100h"
+          "--strict=false"
+          "--show-successes"
+          "--effective-time=$(params.EFFECTIVE_TIME)"
+          "--extra-rule-data=$(params.EXTRA_RULE_DATA)"
+          "--retry-max-wait" "$(params.RETRY_MAX_WAIT)"
+          "--retry-max-retry" "$(params.RETRY_MAX_RETRY)"
+          "--retry-duration" "$(params.RETRY_DURATION)"
+          "--retry-factor" "$(params.RETRY_FACTOR)"
+          "--retry-jitter" "$(params.RETRY_JITTER)"
+          "--output" "text=$(params.HOMEDIR)/text-report.txt?show-successes=false"
+          "--output" "appstudio=$(results.TEST_OUTPUT.path)"
+          "--output" "json=$(params.HOMEDIR)/report-json.json"
+        )
+
+        exec ec "${cmd_args[@]}"
       env:
         - name: SSL_CERT_DIR
           # The Tekton Operator automatically sets the SSL_CERT_DIR env to the value below but,
