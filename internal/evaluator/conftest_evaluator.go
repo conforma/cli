@@ -352,6 +352,12 @@ func NewConftestEvaluatorWithNamespaceAndFilterType(
 	c.policyDir = filepath.Join(c.workDir, "policy")
 	c.dataDir = filepath.Join(c.workDir, "data")
 
+	// Write embedded rego files to policy directory
+	if err := utils.WriteEmbeddedRego(ctx, fs, c.policyDir); err != nil {
+		log.Warnf("Failed to write embedded rego files: %v", err)
+		// Continue without embedded files - graceful degradation
+	}
+
 	if err := c.createDataDirectory(ctx); err != nil {
 		return nil, err
 	}
