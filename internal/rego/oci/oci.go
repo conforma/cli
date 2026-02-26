@@ -920,7 +920,7 @@ func ociImageFiles(bctx rego.BuiltinContext, refTerm *ast.Term, pathsTerm *ast.T
 
 	// Build cache key from ref + paths (hash the paths for a stable key)
 	pathsHash := fmt.Sprintf("%x", sha256.Sum256([]byte(pathsTerm.String())))[:12]
-	cacheKey := refStr + ":" + pathsHash
+	cacheKey := "image:" + refStr + ":" + pathsHash
 
 	// Use component-scoped cache if available, otherwise fall back to global.
 	// Image files data can be substantial and is unique per component.
@@ -1024,7 +1024,7 @@ func ociBlobFiles(bctx rego.BuiltinContext, refTerm *ast.Term, pathsTerm *ast.Te
 
 	// Build cache key from ref + paths (hash the paths for a stable key)
 	pathsHash := fmt.Sprintf("%x", sha256.Sum256([]byte(pathsTerm.String())))[:12]
-	cacheKey := refStr + ":" + pathsHash
+	cacheKey := "blob:" + refStr + ":" + pathsHash
 
 	// Use component-scoped cache if available, otherwise fall back to global.
 	// Blob files data can be substantial and is unique per component.
