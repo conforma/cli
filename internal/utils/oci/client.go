@@ -65,7 +65,7 @@ func initCache() cache.Cache {
 	}
 }
 
-func createRemoteOptions(ctx context.Context) []remote.Option {
+func CreateRemoteOptions(ctx context.Context) []remote.Option {
 	backoff := remote.Backoff{
 		Duration: echttp.DefaultBackoff.Duration,
 		Factor:   echttp.DefaultBackoff.Factor,
@@ -123,7 +123,7 @@ func NewClient(ctx context.Context, opts ...remote.Option) Client {
 
 	o := opts
 	if len(opts) == 0 {
-		o = createRemoteOptions(ctx)
+		o = CreateRemoteOptions(ctx)
 	}
 
 	return &defaultClient{ctx, o}
