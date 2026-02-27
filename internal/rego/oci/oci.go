@@ -742,10 +742,10 @@ func ClearCaches() {
 // Lighter caches (manifests, descriptors, image indexes) remain global because they
 // are small and benefit from cross-component sharing (e.g., shared task bundle manifests).
 type ComponentCache struct {
-	blobCache        sync.Map
-	blobFlight       singleflight.Group
-	imageFilesCache  sync.Map
-	imageFilesFlight singleflight.Group
+	blobCache   sync.Map
+	blobFlight  singleflight.Group
+	filesCache  sync.Map
+	filesFlight singleflight.Group
 }
 
 type componentCacheKey struct{}
@@ -927,15 +927,15 @@ func ociImageFiles(bctx rego.BuiltinContext, refTerm *ast.Term, pathsTerm *ast.T
 	cc := componentCacheFromContext(bctx.Context)
 
 	// Check cache first (fast path)
-	if cached, found := cc.imageFilesCache.Load(cacheKey); found {
+	if cached, found := cc.filesCache.Load(cacheKey); found {
 		logger.Debug("Image files served from cache")
 		return cached.(*ast.Term), nil
 	}
 
 	// Use singleflight to prevent thundering herd
-	result, err, _ := cc.imageFilesFlight.Do(cacheKey, func() (any, error) {
+	result, err, _ := cc.filesFlight.Do(cacheKey, func() (any, error) {
 		// Double-check cache inside singleflight
-		if cached, found := cc.imageFilesCache.Load(cacheKey); found {
+		if cached, found := cc.filesCache.Load(cacheKey); found {
 			logger.Debug("Image files served from cache (after singleflight)")
 			return cached, nil
 		}
@@ -996,7 +996,7 @@ func ociImageFiles(bctx rego.BuiltinContext, refTerm *ast.Term, pathsTerm *ast.T
 
 		logger.Debug("Successfully extracted image files")
 		term := ast.NewTerm(filesValue)
-		cc.imageFilesCache.Store(cacheKey, term)
+		cc.filesCache.Store(cacheKey, term)
 		return term, nil
 	})
 
@@ -1031,15 +1031,15 @@ func ociBlobFiles(bctx rego.BuiltinContext, refTerm *ast.Term, pathsTerm *ast.Te
 	cc := componentCacheFromContext(bctx.Context)
 
 	// Check cache first (fast path)
-	if cached, found := cc.imageFilesCache.Load(cacheKey); found {
+	if cached, found := cc.filesCache.Load(cacheKey); found {
 		logger.Debug("Blob files served from cache")
 		return cached.(*ast.Term), nil
 	}
 
 	// Use singleflight to prevent thundering herd
-	result, err, _ := cc.imageFilesFlight.Do(cacheKey, func() (any, error) {
+	result, err, _ := cc.filesFlight.Do(cacheKey, func() (any, error) {
 		// Double-check cache inside singleflight
-		if cached, found := cc.imageFilesCache.Load(cacheKey); found {
+		if cached, found := cc.filesCache.Load(cacheKey); found {
 			logger.Debug("Blob files served from cache (after singleflight)")
 			return cached, nil
 		}
@@ -1091,7 +1091,7 @@ func ociBlobFiles(bctx rego.BuiltinContext, refTerm *ast.Term, pathsTerm *ast.Te
 		if len(targetPaths) == 0 {
 			logger.Debug("No paths specified, returning empty result")
 			term := ast.NewTerm(ast.NewObject())
-			cc.imageFilesCache.Store(cacheKey, term)
+			cc.filesCache.Store(cacheKey, term)
 			return term, nil
 		}
 
@@ -1203,7 +1203,7 @@ func ociBlobFiles(bctx rego.BuiltinContext, refTerm *ast.Term, pathsTerm *ast.Te
 
 		logger.WithField("file_count", len(extractedFiles)).Debug("Successfully extracted blob files")
 		term := ast.NewTerm(filesValue)
-		cc.imageFilesCache.Store(cacheKey, term)
+		cc.filesCache.Store(cacheKey, term)
 		return term, nil
 	})
 
