@@ -10,6 +10,8 @@ information.
 |===
 |xref:ec_oci_blob.adoc[ec.oci.blob]
 |Fetch a blob from an OCI registry.
+|xref:ec_oci_blob_files.adoc[ec.oci.blob_files]
+|Fetch structured files (YAML or JSON) from within a blob tar archive.
 |xref:ec_oci_descriptor.adoc[ec.oci.descriptor]
 |Fetch a raw Image from an OCI registry.
 |xref:ec_oci_image_files.adoc[ec.oci.image_files]

@@ -1,0 +1,21 @@
+= ec.oci.blob_files
+
+Fetch structured files (YAML or JSON) from within a blob tar archive.
+
+== Usage
+
+  files = ec.oci.blob_files(ref: string, paths: array<string>)
+
+== Parameters
+
+* `ref` (`string`): OCI blob reference
+* `paths` (`array<string>`): the list of paths
+
+== Return
+
+`files` (`object`): object representing the extracted files
+
+The object contains dynamic attributes.
+The attributes are of `string` type and represent the full path of the file within the blob.
+The values are of `any` type and hold the file contents.
+

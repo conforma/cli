@@ -359,6 +359,9 @@ conftest-test-cmd-diff:
 	  <(curl -s https://raw.githubusercontent.com/open-policy-agent/conftest/$${CONFTEST_VER}/internal/commands/test.go) \
 	  cmd/test/test.go
 
+fmt-all:
+	@git ls-files '*.go' | xargs gofmt -w
+
 # Useful while hacking on build numbers and versions
 debug-version:
 	@echo $(VERSION)
