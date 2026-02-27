@@ -337,3 +337,81 @@ Feature: Verify Enterprise Contract Tekton Tasks
     Then the task should succeed
       And the task logs for step "report" should match the snapshot
       And the task results should match the snapshot
+
+  Scenario: Keyless signing verification - Cosign v2 style
+    Given a working namespace
+    Given a cluster policy with content:
+      ```
+      {
+        "sources": [
+          {
+            "policy": [
+              "github.com/conforma/policy//policy/release?ref=0de5461c14413484575e63e96ddb514d8ab954b5",
+              "github.com/conforma/policy//policy/lib?ref=0de5461c14413484575e63e96ddb514d8ab954b5"
+            ],
+            "config": {
+              "include": [
+                "slsa_provenance_available"
+              ]
+            }
+          }
+        ]
+      }
+      ```
+    #
+    # See hack/keyless-test-image for how the test image was created. It's not ideal
+    # that this test requires an external image, but we already do this elsewhere, so
+    # I guess one more is okay. I'm hard coding the identity used to sign the image
+    # which is my personal account. That might have to change if the image is recreated.
+    #
+    # Todo: We should be able test this also with an internal image similar to how it's
+    # done in the "happy day with keyless" scenario in validate_image.feature.
+    #
+    When version 0.1 of the task named "verify-enterprise-contract" is run with parameters:
+      | IMAGES                  | {"components": [{"containerImage": "quay.io/conforma/test:keyless_v2@sha256:2dbc250c79306c30801216e37cd25164c64fda9ac3b9677c5eb0860cb13dbb87"}]} |
+      | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                               |
+      | CERTIFICATE_IDENTITY    | sbaird@redhat.com                                                         |
+      | CERTIFICATE_OIDC_ISSUER | https://accounts.google.com                                               |
+      | REKOR_HOST              | https://rekor.sigstore.dev                                                |
+      | IGNORE_REKOR            | false                                                                     |
+      | STRICT                  | true                                                                      |
+    Then the task should succeed
+     And the task logs for step "report-json" should match the snapshot
+     And the task results should match the snapshot
+
+  #
+  # Todo: This is the same as the above but using a test image signed with cosign v3. It
+  # fails currently, but it might pass if https://github.com/conforma/cli/pull/3123 is merged.
+  #
+  Scenario: Keyless signing verification - Cosign v3 style
+    Given a working namespace
+    Given a cluster policy with content:
+      ```
+      {
+        "sources": [
+          {
+            "policy": [
+              "github.com/conforma/policy//policy/release?ref=0de5461c14413484575e63e96ddb514d8ab954b5",
+              "github.com/conforma/policy//policy/lib?ref=0de5461c14413484575e63e96ddb514d8ab954b5"
+            ],
+            "config": {
+              "include": [
+                "slsa_provenance_available"
+              ]
+            }
+          }
+        ]
+      }
+      ```
+    When version 0.1 of the task named "verify-enterprise-contract" is run with parameters:
+      | IMAGES                  | {"components": [{"containerImage": "quay.io/conforma/test:keyless_v3@sha256:704f54193e2a3698275b6115d32f2c2dd2cf04a07be520407eac8e2a52e40aba"}]} |
+      | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                               |
+      | CERTIFICATE_IDENTITY    | sbaird@redhat.com                                                         |
+      | CERTIFICATE_OIDC_ISSUER | https://accounts.google.com                                               |
+      | REKOR_HOST              | https://rekor.sigstore.dev                                                |
+      | IGNORE_REKOR            | false                                                                     |
+      | STRICT                  | true                                                                      |
+    # Todo: Make it not fail
+    Then the task should fail
+     And the task logs for step "report-json" should match the snapshot
+     And the task results should match the snapshot
