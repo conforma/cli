@@ -301,6 +301,8 @@ spec:
         value: tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml tasks/verify-conforma-konflux-ta/0.1/verify-conforma-konflux-ta.yaml
       - name: STEPS_IMAGE
         value: $(params.bundle-cli-ref-repo)@$(tasks.build-image-index.results.IMAGE_DIGEST)
+      - name: STEPS_IMAGE_STEP_NAMES
+        value: !use-trusted-artifact
       - name: URL
         value: $(params.git-url)
       - name: REVISION
@@ -314,7 +316,8 @@ spec:
         - name: name
           value: tkn-bundle-oci-ta
         - name: bundle
-          value: quay.io/konflux-ci/tekton-catalog/task-tkn-bundle-oci-ta:0.2@sha256:ceb35ce497159209c8a329dcf3969b337a8ea527412d098f0071ec48d76a5693
+          # need to add digest
+          value: quay.io/konflux-ci/tekton-catalog/task-tkn-bundle-oci-ta:0.3
         - name: kind
           value: task
         resolver: bundles
