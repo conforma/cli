@@ -1151,6 +1151,12 @@ func ociBlobFiles(bctx rego.BuiltinContext, refTerm *ast.Term, pathsTerm *ast.Te
 			}
 
 			// Read the file content with size limit protection
+			// Note: This limit protection can't protect against all kinds of memory
+			// exhaustion attacks since we already loaded the full blobContent prior
+			// to this. I'm thinking let's keep it here anyhow since it maybe (?)
+			// can protect against certain kinds of attacks, and it's probably not
+			// doing any harm. That said, its value is questionable and we may want
+			// to revisit this later.
 			limitedReader := io.LimitReader(archive, maxTarEntrySize)
 			data, err := io.ReadAll(limitedReader)
 			if err != nil {
