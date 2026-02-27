@@ -98,8 +98,12 @@ func (p *policy) PublicKeyPEM() ([]byte, error) {
 	if p.Keyless() {
 		return []byte{}, nil
 	}
+	// If SigVerifier is not initialized but we have PublicKey in the policy spec,
+	// return it directly. This handles scenarios like "ec validate input" where
+	// signature verification is not performed but the policy spec may contain a
+	// publicKey field (fixes issue #1528).
 	if p.checkOpts == nil || p.checkOpts.SigVerifier == nil {
-		return nil, errors.New("no check options or sig verifier configured")
+		return []byte(p.PublicKey), nil
 	}
 	pk, err := p.checkOpts.SigVerifier.PublicKey()
 	if err != nil {

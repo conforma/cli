@@ -526,11 +526,13 @@ func TestPublicKeyPEM(t *testing.T) {
 			expectedPublicKey: utils.TestPublicKey,
 		},
 		{
-			name: "checkOpts is nil",
+			// When checkOpts is nil but publicKey is set in the policy spec,
+			// PublicKeyPEM returns the public key directly (fix for issue #1528)
+			name: "checkOpts is nil but publicKey in spec",
 			newPolicy: func(ctx context.Context) (Policy, error) {
-				return NewInertPolicy(ctx, fmt.Sprintf(`{"publicKey": "%s"}`, utils.TestPublicKey))
+				return NewInertPolicy(ctx, fmt.Sprintf(`{"publicKey": %s}`, utils.TestPublicKeyJSON))
 			},
-			err: "no check options or sig verifier configured",
+			expectedPublicKey: utils.TestPublicKey,
 		},
 		{
 			name: "keyless",

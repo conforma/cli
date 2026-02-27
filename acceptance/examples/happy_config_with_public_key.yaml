@@ -1,0 +1,7 @@
+---
+# Policy config that includes a publicKey - for testing issue #1528
+# ec validate input should work even when publicKey is specified
+publicKey: "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----"
+sources:
+  - policy:
+      - "git::https://${GITHOST}/git/happy-day-policy.git"

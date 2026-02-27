@@ -139,3 +139,35 @@ success: true
 [multiple data source top level key map merging:stderr - 1]
 
 ---
+
+[valid policy URL with publicKey in policy config:stdout - 1]
+{
+  "success": true,
+  "filepaths": [
+    {
+      "filepath": "pipeline_definition.yaml",
+      "violations": [],
+      "warnings": [],
+      "successes": null,
+      "success": true,
+      "success-count": 1
+    }
+  ],
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::https://${GITHOST}/git/happy-day-policy.git"
+        ]
+      }
+    ],
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----"
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[valid policy URL with publicKey in policy config:stderr - 1]
+
+---
