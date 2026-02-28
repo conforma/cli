@@ -395,6 +395,30 @@ func taskResultsShouldMatchTheSnapshot(ctx context.Context) error {
 	return snaps.MatchSnapshot(ctx, "results", string(j), nil)
 }
 
+func taskResultShouldEqual(ctx context.Context, resultName, expectedValue string) error {
+	c := testenv.FetchState[ClusterState](ctx)
+
+	if err := mustBeUp(ctx, *c); err != nil {
+		return err
+	}
+
+	info, err := c.cluster.TaskInfo(ctx)
+	if err != nil {
+		return err
+	}
+
+	actual, ok := info.Results[resultName]
+	if !ok {
+		return fmt.Errorf("result %q not found in task results", resultName)
+	}
+
+	if fmt.Sprintf("%v", actual) != expectedValue {
+		return fmt.Errorf("result %q: expected %q, got %q", resultName, expectedValue, actual)
+	}
+
+	return nil
+}
+
 func taskLogsShouldContain(ctx context.Context, stepName, needle string) error {
 	c := testenv.FetchState[ClusterState](ctx)
 
@@ -467,6 +491,7 @@ func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step("^the task logs for step \"([^\"]*)\" should contain `([^`]+)`$", taskLogsShouldContain)
 	sc.Step(`^the task env var for step "([^"]*)" named "([^"]*)" should be set to "([^"]*)"$`, stepEnvVarShouldBe)
 	sc.Step(`^the task results should match the snapshot$`, taskResultsShouldMatchTheSnapshot)
+	sc.Step(`^the task result "([^"]*)" should equal "([^"]*)"$`, taskResultShouldEqual)
 	sc.Step(`^policy configuration named "([^"]*)" with (\d+) policy sources from "([^"]*)"(?:, patched with)$`, createNamedPolicyWithManySources)
 	// stop usage of the cluster once a test is done, godog will call this
 	// function on failure and on the last step, so more than once if the

@@ -95,7 +95,7 @@ paths can be provided by using the `:` separator.
 *VSA_SIGNING_KEY* (`string`):: Signing key for format=dsse (k8s:// or file:// URL)
 *VSA_UPLOAD* (`string`):: VSA upload destination
 +
-*Default*: `local@/var/workdir/vsa`
+*Default*: `local@/var/workdir/conforma/vsa`
 *ociStorage* (`string`):: OCI storage URL for trusted artifacts
 
 == Results
