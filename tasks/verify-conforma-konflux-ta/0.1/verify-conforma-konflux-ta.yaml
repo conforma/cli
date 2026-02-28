@@ -203,7 +203,7 @@ spec:
     - name: VSA_UPLOAD
       type: string
       description: VSA upload destination
-      default: "local@/var/workdir/vsa"
+      default: "local@/var/workdir/conforma/vsa"
 
     - name: ociStorage
       type: string
@@ -322,22 +322,48 @@ spec:
         if [[ "$(params.ENABLE_VSA)" == "true" ]]; then
           EC_ARGS+=(--vsa --attestation-format=$(params.ATTESTATION_FORMAT))
 
+          # Extract local path from VSA_UPLOAD for output directory
+          # VSA_UPLOAD format is "local@/path/to/dir"
+          VSA_LOCAL_PATH=$(echo "$(params.VSA_UPLOAD)" | grep -oE '^local@[^ ]+' | sed 's/^local@//' | head -n1)
+
           if [[ "$(params.ATTESTATION_FORMAT)" == "dsse" ]]; then
             if [[ -z "$(params.VSA_SIGNING_KEY)" ]]; then
               echo "ERROR: VSA_SIGNING_KEY required for format=dsse" >&2
               exit 1
             fi
             EC_ARGS+=(--vsa-signing-key "$(params.VSA_SIGNING_KEY)")
+            EC_ARGS+=(--vsa-upload "$(params.VSA_UPLOAD)")
           fi
 
-          EC_ARGS+=(--vsa-upload "$(params.VSA_UPLOAD)")
-          echo "true" > $(results.VSA_GENERATED.path)
+          # ec requires --attestation-output-dir to be under /tmp or cwd.
+          # Write there first, then copy to the workdir so
+          # create-trusted-artifact includes them in the archive.
+          VSA_TMP_DIR="/tmp/vsa-output"
+          mkdir -p "$VSA_TMP_DIR"
+          EC_ARGS+=(--attestation-output-dir "$VSA_TMP_DIR")
+
+          if [[ -n "$VSA_LOCAL_PATH" ]]; then
+            echo "$VSA_LOCAL_PATH" > $(results.sourceDataArtifact.path)
+          fi
+
+          echo -n "true" > $(results.VSA_GENERATED.path)
         else
-          echo "false" > $(results.VSA_GENERATED.path)
+          echo -n "false" > $(results.VSA_GENERATED.path)
         fi
 
         # Execute EC with constructed arguments
         ec "${EC_ARGS[@]}"
+
+        # Copy VSA output from /tmp to workdir for trusted artifact archival
+        if [[ "$(params.ENABLE_VSA)" == "true" ]]; then
+          VSA_LOCAL_PATH=$(echo "$(params.VSA_UPLOAD)" | grep -oE '^local@[^ ]+' | sed 's/^local@//' | head -n1)
+          if [[ -n "$VSA_LOCAL_PATH" && -d "/tmp/vsa-output" ]]; then
+            mkdir -p "$VSA_LOCAL_PATH"
+            cp -r /tmp/vsa-output/* "$VSA_LOCAL_PATH"/ 2>/dev/null || true
+            # Include raw JSON report for downstream SLSA VSA generation
+            cp "$(params.HOMEDIR)/report-json.json" "$VSA_LOCAL_PATH"/ 2>/dev/null || true
+          fi
+        fi
       env:
         # POLICY_CONFIGURATION is passed via environment variable to safely handle JSON strings
         # This avoids shell quoting issues when Tekton substitutes parameter values directly in scripts
@@ -449,7 +475,9 @@ spec:
         - name: ociStorage
           value: $(params.ociStorage)
         - name: workDir
-          value: /var/workdir
+          value: $(params.TRUSTED_ARTIFACTS_EXTRACT_DIR)
+        - name: sourceDataArtifact
+          value: $(results.sourceDataArtifact.path)
 
   volumes:
     - name: trusted-ca

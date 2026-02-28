@@ -134,7 +134,7 @@
 [Golden container image with trusted artifacts:results - 1]
 {
   "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":5,\"failures\":0,\"warnings\":0,\"result\":\"SUCCESS\"}\n",
-  "VSA_GENERATED": "false\n"
+  "VSA_GENERATED": "false"
 }
 ---
 
