@@ -22,7 +22,7 @@ package sigstore
 
 import (
 	"context"
-	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -176,8 +176,8 @@ func doVerifyImage(bctx rego.BuiltinContext, logger *log.Entry, uri ast.String, 
 }
 
 func buildCacheKey(ref string, optsTerm *ast.Term) string {
-	h := sha256.Sum256([]byte(optsTerm.String()))
-	optsHash := hex.EncodeToString(h[:8]) // First 8 bytes is enough for dedup
+	h := sha512.Sum512([]byte(optsTerm.String()))
+	optsHash := hex.EncodeToString(h[:])
 	return ref + "|" + optsHash
 }
 
