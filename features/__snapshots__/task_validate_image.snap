@@ -180,3 +180,204 @@ true
   "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":3,\"failures\":0,\"warnings\":0,\"result\":\"SUCCESS\"}\n"
 }
 ---
+
+[Keyless signing verification - Cosign v3 style:report-json - 1]
+{
+  "success": false,
+  "components": [
+    {
+      "name": "",
+      "containerImage": "quay.io/conforma/test@sha256:704f54193e2a3698275b6115d32f2c2dd2cf04a07be520407eac8e2a52e40aba",
+      "source": {},
+      "violations": [
+        {
+          "msg": "Image attestation check failed: no matching attestations: ",
+          "metadata": {
+            "code": "builtin.attestation.signature_check",
+            "description": "The attestation signature matches available signing materials.",
+            "title": "Attestation signature check passed"
+          }
+        },
+        {
+          "msg": "Image signature check failed: no signatures found",
+          "metadata": {
+            "code": "builtin.image.signature_check",
+            "description": "The image signature matches available signing materials.",
+            "title": "Image signature check passed"
+          }
+        }
+      ],
+      "success": false
+    }
+  ],
+  "key": "",
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::github.com/conforma/policy//policy/release?ref=0de5461c14413484575e63e96ddb514d8ab954b5",
+          "git::github.com/conforma/policy//policy/lib?ref=0de5461c14413484575e63e96ddb514d8ab954b5"
+        ],
+        "config": {
+          "include": [
+            "slsa_provenance_available"
+          ]
+        }
+      }
+    ],
+    "rekorUrl": "https://rekor.sigstore.dev"
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[Keyless signing verification - Cosign v3 style:results - 1]
+{
+  "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":0,\"failures\":2,\"warnings\":0,\"result\":\"FAILURE\"}\n"
+}
+---
+
+[Keyless signing verification - Cosign v2 style:report-json - 1]
+{
+  "success": true,
+  "components": [
+    {
+      "name": "",
+      "containerImage": "quay.io/conforma/test@sha256:2dbc250c79306c30801216e37cd25164c64fda9ac3b9677c5eb0860cb13dbb87",
+      "source": {},
+      "successes": [
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "builtin.attestation.signature_check",
+            "description": "The attestation signature matches available signing materials.",
+            "title": "Attestation signature check passed"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "builtin.attestation.syntax_check",
+            "description": "The attestation has correct syntax.",
+            "title": "Attestation syntax check passed"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "builtin.image.signature_check",
+            "description": "The image signature matches available signing materials.",
+            "title": "Image signature check passed"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "slsa_provenance_available.allowed_predicate_types_provided",
+            "collections": [
+              "minimal",
+              "slsa3",
+              "redhat",
+              "redhat_rpms",
+              "policy_data"
+            ],
+            "description": "Confirm the `allowed_predicate_types` rule data was provided, since it is required by the policy rules in this package.",
+            "title": "Allowed predicate types provided"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "slsa_provenance_available.attestation_predicate_type_accepted",
+            "collections": [
+              "minimal",
+              "slsa3",
+              "redhat",
+              "redhat_rpms"
+            ],
+            "depends_on": [
+              "attestation_type.known_attestation_type"
+            ],
+            "description": "Verify that the predicateType field of the attestation indicates the in-toto SLSA Provenance format was used to attest the PipelineRun.",
+            "title": "Expected attestation predicate type found"
+          }
+        }
+      ],
+      "success": true,
+      "signatures": [
+        {
+          "keyid": "ebaae7a16610094b0fe46e10ad9a4364464182c0",
+          "sig": "MEQCIHX3aDGqhTjZy/vqz+mtxnH7TF0ck0DMNlF6qarDl8QLAiA8cG+G7RDOgCnc94dOM21VRfVw2OdC5BiP0la3INFfiw==",
+          "certificate": "-----BEGIN CERTIFICATE-----\nMIICyzCCAlGgAwIBAgIUDVXAt072DG4pno8p3eCIGGykBM0wCgYIKoZIzj0EAwMw\nNzEVMBMGA1UEChMMc2lnc3RvcmUuZGV2MR4wHAYDVQQDExVzaWdzdG9yZS1pbnRl\ncm1lZGlhdGUwHhcNMjYwMjI4MTc0MTM3WhcNMjYwMjI4MTc1MTM3WjAAMFkwEwYH\nKoZIzj0CAQYIKoZIzj0DAQcDQgAEfdTUm6Ln/FXAeWExBXjkEyhAc9dTURgL4k2f\nsU1YdwxaHYvbDhzapPvBnKBKkpsJLXhkUsBWh/YLpF/QXUvEoKOCAXAwggFsMA4G\nA1UdDwEB/wQEAwIHgDATBgNVHSUEDDAKBggrBgEFBQcDAzAdBgNVHQ4EFgQU66rn\noWYQCUsP5G4QrZpDZEZBgsAwHwYDVR0jBBgwFoAU39Ppz1YkEZb5qNjpKFWixi4Y\nZD8wHwYDVR0RAQH/BBUwE4ERc2JhaXJkQHJlZGhhdC5jb20wKQYKKwYBBAGDvzAB\nAQQbaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tMCsGCisGAQQBg78wAQgEHQwb\naHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tMIGLBgorBgEEAdZ5AgQCBH0EewB5\nAHcA3T0wasbHETJjGR4cmWc3AqJKXrjePK3/h4pygC8p7o4AAAGcpVdxPAAABAMA\nSDBGAiEAr0X9iTZ80D1OLk8kgN6ajmCpUqFwjpjRXP8MsiCpwfoCIQDlvn2fX1/w\n7bg8aLjt3+A/d7uHI7W/W1C96nyOCUwEyTAKBggqhkjOPQQDAwNoADBlAjEAseqM\nwN0uPByvC590PZ9QE3f4+hJ8IjoZ+HlToDN/5SxJ4RoTH1IWjNBvIIES6lE/AjAM\nAAR6drRugmHaSldfu/1tPoqJFW93eQBsMmVgc0QFdX4z62hhVDvUENGJxYXwffo=\n-----END CERTIFICATE-----\n",
+          "chain": [
+            "-----BEGIN CERTIFICATE-----\nMIICGjCCAaGgAwIBAgIUALnViVfnU0brJasmRkHrn/UnfaQwCgYIKoZIzj0EAwMw\nKjEVMBMGA1UEChMMc2lnc3RvcmUuZGV2MREwDwYDVQQDEwhzaWdzdG9yZTAeFw0y\nMjA0MTMyMDA2MTVaFw0zMTEwMDUxMzU2NThaMDcxFTATBgNVBAoTDHNpZ3N0b3Jl\nLmRldjEeMBwGA1UEAxMVc2lnc3RvcmUtaW50ZXJtZWRpYXRlMHYwEAYHKoZIzj0C\nAQYFK4EEACIDYgAE8RVS/ysH+NOvuDZyPIZtilgUF9NlarYpAd9HP1vBBH1U5CV7\n7LSS7s0ZiH4nE7Hv7ptS6LvvR/STk798LVgMzLlJ4HeIfF3tHSaexLcYpSASr1kS\n0N/RgBJz/9jWCiXno3sweTAOBgNVHQ8BAf8EBAMCAQYwEwYDVR0lBAwwCgYIKwYB\nBQUHAwMwEgYDVR0TAQH/BAgwBgEB/wIBADAdBgNVHQ4EFgQU39Ppz1YkEZb5qNjp\nKFWixi4YZD8wHwYDVR0jBBgwFoAUWMAeX5FFpWapesyQoZMi0CrFxfowCgYIKoZI\nzj0EAwMDZwAwZAIwPCsQK4DYiZYDPIaDi5HFKnfxXx6ASSVmERfsynYBiX2X6SJR\nnZU84/9DZdnFvvxmAjBOt6QpBlc4J/0DxvkTCqpclvziL6BCCPnjdlIB3Pu3BxsP\nmygUY7Ii2zbdCdliiow=\n-----END CERTIFICATE-----\n",
+            "-----BEGIN CERTIFICATE-----\nMIIB9zCCAXygAwIBAgIUALZNAPFdxHPwjeDloDwyYChAO/4wCgYIKoZIzj0EAwMw\nKjEVMBMGA1UEChMMc2lnc3RvcmUuZGV2MREwDwYDVQQDEwhzaWdzdG9yZTAeFw0y\nMTEwMDcxMzU2NTlaFw0zMTEwMDUxMzU2NThaMCoxFTATBgNVBAoTDHNpZ3N0b3Jl\nLmRldjERMA8GA1UEAxMIc2lnc3RvcmUwdjAQBgcqhkjOPQIBBgUrgQQAIgNiAAT7\nXeFT4rb3PQGwS4IajtLk3/OlnpgangaBclYpsYBr5i+4ynB07ceb3LP0OIOZdxex\nX69c5iVuyJRQ+Hz05yi+UF3uBWAlHpiS5sh0+H2GHE7SXrk1EC5m1Tr19L9gg92j\nYzBhMA4GA1UdDwEB/wQEAwIBBjAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBRY\nwB5fkUWlZql6zJChkyLQKsXF+jAfBgNVHSMEGDAWgBRYwB5fkUWlZql6zJChkyLQ\nKsXF+jAKBggqhkjOPQQDAwNpADBmAjEAj1nHeXZp+13NWBNa+EDsDP8G1WWg1tCM\nWP/WHPqpaVo0jhsweNFZgSs0eE7wYI4qAjEA2WB9ot98sIkoF3vZYdd3/VtWB5b9\nTNMea7Ix/stJ5TfcLLeABLE4BNJOsQ4vnBHJ\n-----END CERTIFICATE-----\n"
+          ],
+          "metadata": {
+            "Fulcio Issuer": "https://accounts.google.com",
+            "Fulcio Issuer (V2)": "https://accounts.google.com",
+            "Issuer": "CN=sigstore-intermediate,O=sigstore.dev",
+            "Not After": "${TIMESTAMP}",
+            "Not Before": "${TIMESTAMP}",
+            "Serial Number": "d55c0b74ef60c6e299e8f29dde088186ca404cd",
+            "Subject Alternative Name": "Email Addresses:sbaird@redhat.com"
+          }
+        }
+      ],
+      "attestations": [
+        {
+          "type": "https://in-toto.io/Statement/v0.1",
+          "predicateType": "https://slsa.dev/provenance/v1",
+          "predicateBuildType": "https://example.com/build-type/v1",
+          "signatures": [
+            {
+              "keyid": "a5f7cfad1a5096bda904e09298b7a1ef4ee3ba8a",
+              "sig": "MEUCIQDwhJ8ih3vEbxkEi3cKOcHOXmM/fspp199FTSqlDaEkHQIgFpZGtk8HUn0OSAfXtQa1cdIFB4On8UX6h2HLrcEvoJ8=",
+              "certificate": "-----BEGIN CERTIFICATE-----\nMIICyTCCAk+gAwIBAgIUFUg18Z3r6YfM9Nj8Y03yAUuO5yIwCgYIKoZIzj0EAwMw\nNzEVMBMGA1UEChMMc2lnc3RvcmUuZGV2MR4wHAYDVQQDExVzaWdzdG9yZS1pbnRl\ncm1lZGlhdGUwHhcNMjYwMjI4MTc0MTU0WhcNMjYwMjI4MTc1MTU0WjAAMFkwEwYH\nKoZIzj0CAQYIKoZIzj0DAQcDQgAEBl2hK5c1b9vqypKKZldJMCragUPWi5hnhIad\n162nomyr8GLb+B0dmMtEGbGQBj6rzLfH2PtmtfMVb5kal4MgZ6OCAW4wggFqMA4G\nA1UdDwEB/wQEAwIHgDATBgNVHSUEDDAKBggrBgEFBQcDAzAdBgNVHQ4EFgQUpffP\nrRpQlr2pBOCSmLeh707juoowHwYDVR0jBBgwFoAU39Ppz1YkEZb5qNjpKFWixi4Y\nZD8wHwYDVR0RAQH/BBUwE4ERc2JhaXJkQHJlZGhhdC5jb20wKQYKKwYBBAGDvzAB\nAQQbaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tMCsGCisGAQQBg78wAQgEHQwb\naHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tMIGJBgorBgEEAdZ5AgQCBHsEeQB3\nAHUA3T0wasbHETJjGR4cmWc3AqJKXrjePK3/h4pygC8p7o4AAAGcpVezWgAABAMA\nRjBEAiA/NXWMmbfw2wWZlI+BvrYO4jC01rw/0YF5bEY4tXsg0gIgXIpNG0qjaB0u\nm6Q0pNRu10K46Gt9SmJYJ8U+FpnmuPIwCgYIKoZIzj0EAwMDaAAwZQIwMVWt3/LU\npCCWMADC8p3hxvjyDDNGc3BXCZVkCeSf239ZYutcDI4u2D0nO9Tr+aCdAjEA2SUD\ny7pTu+/eOnj5k3Rh5RoHN6QDgeYp8txCdzVGnKzqAgRbLhsduqKF91pGJsKN\n-----END CERTIFICATE-----\n",
+              "chain": [
+                "-----BEGIN CERTIFICATE-----\nMIICGjCCAaGgAwIBAgIUALnViVfnU0brJasmRkHrn/UnfaQwCgYIKoZIzj0EAwMw\nKjEVMBMGA1UEChMMc2lnc3RvcmUuZGV2MREwDwYDVQQDEwhzaWdzdG9yZTAeFw0y\nMjA0MTMyMDA2MTVaFw0zMTEwMDUxMzU2NThaMDcxFTATBgNVBAoTDHNpZ3N0b3Jl\nLmRldjEeMBwGA1UEAxMVc2lnc3RvcmUtaW50ZXJtZWRpYXRlMHYwEAYHKoZIzj0C\nAQYFK4EEACIDYgAE8RVS/ysH+NOvuDZyPIZtilgUF9NlarYpAd9HP1vBBH1U5CV7\n7LSS7s0ZiH4nE7Hv7ptS6LvvR/STk798LVgMzLlJ4HeIfF3tHSaexLcYpSASr1kS\n0N/RgBJz/9jWCiXno3sweTAOBgNVHQ8BAf8EBAMCAQYwEwYDVR0lBAwwCgYIKwYB\nBQUHAwMwEgYDVR0TAQH/BAgwBgEB/wIBADAdBgNVHQ4EFgQU39Ppz1YkEZb5qNjp\nKFWixi4YZD8wHwYDVR0jBBgwFoAUWMAeX5FFpWapesyQoZMi0CrFxfowCgYIKoZI\nzj0EAwMDZwAwZAIwPCsQK4DYiZYDPIaDi5HFKnfxXx6ASSVmERfsynYBiX2X6SJR\nnZU84/9DZdnFvvxmAjBOt6QpBlc4J/0DxvkTCqpclvziL6BCCPnjdlIB3Pu3BxsP\nmygUY7Ii2zbdCdliiow=\n-----END CERTIFICATE-----\n",
+                "-----BEGIN CERTIFICATE-----\nMIIB9zCCAXygAwIBAgIUALZNAPFdxHPwjeDloDwyYChAO/4wCgYIKoZIzj0EAwMw\nKjEVMBMGA1UEChMMc2lnc3RvcmUuZGV2MREwDwYDVQQDEwhzaWdzdG9yZTAeFw0y\nMTEwMDcxMzU2NTlaFw0zMTEwMDUxMzU2NThaMCoxFTATBgNVBAoTDHNpZ3N0b3Jl\nLmRldjERMA8GA1UEAxMIc2lnc3RvcmUwdjAQBgcqhkjOPQIBBgUrgQQAIgNiAAT7\nXeFT4rb3PQGwS4IajtLk3/OlnpgangaBclYpsYBr5i+4ynB07ceb3LP0OIOZdxex\nX69c5iVuyJRQ+Hz05yi+UF3uBWAlHpiS5sh0+H2GHE7SXrk1EC5m1Tr19L9gg92j\nYzBhMA4GA1UdDwEB/wQEAwIBBjAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBRY\nwB5fkUWlZql6zJChkyLQKsXF+jAfBgNVHSMEGDAWgBRYwB5fkUWlZql6zJChkyLQ\nKsXF+jAKBggqhkjOPQQDAwNpADBmAjEAj1nHeXZp+13NWBNa+EDsDP8G1WWg1tCM\nWP/WHPqpaVo0jhsweNFZgSs0eE7wYI4qAjEA2WB9ot98sIkoF3vZYdd3/VtWB5b9\nTNMea7Ix/stJ5TfcLLeABLE4BNJOsQ4vnBHJ\n-----END CERTIFICATE-----\n"
+              ],
+              "metadata": {
+                "Fulcio Issuer": "https://accounts.google.com",
+                "Fulcio Issuer (V2)": "https://accounts.google.com",
+                "Issuer": "CN=sigstore-intermediate,O=sigstore.dev",
+                "Not After": "${TIMESTAMP}",
+                "Not Before": "${TIMESTAMP}",
+                "Serial Number": "154835f19debe987ccf4d8fc634df2014b8ee722",
+                "Subject Alternative Name": "Email Addresses:sbaird@redhat.com"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "key": "",
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::github.com/conforma/policy//policy/release?ref=0de5461c14413484575e63e96ddb514d8ab954b5",
+          "git::github.com/conforma/policy//policy/lib?ref=0de5461c14413484575e63e96ddb514d8ab954b5"
+        ],
+        "config": {
+          "include": [
+            "slsa_provenance_available"
+          ]
+        }
+      }
+    ],
+    "rekorUrl": "https://rekor.sigstore.dev"
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[Keyless signing verification - Cosign v2 style:results - 1]
+{
+  "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":5,\"failures\":0,\"warnings\":0,\"result\":\"SUCCESS\"}\n"
+}
+---
