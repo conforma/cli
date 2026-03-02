@@ -157,11 +157,19 @@ func (a *ApplicationSnapshotImage) FetchImageFiles(ctx context.Context) error {
 func (a *ApplicationSnapshotImage) ValidateImageSignature(ctx context.Context) error {
 	opts := a.checkOpts
 	client := oci.NewClient(ctx)
+	useBundles := a.hasBundles(ctx)
 
 	var sigs []cosignOCI.Signature
 	var err error
 
-	if a.hasBundles(ctx) {
+	if useBundles {
+		// For v3 bundles, both image signatures and attestations are stored as
+		// "attestations" in the unified bundle format. So we use VerifyImageAttestations
+		// to extract image signatures from the bundle, even though it seems unintuitive.
+		// This is different from v2 where image signatures and attestations were separate.
+		//
+		// The certificate extraction requires different handling for bundles and
+		// should be addressed in future work to achieve full v2 parity.
 		opts.NewBundleFormat = true
 		opts.ClaimVerifier = cosign.IntotoSubjectClaimVerifier
 		sigs, _, err = client.VerifyImageAttestations(a.reference, &opts)
@@ -174,11 +182,24 @@ func (a *ApplicationSnapshotImage) ValidateImageSignature(ctx context.Context) e
 	}
 
 	for _, s := range sigs {
-		es, err := signature.NewEntitySignature(s)
-		if err != nil {
-			return err
+		if useBundles {
+			// For bundle image signatures produced by cosign v3, the old
+			// method of accessing the signatures doesn't work. Instead we have
+			// to extract them from the bundle. And the bundle actually has
+			// signatures for both the image itself and the attestation.
+			signatures, err := extractSignaturesFromBundle(s)
+			if err != nil {
+				return fmt.Errorf("cannot extract signatures from bundle: %w", err)
+			}
+			a.signatures = append(a.signatures, signatures...)
+		} else {
+			// For older non-bundle image signatures produced by cosign v2
+			es, err := signature.NewEntitySignature(s)
+			if err != nil {
+				return err
+			}
+			a.signatures = append(a.signatures, es)
 		}
-		a.signatures = append(a.signatures, es)
 	}
 	return nil
 }
@@ -461,7 +482,7 @@ func (a *ApplicationSnapshotImage) WriteInputFile(ctx context.Context) (string, 
 	log.Debugf("Created dir %s", inputDir)
 	inputJSONPath := path.Join(inputDir, "input.json")
 
-	f, err := fs.OpenFile(inputJSONPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0644)
+	f, err := fs.OpenFile(inputJSONPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o644)
 	if err != nil {
 		log.Debugf("Problem creating file in %s", inputDir)
 		return "", nil, err
@@ -479,4 +500,55 @@ func (a *ApplicationSnapshotImage) WriteInputFile(ctx context.Context) (string, 
 
 	log.Debugf("Done preparing input file:\n%s", inputJSONPath)
 	return inputJSONPath, inputJSON, nil
+}
+
+// extractSignaturesFromBundle extracts signature information from a bundle
+// image signature attestation, using the same pattern as createEntitySignatures.
+//
+// TODO: This currently only extracts the signature value from the DSSE envelope.
+// Certificate information (keyid, certificate, chain, metadata) is not being
+// extracted because it requires different handling for v3 bundles compared to v2.
+// Future work should investigate how to access certificate data from bundle
+// attestations to achieve full parity with v2 signature output. Also, there might
+// be some cosign methods we can use instead of doing it ourselves here.
+func extractSignaturesFromBundle(sig cosignOCI.Signature) ([]signature.EntitySignature, error) {
+	reader, err := sig.Uncompressed()
+	if err != nil {
+		return nil, fmt.Errorf("cannot read signature data: %w", err)
+	}
+	defer reader.Close()
+
+	var attestationPayload cosign.AttestationPayload
+	if err := json.NewDecoder(reader).Decode(&attestationPayload); err != nil {
+		return nil, fmt.Errorf("cannot parse DSSE envelope: %w", err)
+	}
+
+	// Create the base EntitySignature from the oci.Signature (for certificate info)
+	es, err := signature.NewEntitySignature(sig)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create base signature: %w", err)
+	}
+
+	var results []signature.EntitySignature
+	for _, s := range attestationPayload.Signatures {
+		esNew := es
+		// The Signature and KeyID can come from two locations, the oci.Signature or
+		// the cosign.Signature. Prioritize information from oci.Signature, but fallback
+		// to cosign.Signature when needed (same pattern as createEntitySignatures)
+		//
+		// Todo: Actually the above comment might be stale and/or wrong since I belive
+		// it was copied from similar code in internal/attestation/attestation.go. Let's
+		// review this later. As far as I can tell this code always produces an empty
+		// string for the KeyId.
+		//
+		if esNew.Signature == "" {
+			esNew.Signature = s.Sig
+		}
+		if esNew.KeyID == "" {
+			esNew.KeyID = s.KeyID
+		}
+		results = append(results, esNew)
+	}
+
+	return results, nil
 }

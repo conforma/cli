@@ -251,11 +251,11 @@ true
       "signatures": [
         {
           "keyid": "",
-          "sig": ""
+          "sig": "MEQCIDj5l7I0bPCua+H1ZfAAUnd4Hd4k7wUUEi/lpWYSLkOFAiBGgK9KWiNR1t+C4TbmkU/vnpHonmg5hNnwLRC70xc2Rg=="
         },
         {
           "keyid": "",
-          "sig": ""
+          "sig": "MEUCIBZc+dmgTn8SCx30h9yvCOjsBwj1+aZX0gW53c7TeyuSAiEAp4zWGNHMrjql9NFl/fCmFXnJkgDkOqbN5n7H7mw6aqI="
         }
       ],
       "attestations": [
