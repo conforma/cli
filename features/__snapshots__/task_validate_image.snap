@@ -251,10 +251,6 @@ true
       "signatures": [
         {
           "keyid": "",
-          "sig": "MEQCIDj5l7I0bPCua+H1ZfAAUnd4Hd4k7wUUEi/lpWYSLkOFAiBGgK9KWiNR1t+C4TbmkU/vnpHonmg5hNnwLRC70xc2Rg=="
-        },
-        {
-          "keyid": "",
           "sig": "MEUCIBZc+dmgTn8SCx30h9yvCOjsBwj1+aZX0gW53c7TeyuSAiEAp4zWGNHMrjql9NFl/fCmFXnJkgDkOqbN5n7H7mw6aqI="
         }
       ],
@@ -266,16 +262,6 @@ true
             {
               "keyid": "",
               "sig": "MEUCIQC5bGm4zzbExXBMrZCmqZ98iqUhi8TV/maq/8dJ/c3POAIgCNw+RkeO7PAkT6JDWIvISZ2AjILu9YuPQ0qqfNwCqug="
-            }
-          ]
-        },
-        {
-          "type": "https://in-toto.io/Statement/v0.1",
-          "predicateType": "https://sigstore.dev/cosign/sign/v1",
-          "signatures": [
-            {
-              "keyid": "",
-              "sig": "MEUCID1cJkxyk1oGvXcoAVkDST9A1vfX2gxPEz+LUzN10nDmAiEAxh9rp79yr4fZmAWWOit0dZ5QWK+uYIU8fQVb0/rLIyM="
             }
           ]
         }

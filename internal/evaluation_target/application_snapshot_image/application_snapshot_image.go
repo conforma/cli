@@ -183,6 +183,17 @@ func (a *ApplicationSnapshotImage) ValidateImageSignature(ctx context.Context) e
 
 	for _, s := range sigs {
 		if useBundles {
+			// This will appears in the output under "signatures" so filter out
+			// the sigs that are provenance attestations leaving only the sigs
+			// that are image signatures. Note: This does seems confusing and
+			// I'm not 100% sure we're doing the right thing here. Maybe revisit
+			// once we have a better idea about sigstore bundles and how they're
+			// handled by cosign itself.
+			if !isImageSignatureAttestation(s) {
+				log.Debugf("Skipping non-image signature attestation")
+				continue
+			}
+
 			// For bundle image signatures produced by cosign v3, the old
 			// method of accessing the signatures doesn't work. Instead we have
 			// to extract them from the bundle. And the bundle actually has
@@ -193,7 +204,8 @@ func (a *ApplicationSnapshotImage) ValidateImageSignature(ctx context.Context) e
 			}
 			a.signatures = append(a.signatures, signatures...)
 		} else {
-			// For older non-bundle image signatures produced by cosign v2
+			// For older non-bundle image signatures produced by cosign v2.
+			// Note that filtering isn't needed, since we have only image sigs here.
 			es, err := signature.NewEntitySignature(s)
 			if err != nil {
 				return err
@@ -220,6 +232,11 @@ func (a *ApplicationSnapshotImage) ValidateAttestationSignature(ctx context.Cont
 		return err
 	}
 
+	// Todo:
+	// - For the non-bundle code path we actually check the syntax.
+	//   We should do that for bundles as well probably.
+	// - Doing an early return like thi shere seems untidy, refactor
+	//   maybe?
 	if useBundles {
 		return a.parseAttestationsFromBundles(layers)
 	}
@@ -272,8 +289,19 @@ func (a *ApplicationSnapshotImage) ValidateAttestationSignature(ctx context.Cont
 // parseAttestationsFromBundles extracts attestations from Sigstore bundles.
 // Bundle-wrapped layers report an incorrect media type, so we unmarshal the
 // DSSE envelope from the raw payload directly.
+//
+// Note: For v3 bundles, this function filters out image signature attestations
+// (https://sigstore.dev/cosign/sign/v1) since those are handled in ValidateImageSignature.
+// Only provenance and other attestations are added to the attestations array.
 func (a *ApplicationSnapshotImage) parseAttestationsFromBundles(layers []cosignOCI.Signature) error {
 	for _, sig := range layers {
+		// For v3 bundles, filter out image signature attestations - those are handled
+		// in ValidateImageSignature. Only add provenance attestations here.
+		if isImageSignatureAttestation(sig) {
+			log.Debugf("Skipping image signature attestation - handled in ValidateImageSignature")
+			continue
+		}
+
 		payload, err := sig.Payload()
 		if err != nil {
 			log.Debugf("Skipping bundle entry: cannot read payload: %v", err)
@@ -296,8 +324,8 @@ func (a *ApplicationSnapshotImage) parseAttestationsFromBundles(layers []cosignO
 		if err != nil {
 			return fmt.Errorf("unable to parse bundle attestation: %w", err)
 		}
-		t := att.PredicateType()
-		log.Debugf("Found bundle attestation with predicateType: %s", t)
+		log.Debugf("Found bundle attestation with predicateType: %s", att.PredicateType())
+
 		a.attestations = append(a.attestations, att)
 	}
 	return nil
@@ -500,6 +528,43 @@ func (a *ApplicationSnapshotImage) WriteInputFile(ctx context.Context) (string, 
 
 	log.Debugf("Done preparing input file:\n%s", inputJSONPath)
 	return inputJSONPath, inputJSON, nil
+}
+
+// extractPredicateType extracts the predicateType field from a JSON
+// payload lazily, i.e. without unmarshalling all the other fields
+func extractPredicateType(payload []byte) (string, error) {
+	var attestation struct {
+		PredicateType string `json:"predicateType"`
+	}
+	if err := json.Unmarshal(payload, &attestation); err != nil {
+		return "", err
+	}
+	return attestation.PredicateType, nil
+}
+
+// hasPredicateType checks if a JSON payload has the specified predicate type.
+func hasPredicateType(payload []byte, expectedType string) bool {
+	predicateType, err := extractPredicateType(payload)
+	if err != nil {
+		log.Debugf("Cannot parse JSON payload: %v", err)
+		return false
+	}
+	return predicateType == expectedType
+}
+
+const cosignSignPredicateType = "https://sigstore.dev/cosign/sign/v1"
+
+// isImageSignatureAttestation checks if a signature from a bundle represents
+// an image signature attestation (vs. a provenance attestation).
+func isImageSignatureAttestation(sig cosignOCI.Signature) bool {
+	payload, err := sig.Payload()
+	if err != nil {
+		log.Debugf("Cannot read signature payload: %v", err)
+		return false
+	}
+
+	// Image signature attestations use the cosign/sign predicate type
+	return hasPredicateType(payload, cosignSignPredicateType)
 }
 
 // extractSignaturesFromBundle extracts signature information from a bundle
