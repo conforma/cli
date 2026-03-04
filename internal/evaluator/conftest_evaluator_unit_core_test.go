@@ -353,8 +353,8 @@ func TestConftestEvaluatorEvaluateNoSuccessWarningsOrFailures(t *testing.T) {
 
 func TestConftestEvaluatorEvaluate(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(path.Join(dir, "inputs"), 0755))
-	require.NoError(t, os.WriteFile(path.Join(dir, "inputs", "data.json"), []byte("{}"), 0600))
+	require.NoError(t, os.MkdirAll(path.Join(dir, "inputs"), 0o755))
+	require.NoError(t, os.WriteFile(path.Join(dir, "inputs", "data.json"), []byte("{}"), 0o600))
 
 	rego, err := fs.Sub(policies, "__testdir__/simple")
 	require.NoError(t, err)
@@ -409,8 +409,8 @@ func TestConftestEvaluatorEvaluate(t *testing.T) {
 
 func TestUnconformingRule(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(path.Join(dir, "inputs"), 0755))
-	require.NoError(t, os.WriteFile(path.Join(dir, "inputs", "data.json"), []byte("{}"), 0600))
+	require.NoError(t, os.MkdirAll(path.Join(dir, "inputs"), 0o755))
+	require.NoError(t, os.WriteFile(path.Join(dir, "inputs", "data.json"), []byte("{}"), 0o600))
 
 	rego, err := fs.Sub(policies, "__testdir__/unconforming")
 	require.NoError(t, err)
@@ -443,12 +443,12 @@ func TestUnconformingRule(t *testing.T) {
 // TestAnnotatedAndNonAnnotatedRules tests the separation of annotated and non-annotated rules
 func TestAnnotatedAndNonAnnotatedRules(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(path.Join(dir, "inputs"), 0755))
-	require.NoError(t, os.WriteFile(path.Join(dir, "inputs", "data.json"), []byte("{}"), 0600))
+	require.NoError(t, os.MkdirAll(path.Join(dir, "inputs"), 0o755))
+	require.NoError(t, os.WriteFile(path.Join(dir, "inputs", "data.json"), []byte("{}"), 0o600))
 
 	// Create a test directory with both annotated and non-annotated rules
 	testDir := path.Join(dir, "test_policies")
-	require.NoError(t, os.MkdirAll(testDir, 0755))
+	require.NoError(t, os.MkdirAll(testDir, 0o755))
 
 	// Annotated rule
 	annotatedRule := `package annotated
@@ -466,7 +466,7 @@ deny contains result if {
 		"msg": "Annotated rule failure",
 	}
 }`
-	require.NoError(t, os.WriteFile(path.Join(testDir, "annotated.rego"), []byte(annotatedRule), 0600))
+	require.NoError(t, os.WriteFile(path.Join(testDir, "annotated.rego"), []byte(annotatedRule), 0o600))
 
 	// Non-annotated rule
 	nonAnnotatedRule := `package nonannotated
@@ -479,7 +479,7 @@ deny contains result if {
 		"msg": "Non-annotated rule failure",
 	}
 }`
-	require.NoError(t, os.WriteFile(path.Join(testDir, "nonannotated.rego"), []byte(nonAnnotatedRule), 0600))
+	require.NoError(t, os.WriteFile(path.Join(testDir, "nonannotated.rego"), []byte(nonAnnotatedRule), 0o600))
 
 	// Non-annotated rule without code in result
 	nonAnnotatedRuleNoCode := `package noresultcode
@@ -489,7 +489,7 @@ import rego.v1
 deny contains result if {
 	result := "No code in result"
 }`
-	require.NoError(t, os.WriteFile(path.Join(testDir, "noresultcode.rego"), []byte(nonAnnotatedRuleNoCode), 0600))
+	require.NoError(t, os.WriteFile(path.Join(testDir, "noresultcode.rego"), []byte(nonAnnotatedRuleNoCode), 0o600))
 
 	// Create rules archive
 	archivePath := path.Join(dir, "rules.tar.gz")
@@ -536,12 +536,12 @@ deny contains result if {
 // TestRuleCollectionWithMixedRules tests rule collection logic with mixed annotated and non-annotated rules
 func TestRuleCollectionWithMixedRules(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(path.Join(dir, "inputs"), 0755))
-	require.NoError(t, os.WriteFile(path.Join(dir, "inputs", "data.json"), []byte("{}"), 0600))
+	require.NoError(t, os.MkdirAll(path.Join(dir, "inputs"), 0o755))
+	require.NoError(t, os.WriteFile(path.Join(dir, "inputs", "data.json"), []byte("{}"), 0o600))
 
 	// Create test directory with mixed rules
 	testDir := path.Join(dir, "mixed_policies")
-	require.NoError(t, os.MkdirAll(testDir, 0755))
+	require.NoError(t, os.MkdirAll(testDir, 0o755))
 
 	// Annotated failing
 	annotatedFailingRule := `package mixed
@@ -559,7 +559,7 @@ deny contains result if {
 		"msg": "Annotated rule failure",
 	}
 }`
-	require.NoError(t, os.WriteFile(path.Join(testDir, "annotated_failing.rego"), []byte(annotatedFailingRule), 0600))
+	require.NoError(t, os.WriteFile(path.Join(testDir, "annotated_failing.rego"), []byte(annotatedFailingRule), 0o600))
 
 	// Annotated passing
 	annotatedPassingRule := `package mixed
@@ -575,7 +575,7 @@ deny contains result if {
 	false
 	result := "This should not be reached"
 }`
-	require.NoError(t, os.WriteFile(path.Join(testDir, "annotated_passing.rego"), []byte(annotatedPassingRule), 0600))
+	require.NoError(t, os.WriteFile(path.Join(testDir, "annotated_passing.rego"), []byte(annotatedPassingRule), 0o600))
 
 	// Non-annotated failing
 	nonAnnotatedFailingRule := `package mixed
@@ -588,7 +588,7 @@ deny contains result if {
 		"msg": "Non-annotated rule failure",
 	}
 }`
-	require.NoError(t, os.WriteFile(path.Join(testDir, "nonannotated_failing.rego"), []byte(nonAnnotatedFailingRule), 0600))
+	require.NoError(t, os.WriteFile(path.Join(testDir, "nonannotated_failing.rego"), []byte(nonAnnotatedFailingRule), 0o600))
 
 	// Non-annotated passing
 	nonAnnotatedPassingRule := `package mixed
@@ -599,7 +599,7 @@ deny contains result if {
 	false
 	result := "This should not be reached"
 }`
-	require.NoError(t, os.WriteFile(path.Join(testDir, "nonannotated_passing.rego"), []byte(nonAnnotatedPassingRule), 0600))
+	require.NoError(t, os.WriteFile(path.Join(testDir, "nonannotated_passing.rego"), []byte(nonAnnotatedPassingRule), 0o600))
 
 	// Create rules archive
 	archivePath := path.Join(dir, "rules.tar.gz")
@@ -654,12 +654,12 @@ deny contains result if {
 // TestFilteringWithMixedRules verifies that both annotated and non-annotated rules participate in filtering
 func TestFilteringWithMixedRules(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(path.Join(dir, "inputs"), 0755))
-	require.NoError(t, os.WriteFile(path.Join(dir, "inputs", "data.json"), []byte("{}"), 0600))
+	require.NoError(t, os.MkdirAll(path.Join(dir, "inputs"), 0o755))
+	require.NoError(t, os.WriteFile(path.Join(dir, "inputs", "data.json"), []byte("{}"), 0o600))
 
 	// Create test directory with rules in different packages
 	testDir := path.Join(dir, "filtering_policies")
-	require.NoError(t, os.MkdirAll(testDir, 0755))
+	require.NoError(t, os.MkdirAll(testDir, 0o755))
 
 	// Annotated rule in package 'a'
 	annotatedRuleA := `package a
@@ -677,7 +677,7 @@ deny contains result if {
 		"msg": "Annotated rule in package a",
 	}
 }`
-	require.NoError(t, os.WriteFile(path.Join(testDir, "a_annotated.rego"), []byte(annotatedRuleA), 0600))
+	require.NoError(t, os.WriteFile(path.Join(testDir, "a_annotated.rego"), []byte(annotatedRuleA), 0o600))
 
 	// Non-annotated rule in package 'b'
 	nonAnnotatedRuleB := `package b
@@ -690,7 +690,7 @@ deny contains result if {
 		"msg": "Non-annotated rule in package b",
 	}
 }`
-	require.NoError(t, os.WriteFile(path.Join(testDir, "b_nonannotated.rego"), []byte(nonAnnotatedRuleB), 0600))
+	require.NoError(t, os.WriteFile(path.Join(testDir, "b_nonannotated.rego"), []byte(nonAnnotatedRuleB), 0o600))
 
 	// Create rules archive
 	archivePath := path.Join(dir, "rules.tar.gz")

@@ -196,7 +196,7 @@ func TestInlineDataSource(t *testing.T) {
 			// Verify file permissions
 			stat, err := fs.Stat(file)
 			require.NoError(t, err)
-			assert.Equal(t, os.FileMode(0400), stat.Mode().Perm())
+			assert.Equal(t, os.FileMode(0o400), stat.Mode().Perm())
 		})
 	}
 }
@@ -315,7 +315,7 @@ func TestInlineDataGetPolicy(t *testing.T) {
 			// Verify file permissions are read-only
 			stat, err := fs.Stat(ruleDataFile)
 			require.NoError(t, err)
-			assert.Equal(t, os.FileMode(0400), stat.Mode().Perm(), "file should have read-only permissions")
+			assert.Equal(t, os.FileMode(0o400), stat.Mode().Perm(), "file should have read-only permissions")
 
 			// Verify cache functionality - second call should return same result
 			dest2, err2 := s.GetPolicy(ctx, tt.workDir, tt.showMsg)
@@ -548,11 +548,11 @@ func TestGetPolicyThroughCache(t *testing.T) {
 		data := []byte("hello")
 		dl := func(source, dest string) (metadata.Metadata, error) {
 			invocations++
-			if err := fs.MkdirAll(dest, 0755); err != nil {
+			if err := fs.MkdirAll(dest, 0o755); err != nil {
 				return nil, err
 			}
 
-			return nil, afero.WriteFile(fs, filepath.Join(dest, "data.json"), data, 0400)
+			return nil, afero.WriteFile(fs, filepath.Join(dest, "data.json"), data, 0o400)
 		}
 
 		source := &mockPolicySource{&mock.Mock{}}
@@ -614,7 +614,7 @@ func TestDownloadCacheWorkdirMismatch(t *testing.T) {
 
 	// same URL downloaded to workdir1
 	precachedDest := uniqueDestination(tmp, "subdir", source.PolicyUrl())
-	require.NoError(t, os.MkdirAll(precachedDest, 0755))
+	require.NoError(t, os.MkdirAll(precachedDest, 0o755))
 	downloadCache.Store("policy-url", func() (string, cacheContent) {
 		return precachedDest, cacheContent{}
 	})
@@ -652,11 +652,11 @@ func TestConcurrentPolicyCachingRaceCondition(t *testing.T) {
 	// This represents the first worker that successfully downloaded the policy
 	sharedCacheDir := filepath.Join(tmp, "shared-cache")
 	cachedPolicyPath := uniqueDestination(sharedCacheDir, "subdir", source.PolicyUrl())
-	require.NoError(t, os.MkdirAll(cachedPolicyPath, 0755))
+	require.NoError(t, os.MkdirAll(cachedPolicyPath, 0o755))
 
 	// Create test policy files
 	policyFile := filepath.Join(cachedPolicyPath, "policy.rego")
-	require.NoError(t, os.WriteFile(policyFile, []byte("package test"), 0600))
+	require.NoError(t, os.WriteFile(policyFile, []byte("package test"), 0o600))
 
 	// Pre-populate the cache with the shared policy location
 	downloadCache.Store("policy-url", func() (string, cacheContent) {

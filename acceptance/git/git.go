@@ -91,15 +91,15 @@ func startStubGitServer(ctx context.Context) (context.Context, error) {
 	}
 
 	nginxConfDir := path.Join(repositories, "conf")
-	if err = os.Mkdir(nginxConfDir, 0755); err != nil {
+	if err = os.Mkdir(nginxConfDir, 0o755); err != nil {
 		return ctx, err
 	}
-	if err = os.WriteFile(path.Join(nginxConfDir, "nginx.conf"), nginxConf, 0400); err != nil {
+	if err = os.WriteFile(path.Join(nginxConfDir, "nginx.conf"), nginxConf, 0o400); err != nil {
 		return ctx, err
 	}
 
 	tlsDir := path.Join(repositories, "tls")
-	if err = os.Mkdir(tlsDir, 0755); err != nil {
+	if err = os.Mkdir(tlsDir, 0o755); err != nil {
 		return ctx, err
 	}
 
@@ -113,7 +113,7 @@ func startStubGitServer(ctx context.Context) (context.Context, error) {
 			Bytes: keyBytes,
 		})
 
-		if err = os.WriteFile(path.Join(tlsDir, "server.key"), keyPem, 0400); err != nil {
+		if err = os.WriteFile(path.Join(tlsDir, "server.key"), keyPem, 0o400); err != nil {
 			return ctx, err
 		}
 
@@ -141,7 +141,7 @@ func startStubGitServer(ctx context.Context) (context.Context, error) {
 				Bytes: cert,
 			})
 
-			if err = os.WriteFile(certificate, certPEM, 0400); err != nil {
+			if err = os.WriteFile(certificate, certPEM, 0o400); err != nil {
 				return ctx, err
 			}
 
@@ -151,7 +151,7 @@ func startStubGitServer(ctx context.Context) (context.Context, error) {
 
 	// Create a minimal health check repository before starting the container
 	healthCheckDir := path.Join(repositories, "health-check.git")
-	if err := os.MkdirAll(healthCheckDir, 0755); err != nil {
+	if err := os.MkdirAll(healthCheckDir, 0o755); err != nil {
 		return ctx, err
 	}
 
@@ -281,7 +281,7 @@ func createGitRepository(ctx context.Context, repositoryName string, files *godo
 			}))
 		}
 
-		err = os.WriteFile(dest, b, 0600)
+		err = os.WriteFile(dest, b, 0o600)
 		if err != nil {
 			return err
 		}

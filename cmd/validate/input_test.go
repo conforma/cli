@@ -68,7 +68,7 @@ func setUpValidateInputCmd(validate InputValidationFunc, fs afero.Fs) (*cobra.Co
 func Test_ValidateInputCmd_SuccessSingleFile(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	// Write a dummy file to simulate input
-	require.NoError(t, afero.WriteFile(fs, "/input.yaml", []byte("some: data"), 0644))
+	require.NoError(t, afero.WriteFile(fs, "/input.yaml", []byte("some: data"), 0o644))
 
 	// Mock validator: returns success with no violations, one success result.
 	outMock := &output.Output{
@@ -113,8 +113,8 @@ func Test_ValidateInputCmd_SuccessSingleFile(t *testing.T) {
 
 func Test_ValidateInputCmd_SuccessMultipleFiles(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	require.NoError(t, afero.WriteFile(fs, "/input1.yaml", []byte("some: data"), 0644))
-	require.NoError(t, afero.WriteFile(fs, "/input2.yaml", []byte("other: data"), 0644))
+	require.NoError(t, afero.WriteFile(fs, "/input1.yaml", []byte("some: data"), 0o644))
+	require.NoError(t, afero.WriteFile(fs, "/input2.yaml", []byte("other: data"), 0o644))
 
 	// Mock validator: always returns success.
 	outMock := &output.Output{
@@ -166,7 +166,7 @@ func Test_ValidateInputCmd_SuccessMultipleFiles(t *testing.T) {
 
 func Test_ValidateInputCmd_Failure(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	require.NoError(t, afero.WriteFile(fs, "/bad.yaml", []byte("invalid"), 0644))
+	require.NoError(t, afero.WriteFile(fs, "/bad.yaml", []byte("invalid"), 0o644))
 
 	// Mock validator: returns an error
 	cmd, _ := setUpValidateInputCmd(mockValidate(nil, errors.New("validation failed")), fs)
@@ -184,7 +184,7 @@ func Test_ValidateInputCmd_Failure(t *testing.T) {
 
 func Test_ValidateInputCmd_StrictMode(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	require.NoError(t, afero.WriteFile(fs, "/file.yaml", []byte("some: data"), 0644))
+	require.NoError(t, afero.WriteFile(fs, "/file.yaml", []byte("some: data"), 0o644))
 
 	// Mock validator: returns no error, but a violation.
 	outMock := &output.Output{
@@ -213,7 +213,7 @@ func Test_ValidateInputCmd_StrictMode(t *testing.T) {
 
 func Test_ValidateInputCmd_NonStrictMode(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	require.NoError(t, afero.WriteFile(fs, "/file.yaml", []byte("some: data"), 0644))
+	require.NoError(t, afero.WriteFile(fs, "/file.yaml", []byte("some: data"), 0o644))
 
 	// Mock validator: returns no error but a violation (should not cause non-zero exit in non-strict mode).
 	outMock := &output.Output{
@@ -255,7 +255,7 @@ func Test_ValidateInputCmd_NonStrictMode(t *testing.T) {
 
 func Test_ValidateInputCmd_NoPolicyProvided(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	require.NoError(t, afero.WriteFile(fs, "/file.yaml", []byte("some: data"), 0644))
+	require.NoError(t, afero.WriteFile(fs, "/file.yaml", []byte("some: data"), 0o644))
 
 	cmd, _ := setUpValidateInputCmd(nil, fs)
 	cmd.SetArgs([]string{
@@ -281,7 +281,7 @@ func Test_ValidateInputCmd_NoFileProvided(t *testing.T) {
 
 func Test_ValidateInputCmd_PolicyParsingError(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	require.NoError(t, afero.WriteFile(fs, "/file.yaml", []byte("some: data"), 0644))
+	require.NoError(t, afero.WriteFile(fs, "/file.yaml", []byte("some: data"), 0o644))
 
 	cmd, _ := setUpValidateInputCmd(nil, fs)
 	cmd.SetArgs([]string{
@@ -298,8 +298,8 @@ func Test_ValidateInputCmd_PolicyParsingError(t *testing.T) {
 
 func Test_ValidateInputCmd_EmptyPolicyFile(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	require.NoError(t, afero.WriteFile(fs, "/file.yaml", []byte("data"), 0644))
-	require.NoError(t, afero.WriteFile(fs, "/policy.yaml", []byte{}, 0644))
+	require.NoError(t, afero.WriteFile(fs, "/file.yaml", []byte("data"), 0o644))
+	require.NoError(t, afero.WriteFile(fs, "/policy.yaml", []byte{}, 0o644))
 
 	cmd, _ := setUpValidateInputCmd(nil, fs)
 	cmd.SetArgs([]string{
@@ -358,7 +358,7 @@ func Test_ValidateInputCmd_ShowWarningsFlag(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			fs := afero.NewMemMapFs()
-			require.NoError(t, afero.WriteFile(fs, "/file.yaml", []byte("some: data"), 0644))
+			require.NoError(t, afero.WriteFile(fs, "/file.yaml", []byte("some: data"), 0o644))
 
 			cmd, buf := setUpValidateInputCmd(warningValidator, fs)
 			args := append(c.args, "--output", "json") // Explicitly request JSON output
@@ -400,7 +400,7 @@ func Test_ValidateInputCmd_ShowWarningsFlag(t *testing.T) {
 
 func Test_ValidateInputCmd_DefaultTextOutput(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	require.NoError(t, afero.WriteFile(fs, "/input.yaml", []byte("some: data"), 0644))
+	require.NoError(t, afero.WriteFile(fs, "/input.yaml", []byte("some: data"), 0o644))
 
 	// Mock validator: returns success with no violations, one success result.
 	outMock := &output.Output{
@@ -442,7 +442,7 @@ func Test_ValidateInputCmd_DefaultTextOutput(t *testing.T) {
 
 func Test_ValidateInputCmd_TextOutputWithShowSuccesses(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	require.NoError(t, afero.WriteFile(fs, "/input.yaml", []byte("some: data"), 0644))
+	require.NoError(t, afero.WriteFile(fs, "/input.yaml", []byte("some: data"), 0o644))
 
 	// Mock validator: returns success with one success result.
 	outMock := &output.Output{

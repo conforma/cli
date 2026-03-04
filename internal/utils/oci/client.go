@@ -56,7 +56,7 @@ func initCache() cache.Cache {
 		return nil
 	} else {
 		imgCacheDir := path.Join(userCache, "ec", "images")
-		if err := os.MkdirAll(imgCacheDir, 0700); err != nil {
+		if err := os.MkdirAll(imgCacheDir, 0o700); err != nil {
 			log.Debugf("unable to create temporary directory for image cache in %q: %v", imgCacheDir, err)
 			return nil
 		}
