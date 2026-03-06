@@ -61,7 +61,9 @@ func initCache() cache.Cache {
 			return nil
 		}
 		log.Debugf("using %q directory to store image cache", imgCacheDir)
-		return cache.NewFilesystemCache(imgCacheDir)
+		inner := cache.NewFilesystemCache(imgCacheDir)
+		// NewSafeCache makes the cache safe for concurrent use (see https://github.com/conforma/cli/issues/1109).
+		return NewSafeCache(inner, imgCacheDir)
 	}
 }
 
