@@ -144,9 +144,17 @@ focus-acceptance: build ## Run acceptance tests with @focus tag
 # The `|| true` here is so the @focus tag still gets removed after a failure.
 feature_%: ## Run acceptance tests for a single feature file, e.g. make feature_validate_image
 	@echo "Testing feature '$*'"
+	@#
 	@sed -i '1i@focus' features/$*.feature
 	@$(MAKE) focus-acceptance || true
+	@#
+	@# Remove @focus tag
 	@sed -i '1d' features/$*.feature
+	@#
+	@# With UPDATE_SNAPS=true all the other snap files will be deleted. Let's put them back.
+	@if [ -n "$$UPDATE_SNAPS" ]; then \
+	  git ls-files --deleted -- 'features/__snapshots__/*.snap' | xargs -r git checkout --; \
+	fi
 
 # (Replace spaces with underscores in the scenario name.)
 scenario_%: build ## Run acceptance tests for a single scenario, e.g. make scenario_inline_policy

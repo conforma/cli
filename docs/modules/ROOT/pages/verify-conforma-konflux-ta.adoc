@@ -21,8 +21,10 @@ You can also specify a policy configuration using a git url, e.g.
 
 +
 *Default*: `enterprise-contract-service/default`
-*PUBLIC_KEY* (`string`):: Public key used to verify signatures. Must be a valid k8s cosign reference, e.g. k8s://my-space/my-secret where my-secret contains the expected cosign.pub attribute.
+*PUBLIC_KEY* (`string`):: Public key used to verify traditional long-lived signatures. Must be a valid k8s cosign reference, e.g. k8s://my-space/my-secret where my-secret contains the expected cosign.pub attribute. Required for traditional signing key verification. Will be ignored if either of CERTIFICATE_IDENTITY or CERTIFICATE_OIDC_ISSUER are provided.
 *REKOR_HOST* (`string`):: Rekor host for transparency log lookups
+*CERTIFICATE_IDENTITY* (`string`):: Expected identity in the signing certificate for keyless verification. This should be the email or URI that was used when signing. You should provide both CERTIFICATE_OIDC_ISSUER and CERTIFICATE_IDENTITY for keyless verification. The PUBLIC_KEY param will be ignored if this is provided.
+*CERTIFICATE_OIDC_ISSUER* (`string`):: Expected OIDC issuer in the signing certificate for keyless verification. This should match the issuer that provided the identity token used for signing. You should provide both CERTIFICATE_OIDC_ISSUER and CERTIFICATE_IDENTITY for keyless verification. The PUBLIC_KEY param will be ignored if this is provided.
 *IGNORE_REKOR* (`string`):: Skip Rekor transparency log checks during validation.
 +
 *Default*: `false`

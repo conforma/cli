@@ -52,14 +52,35 @@ spec:
     - name: PUBLIC_KEY
       type: string
       description: >-
-        Public key used to verify signatures. Must be a valid k8s cosign
-        reference, e.g. k8s://my-space/my-secret where my-secret contains
-        the expected cosign.pub attribute.
+        Public key used to verify traditional long-lived signatures. Must be a
+        valid k8s cosign reference, e.g. k8s://my-space/my-secret where
+        my-secret contains the expected cosign.pub attribute. Required for
+        traditional signing key verification. Will be ignored if either of
+        CERTIFICATE_IDENTITY or CERTIFICATE_OIDC_ISSUER are provided.
       default: ""
 
     - name: REKOR_HOST
       type: string
       description: Rekor host for transparency log lookups
+      default: ""
+
+    - name: CERTIFICATE_IDENTITY
+      type: string
+      description: >-
+        Expected identity in the signing certificate for keyless verification.
+        This should be the email or URI that was used when signing.
+        You should provide both CERTIFICATE_OIDC_ISSUER and CERTIFICATE_IDENTITY
+        for keyless verification. The PUBLIC_KEY param will be ignored if this is
+        provided.
+      default: ""
+
+    - name: CERTIFICATE_OIDC_ISSUER
+      type: string
+      description: >-
+        Expected OIDC issuer in the signing certificate for keyless verification.
+        This should match the issuer that provided the identity token used for signing.
+        You should provide both CERTIFICATE_OIDC_ISSUER and CERTIFICATE_IDENTITY for
+        keyless verification. The PUBLIC_KEY param will be ignored if this is provided.
       default: ""
 
     - name: IGNORE_REKOR
@@ -288,51 +309,63 @@ spec:
         #!/bin/bash
         set -euo pipefail
 
-        # Build EC arguments array
-        # POLICY_CONFIGURATION is passed via environment variable to safely handle JSON strings
-        EC_ARGS=(
+        cmd_args=(
           validate
           image
-          --images /tekton/home/snapshot.json
-          --policy "${POLICY_CONFIGURATION}"
-          --public-key "$(params.PUBLIC_KEY)"
-          --rekor-url "$(params.REKOR_HOST)"
-          --ignore-rekor=$(params.IGNORE_REKOR)
-          --workers "$(params.WORKERS)"
-          --info=$(params.INFO)
-          --timeout=100h
-          --strict=false
-          --show-successes
-          --effective-time=$(params.EFFECTIVE_TIME)
-          --extra-rule-data=$(params.EXTRA_RULE_DATA)
+          --images="${HOMEDIR}/snapshot.json"
+          --policy="${POLICY_CONFIGURATION}"
         )
 
-        EC_ARGS+=(
-          --retry-max-wait "$(params.RETRY_MAX_WAIT)"
-          --retry-max-retry "$(params.RETRY_MAX_RETRY)"
-          --retry-duration "$(params.RETRY_DURATION)"
-          --retry-factor "$(params.RETRY_FACTOR)"
-          --retry-jitter "$(params.RETRY_JITTER)"
-          --output "text=$(params.HOMEDIR)/text-report.txt?show-successes=false"
-          --output "appstudio=$(results.TEST_OUTPUT.path)"
-          --output "json=$(params.HOMEDIR)/report-json.json"
+        # To keep bash logic as thin as possible we deliberately don't sanitize
+        # these params. If something is wrong or missing let Conforma handle it.
+        if [ -n "${CERTIFICATE_IDENTITY}" ] || [ -n "${CERTIFICATE_OIDC_ISSUER}" ]; then
+          cmd_args+=(
+            --certificate-identity="${CERTIFICATE_IDENTITY}"
+            --certificate-oidc-issuer="${CERTIFICATE_OIDC_ISSUER}"
+          )
+        elif [ -n "${PUBLIC_KEY}" ]; then
+          cmd_args+=(
+            --public-key="${PUBLIC_KEY}"
+          )
+        fi
+
+        cmd_args+=(
+          --rekor-url="${REKOR_HOST}"
+          --ignore-rekor="${IGNORE_REKOR}"
+          --workers="${WORKERS}"
+          --info="${INFO}"
+          --timeout=0
+          --strict=false
+          --show-successes=true
+          --effective-time="${EFFECTIVE_TIME}"
+          --extra-rule-data="${EXTRA_RULE_DATA}"
+          --retry-max-wait="${RETRY_MAX_WAIT}"
+          --retry-max-retry="${RETRY_MAX_RETRY}"
+          --retry-duration="${RETRY_DURATION}"
+          --retry-factor="${RETRY_FACTOR}"
+          --retry-jitter="${RETRY_JITTER}"
+          --output="text=${HOMEDIR}/text-report.txt?show-successes=false"
+          --output="json=${HOMEDIR}/report-json.json"
+          --output="appstudio=$(results.TEST_OUTPUT.path)"
         )
 
         # Add VSA arguments if enabled
-        if [[ "$(params.ENABLE_VSA)" == "true" ]]; then
-          EC_ARGS+=(--vsa --attestation-format=$(params.ATTESTATION_FORMAT))
+        if [[ "${ENABLE_VSA}" == "true" ]]; then
+          cmd_args+=(
+            --vsa="true"
+            --attestation-format="${ATTESTATION_FORMAT}"
+          )
 
-          # Extract local path from VSA_UPLOAD for output directory
-          # VSA_UPLOAD format is "local@/path/to/dir"
-          VSA_LOCAL_PATH=$(echo "$(params.VSA_UPLOAD)" | grep -oE '^local@[^ ]+' | sed 's/^local@//' | head -n1 || true)
 
-          if [[ "$(params.ATTESTATION_FORMAT)" == "dsse" ]]; then
-            if [[ -z "$(params.VSA_SIGNING_KEY)" ]]; then
+          if [[ "${ATTESTATION_FORMAT}" == "dsse" ]]; then
+            if [[ -z "${VSA_SIGNING_KEY}" ]]; then
               echo "ERROR: VSA_SIGNING_KEY required for format=dsse" >&2
               exit 1
             fi
-            EC_ARGS+=(--vsa-signing-key "$(params.VSA_SIGNING_KEY)")
-            EC_ARGS+=(--vsa-upload "$(params.VSA_UPLOAD)")
+            cmd_args+=(
+              --vsa-signing-key="${VSA_SIGNING_KEY}"
+              --vsa-upload="${VSA_UPLOAD}"
+            )
           fi
 
           # ec requires --attestation-output-dir to be under /tmp or cwd.
@@ -340,31 +373,72 @@ spec:
           # create-trusted-artifact includes them in the archive.
           VSA_TMP_DIR="/tmp/vsa-output"
           mkdir -p "$VSA_TMP_DIR"
-          EC_ARGS+=(--attestation-output-dir "$VSA_TMP_DIR")
+          cmd_args+=(
+            --attestation-output-dir="$VSA_TMP_DIR"
+          )
 
           echo -n "true" > $(results.VSA_GENERATED.path)
         else
           echo -n "false" > $(results.VSA_GENERATED.path)
         fi
 
-        # Execute EC with constructed arguments
-        ec "${EC_ARGS[@]}"
+        # Execute Conforma with constructed arguments
+        ec "${cmd_args[@]}"
 
         # Copy VSA output from /tmp to workdir for trusted artifact archival
-        if [[ "$(params.ENABLE_VSA)" == "true" ]]; then
-          VSA_LOCAL_PATH=$(echo "$(params.VSA_UPLOAD)" | grep -oE '^local@[^ ]+' | sed 's/^local@//' | head -n1 || true)
+        if [[ "${ENABLE_VSA}" == "true" ]]; then
+          # Extract local path from VSA_UPLOAD for output directory
+          # VSA_UPLOAD format is "local@/path/to/dir"
+          # Fixme: Because of -o pipefail this will fail the whole task when the grep doesn't match
+          VSA_LOCAL_PATH=$(echo "${VSA_UPLOAD}" | grep -oE '^local@[^ ]+' | sed 's/^local@//' | head -n1 || true)
           if [[ -n "$VSA_LOCAL_PATH" && -d "/tmp/vsa-output" ]]; then
             mkdir -p "$VSA_LOCAL_PATH"
             cp -r /tmp/vsa-output/* "$VSA_LOCAL_PATH"/ 2>/dev/null || true
             # Include raw JSON report for downstream SLSA VSA generation
-            cp "$(params.HOMEDIR)/report-json.json" "$VSA_LOCAL_PATH"/ 2>/dev/null || true
+            cp "${HOMEDIR}/report-json.json" "$VSA_LOCAL_PATH"/ 2>/dev/null || true
           fi
         fi
       env:
-        # POLICY_CONFIGURATION is passed via environment variable to safely handle JSON strings
-        # This avoids shell quoting issues when Tekton substitutes parameter values directly in scripts
         - name: POLICY_CONFIGURATION
           value: "$(params.POLICY_CONFIGURATION)"
+        - name: PUBLIC_KEY
+          value: "$(params.PUBLIC_KEY)"
+        - name: CERTIFICATE_IDENTITY
+          value: "$(params.CERTIFICATE_IDENTITY)"
+        - name: CERTIFICATE_OIDC_ISSUER
+          value: "$(params.CERTIFICATE_OIDC_ISSUER)"
+        - name: REKOR_HOST
+          value: "$(params.REKOR_HOST)"
+        - name: IGNORE_REKOR
+          value: "$(params.IGNORE_REKOR)"
+        - name: WORKERS
+          value: "$(params.WORKERS)"
+        - name: INFO
+          value: "$(params.INFO)"
+        - name: EFFECTIVE_TIME
+          value: "$(params.EFFECTIVE_TIME)"
+        - name: EXTRA_RULE_DATA
+          value: "$(params.EXTRA_RULE_DATA)"
+        - name: RETRY_MAX_WAIT
+          value: "$(params.RETRY_MAX_WAIT)"
+        - name: RETRY_MAX_RETRY
+          value: "$(params.RETRY_MAX_RETRY)"
+        - name: RETRY_DURATION
+          value: "$(params.RETRY_DURATION)"
+        - name: RETRY_FACTOR
+          value: "$(params.RETRY_FACTOR)"
+        - name: RETRY_JITTER
+          value: "$(params.RETRY_JITTER)"
+        - name: ENABLE_VSA
+          value: "$(params.ENABLE_VSA)"
+        - name: ATTESTATION_FORMAT
+          value: "$(params.ATTESTATION_FORMAT)"
+        - name: VSA_SIGNING_KEY
+          value: "$(params.VSA_SIGNING_KEY)"
+        - name: VSA_UPLOAD
+          value: "$(params.VSA_UPLOAD)"
+        - name: HOMEDIR
+          value: "$(params.HOMEDIR)"
         - name: SSL_CERT_DIR
           # The Tekton Operator automatically sets the SSL_CERT_DIR env to the value below but,
           # of course, without the $(param.SSL_CERT_DIR) bit. When a Task Step sets it to a
