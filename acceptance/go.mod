@@ -22,18 +22,18 @@ require (
 	github.com/pkg/diff v0.0.0-20210226163009-20ebb0f2a09e
 	github.com/pkg/errors v0.9.1
 	github.com/secure-systems-lab/go-securesystemslib v0.9.1
-	github.com/sigstore/cosign/v2 v2.4.1
+	github.com/sigstore/cosign/v3 v3.0.5
 	github.com/sigstore/rekor v1.3.10
 	github.com/sigstore/sigstore v1.9.1
 	github.com/stretchr/testify v1.11.1
 	github.com/tektoncd/cli v0.38.2
-	github.com/tektoncd/pipeline v0.70.0
+	github.com/tektoncd/pipeline v1.10.0
 	github.com/testcontainers/testcontainers-go v0.34.1
 	github.com/transparency-dev/merkle v0.0.2
 	github.com/wiremock/go-wiremock v1.11.0
 	github.com/yudai/gojsondiff v1.0.0
 	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f
-	gopkg.in/go-jose/go-jose.v2 v2.6.3
+	gopkg.in/go-jose/go-jose.v4 v4.1.3
 	k8s.io/api v0.34.3
 	k8s.io/apimachinery v0.34.3
 	k8s.io/client-go v0.34.3
