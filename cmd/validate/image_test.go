@@ -585,7 +585,7 @@ spec:
 
 			cmd.SetContext(ctx)
 
-			err := afero.WriteFile(fs, "/policy.yaml", []byte(c.config), 0644)
+			err := afero.WriteFile(fs, "/policy.yaml", []byte(c.config), 0o644)
 			if err != nil {
 				panic(err)
 			}
@@ -641,7 +641,7 @@ func Test_ValidateImageCommandJSONPolicyFile(t *testing.T) {
         - '@minimal'
       exclude: []
 `
-	err := afero.WriteFile(fs, "/policy.json", []byte(testPolicyJSON), 0644)
+	err := afero.WriteFile(fs, "/policy.json", []byte(testPolicyJSON), 0o644)
 	if err != nil {
 		panic(err)
 	}
@@ -701,7 +701,7 @@ func Test_ValidateImageCommandExtraData(t *testing.T) {
         - '@minimal'
       exclude: []
 `
-	err := afero.WriteFile(fs, "/policy.json", []byte(testPolicyJSON), 0644)
+	err := afero.WriteFile(fs, "/policy.json", []byte(testPolicyJSON), 0o644)
 	if err != nil {
 		panic(err)
 	}
@@ -717,7 +717,7 @@ spec:
           repository: quay.io/some-namespace/msd
 `
 
-	err = afero.WriteFile(fs, "/value.yaml", []byte(testExtraRuleDataYAML), 0644)
+	err = afero.WriteFile(fs, "/value.yaml", []byte(testExtraRuleDataYAML), 0o644)
 	if err != nil {
 		panic(err)
 	}
@@ -784,7 +784,7 @@ func Test_ValidateImageCommandEmptyPolicyFile(t *testing.T) {
 
 	cmd.SetContext(ctx)
 
-	err := afero.WriteFile(fs, "/policy.yaml", []byte(nil), 0644)
+	err := afero.WriteFile(fs, "/policy.yaml", []byte(nil), 0o644)
 	if err != nil {
 		panic(err)
 	}
@@ -875,12 +875,12 @@ func Test_ValidateImageError(t *testing.T) {
         - '@minimal'
       exclude: []
 `
-			err := afero.WriteFile(fs, "/policy.yaml", []byte(testPolicyJSON), 0644)
+			err := afero.WriteFile(fs, "/policy.yaml", []byte(testPolicyJSON), 0o644)
 			if err != nil {
 				panic(err)
 			}
 
-			err = afero.WriteFile(fs, "/value.json", []byte(nil), 0644)
+			err = afero.WriteFile(fs, "/value.json", []byte(nil), 0o644)
 			if err != nil {
 				panic(err)
 			}
@@ -1450,7 +1450,7 @@ func TestValidateImageCommand_VSAUpload_Success(t *testing.T) {
 	ctx := utils.WithFS(context.Background(), fs)
 
 	// Create a test VSA signing key (real ECDSA P-256 key for testing)
-	err := afero.WriteFile(fs, "/tmp/vsa-key.pem", []byte(testECKey), 0600)
+	err := afero.WriteFile(fs, "/tmp/vsa-key.pem", []byte(testECKey), 0o600)
 	require.NoError(t, err)
 
 	client := fake.FakeClient{}
@@ -1510,7 +1510,7 @@ func TestValidateImageCommand_VSAUpload_NoStorageBackends(t *testing.T) {
 	ctx := utils.WithFS(context.Background(), fs)
 
 	// Create VSA signing key
-	err := afero.WriteFile(fs, "/tmp/vsa-key.pem", []byte(testECKey), 0600)
+	err := afero.WriteFile(fs, "/tmp/vsa-key.pem", []byte(testECKey), 0o600)
 	require.NoError(t, err)
 
 	client := fake.FakeClient{}
@@ -1654,7 +1654,7 @@ func TestValidateImageCommand_VSAFormat_DSSE(t *testing.T) {
 	ctx := utils.WithFS(context.Background(), fs)
 
 	// Create a test VSA signing key
-	err := afero.WriteFile(fs, "/tmp/vsa-key.pem", []byte(testECKey), 0600)
+	err := afero.WriteFile(fs, "/tmp/vsa-key.pem", []byte(testECKey), 0o600)
 	require.NoError(t, err)
 
 	client := fake.FakeClient{}
@@ -1923,7 +1923,7 @@ func TestGenerateVSAsDSSE_Errors(t *testing.T) {
 		ctx := utils.WithFS(context.Background(), fs)
 
 		// Create invalid signing key file
-		err := afero.WriteFile(fs, "/tmp/invalid-key.pem", []byte("invalid key content"), 0600)
+		err := afero.WriteFile(fs, "/tmp/invalid-key.pem", []byte("invalid key content"), 0o600)
 		require.NoError(t, err)
 
 		client := fake.FakeClient{}
@@ -2003,7 +2003,7 @@ func TestGenerateVSAsDSSE_Errors(t *testing.T) {
 		ctx := utils.WithFS(context.Background(), fs)
 
 		// Create a test VSA signing key
-		err := afero.WriteFile(fs, "/tmp/vsa-key.pem", []byte(testECKey), 0600)
+		err := afero.WriteFile(fs, "/tmp/vsa-key.pem", []byte(testECKey), 0o600)
 		require.NoError(t, err)
 
 		client := fake.FakeClient{}
@@ -2152,7 +2152,7 @@ func TestVSAGeneration_WithOutputDir(t *testing.T) {
 
 			// Create test VSA signing key if needed
 			if tt.needsKey {
-				err := afero.WriteFile(fs, "/tmp/vsa-key.pem", []byte(testECKey), 0600)
+				err := afero.WriteFile(fs, "/tmp/vsa-key.pem", []byte(testECKey), 0o600)
 				require.NoError(t, err)
 			}
 

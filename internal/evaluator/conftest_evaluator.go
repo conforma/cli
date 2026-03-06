@@ -978,7 +978,7 @@ func createConfigJSON(ctx context.Context, dataDir string, p ConfigProvider) err
 	}
 	if !exists {
 		log.Debugf("Config data dir '%s' does not exist, will create.", dataDir)
-		if err := fs.MkdirAll(configDataDir, 0755); err != nil {
+		if err := fs.MkdirAll(configDataDir, 0o755); err != nil {
 			return err
 		}
 	}
@@ -1027,7 +1027,7 @@ func createConfigJSON(ctx context.Context, dataDir string, p ConfigProvider) err
 	}
 	// write our jsonData content to the config/config.json file in the data dir
 	log.Debugf("Writing config data to %s: %#v", configFilePath, string(configJSON))
-	if err := afero.WriteFile(fs, configFilePath, configJSON, 0444); err != nil {
+	if err := afero.WriteFile(fs, configFilePath, configJSON, 0o444); err != nil {
 		return err
 	}
 
@@ -1044,7 +1044,7 @@ func (c *conftestEvaluator) createDataDirectory(ctx context.Context) error {
 	}
 	if !exists {
 		log.Debugf("Data dir '%s' does not exist, will create.", dataDir)
-		if err := fs.MkdirAll(dataDir, 0755); err != nil {
+		if err := fs.MkdirAll(dataDir, 0o755); err != nil {
 			return err
 		}
 	}

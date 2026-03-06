@@ -548,7 +548,7 @@ func createAndPushImageWithLayer(ctx context.Context, imageName string, files *g
 			name := r.Cells[0].Value
 			if err := t.WriteHeader(&tar.Header{
 				Name: name,
-				Mode: 0644,
+				Mode: 0o644,
 				Size: int64(len(content)),
 			}); err != nil {
 				return nil, err
