@@ -224,6 +224,13 @@ spec:
     volumeMounts:
       - mountPath: /var/workdir
         name: workdir
+      - name: trusted-ca
+        mountPath: /mnt/trusted-ca
+        readOnly: true
+      - name: trusted-ca
+        mountPath: /etc/ssl/certs/ca-custom-bundle.crt
+        subPath: ca-bundle.crt
+        readOnly: true
     env:
       - name: "ORAS_OPTIONS"
         value: "$(params.ORAS_OPTIONS)"
