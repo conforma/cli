@@ -63,7 +63,7 @@ Error: Get "http://tuf.invalid/root.json": dial tcp: lookup tuf.invalid on 10.96
 ---
 
 [Initialize TUF succeeds:initialize-tuf - 1]
-${TIMESTAMP} INFO Step was skipped due to when expressions were evaluated to false.
+WARNING: Could not fetch signing_config.json from the TUF mirror (encountered error: getting info for target "signing_config.v0.2.json": target signing_config.v0.2.json not found). It is recommended to use a signing config file rather than provide service URLs when signing.
 
 ---
 
@@ -449,6 +449,148 @@ true
 ---
 
 [Keyless signing verification cosign v2 style:results - 1]
+{
+  "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":5,\"failures\":0,\"warnings\":0,\"result\":\"SUCCESS\"}\n"
+}
+---
+
+[Keyless signing verification with local test image:report-json - 1]
+{
+  "success": true,
+  "components": [
+    {
+      "name": "",
+      "containerImage": "${REGISTRY}/acceptance/ec-happy-day-keyless@sha256:${REGISTRY_acceptance/ec-happy-day-keyless:latest_DIGEST}",
+      "source": {},
+      "successes": [
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "builtin.attestation.signature_check",
+            "description": "The attestation signature matches available signing materials.",
+            "title": "Attestation signature check passed"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "builtin.attestation.syntax_check",
+            "description": "The attestation has correct syntax.",
+            "title": "Attestation syntax check passed"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "builtin.image.signature_check",
+            "description": "The image signature matches available signing materials.",
+            "title": "Image signature check passed"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "slsa_provenance_available.allowed_predicate_types_provided",
+            "collections": [
+              "minimal",
+              "slsa3",
+              "redhat",
+              "redhat_rpms",
+              "policy_data"
+            ],
+            "description": "Confirm the `allowed_predicate_types` rule data was provided, since it is required by the policy rules in this package.",
+            "title": "Allowed predicate types provided"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "slsa_provenance_available.attestation_predicate_type_accepted",
+            "collections": [
+              "minimal",
+              "slsa3",
+              "redhat",
+              "redhat_rpms"
+            ],
+            "depends_on": [
+              "attestation_type.known_attestation_type"
+            ],
+            "description": "Verify that the predicateType field of the attestation indicates the in-toto SLSA Provenance format was used to attest the PipelineRun.",
+            "title": "Expected attestation predicate type found"
+          }
+        }
+      ],
+      "success": true,
+      "signatures": [
+        {
+          "keyid": "1baca75b47d428cd084a8333bd4e5de2e9179a16",
+          "sig": "${IMAGE_SIGNATURE_acceptance/ec-happy-day-keyless}",
+          "certificate": "-----BEGIN CERTIFICATE-----\nMIIDQTCCAuigAwIBAgIUTJ7dbOAvCfTVVl61zXIDVGVgN4QwCgYIKoZIzj0EAwIw\nfjEMMAoGA1UEBhMDVVNBMRMwEQYDVQQIEwpDYWxpZm9ybmlhMRYwFAYDVQQHEw1T\nYW4gRnJhbmNpc2NvMRYwFAYDVQQJEw01NDggTWFya2V0IFN0MQ4wDAYDVQQREwU1\nNzI3NDEZMBcGA1UEChMQTGludXggRm91bmRhdGlvbjAeFw0yNTExMDMyMTA0NDZa\nFw0yNTExMDMyMTE0NDZaMAAwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAR4cdPe\n/m6G4ujNS5/Ccry6phWm4101uOVJMoNKZ15twtUdgmQyaS9GZTHbbXtrCgAd2zIP\niZC83bAXpWZyF4T3o4IBwDCCAbwwDgYDVR0PAQH/BAQDAgeAMBMGA1UdJQQMMAoG\nCCsGAQUFBwMDMB0GA1UdDgQWBBQbrKdbR9QozQhKgzO9Tl3i6ReaFjAfBgNVHSME\nGDAWgBR8YMkwiwxyBgREJ8UPHiwhvqShwjBOBgNVHREBAf8ERDBChkBodHRwczov\nL2t1YmVybmV0ZXMuaW8vbmFtZXNwYWNlcy9kZWZhdWx0L3NlcnZpY2VhY2NvdW50\ncy9kZWZhdWx0MDoGCisGAQQBg78wAQEELGh0dHBzOi8va3ViZXJuZXRlcy5kZWZh\ndWx0LnN2Yy5jbHVzdGVyLmxvY2FsMDwGCisGAQQBg78wAQgELgwsaHR0cHM6Ly9r\ndWJlcm5ldGVzLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwwgYoGCisGAQQB1nkC\nBAIEfAR6AHgAdgDLyqm0RaKjHrciwWg8tIRx6zukUKD8h4OOxLqNfau1IQAAAZpL\niWRiAAAEAwBHMEUCIDhlupbKRoZ0V+IweU+ukTbBll39QZTuT9SuOKw/oWSYAiEA\nq+xRKHyGY2Z/sRmu5Fxi19lj39c86fgByzJ2wf4g0U4wCgYIKoZIzj0EAwIDRwAw\nRAIgckW+u5SLDzz22z7v77eM62YqEhkDo1MqlY5Sr7E+HwkCIAKXOJV+VDVSBD3q\nk+4wpA3YOqyKYPA6b+5RvMoPbEF0\n-----END CERTIFICATE-----\n",
+          "chain": [
+            "-----BEGIN CERTIFICATE-----\nMIICNjCCAd2gAwIBAgIIBel2loQvuJkwCgYIKoZIzj0EAwIwfjEMMAoGA1UEBhMD\nVVNBMRMwEQYDVQQIEwpDYWxpZm9ybmlhMRYwFAYDVQQHEw1TYW4gRnJhbmNpc2Nv\nMRYwFAYDVQQJEw01NDggTWFya2V0IFN0MQ4wDAYDVQQREwU1NzI3NDEZMBcGA1UE\nChMQTGludXggRm91bmRhdGlvbjAeFw0yNTExMDMyMTA0MTVaFw0yNjExMDMyMTA0\nMTVaMH4xDDAKBgNVBAYTA1VTQTETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UE\nBxMNU2FuIEZyYW5jaXNjbzEWMBQGA1UECRMNNTQ4IE1hcmtldCBTdDEOMAwGA1UE\nERMFNTcyNzQxGTAXBgNVBAoTEExpbnV4IEZvdW5kYXRpb24wWTATBgcqhkjOPQIB\nBggqhkjOPQMBBwNCAASDfJhi/iziGM0bVM4sp3zS8PzsPI0htrPqLtLea12emea+\nV3WAfXal6csuvkQmD6oLPX4ue8+XTnx3Dk7CVqppo0UwQzAOBgNVHQ8BAf8EBAMC\nAQYwEgYDVR0TAQH/BAgwBgEB/wIBATAdBgNVHQ4EFgQUfGDJMIsMcgYERCfFDx4s\nIb6kocIwCgYIKoZIzj0EAwIDRwAwRAIgHJsg0Nu3ZyNik39aCIwzQj7TVrza7+tI\nn7NFEMPAIUYCIEM8+dSaoi2s/QeRL/7el2lM7yvyTWkM++qFyZwP1J/z\n-----END CERTIFICATE-----\n"
+          ],
+          "metadata": {
+            "Fulcio Issuer": "https://kubernetes.default.svc.cluster.local",
+            "Fulcio Issuer (V2)": "https://kubernetes.default.svc.cluster.local",
+            "Issuer": "O=Linux Foundation,POSTALCODE=57274,STREET=548 Market St,L=San Francisco,ST=California,C=USA",
+            "Not After": "${TIMESTAMP}",
+            "Not Before": "${TIMESTAMP}",
+            "Serial Number": "4c9edd6ce02f09f4d5565eb5cd72035465603784",
+            "Subject Alternative Name": "URIs:https://kubernetes.io/namespaces/default/serviceaccounts/default"
+          }
+        }
+      ],
+      "attestations": [
+        {
+          "type": "https://in-toto.io/Statement/v0.1",
+          "predicateType": "https://slsa.dev/provenance/v0.2",
+          "predicateBuildType": "tekton.dev/v1/PipelineRun",
+          "signatures": [
+            {
+              "keyid": "5435369d5ec5bc49a4973dd7db9ec0a41344a906",
+              "sig": "${ATTESTATION_SIGNATURE_acceptance/ec-happy-day-keyless}",
+              "certificate": "-----BEGIN CERTIFICATE-----\nMIIDQjCCAuigAwIBAgIUBM2+vJjgiJmZiSxt5tCTEFsd6qEwCgYIKoZIzj0EAwIw\nfjEMMAoGA1UEBhMDVVNBMRMwEQYDVQQIEwpDYWxpZm9ybmlhMRYwFAYDVQQHEw1T\nYW4gRnJhbmNpc2NvMRYwFAYDVQQJEw01NDggTWFya2V0IFN0MQ4wDAYDVQQREwU1\nNzI3NDEZMBcGA1UEChMQTGludXggRm91bmRhdGlvbjAeFw0yNTExMDMyMTA0NDha\nFw0yNTExMDMyMTE0NDhaMAAwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAR7rTm1\nrZINWj58UJ6tA6v2tEBhzhyUQDQko5kAvd0nTl0XhP/kWzj0icT0693zoPKAkjZq\n5m6XZP6yNvteceKao4IBwDCCAbwwDgYDVR0PAQH/BAQDAgeAMBMGA1UdJQQMMAoG\nCCsGAQUFBwMDMB0GA1UdDgQWBBRUNTadXsW8SaSXPdfbnsCkE0SpBjAfBgNVHSME\nGDAWgBR8YMkwiwxyBgREJ8UPHiwhvqShwjBOBgNVHREBAf8ERDBChkBodHRwczov\nL2t1YmVybmV0ZXMuaW8vbmFtZXNwYWNlcy9kZWZhdWx0L3NlcnZpY2VhY2NvdW50\ncy9kZWZhdWx0MDoGCisGAQQBg78wAQEELGh0dHBzOi8va3ViZXJuZXRlcy5kZWZh\ndWx0LnN2Yy5jbHVzdGVyLmxvY2FsMDwGCisGAQQBg78wAQgELgwsaHR0cHM6Ly9r\ndWJlcm5ldGVzLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwwgYoGCisGAQQB1nkC\nBAIEfAR6AHgAdgDLyqm0RaKjHrciwWg8tIRx6zukUKD8h4OOxLqNfau1IQAAAZpL\niWpgAAAEAwBHMEUCIAn3q9yzuDdiYwtO6nTPST6ddRVI8Q3X8eKmWE5qS33NAiEA\n4ANf9l1M1cAayTLQ1/Rv6Uj2dnvuAUGDgZafVIFCbh8wCgYIKoZIzj0EAwIDSAAw\nRQIhAIBMl8jxXHfiOUT2PV6kqYO04o3aSVJhX9L8oERY29ZQAiBdu8HoOFMio7nk\nAuR0FYpd6t8PVeaCg+w+/gTyvzbXhg==\n-----END CERTIFICATE-----\n",
+              "chain": [
+                "-----BEGIN CERTIFICATE-----\nMIICNjCCAd2gAwIBAgIIBel2loQvuJkwCgYIKoZIzj0EAwIwfjEMMAoGA1UEBhMD\nVVNBMRMwEQYDVQQIEwpDYWxpZm9ybmlhMRYwFAYDVQQHEw1TYW4gRnJhbmNpc2Nv\nMRYwFAYDVQQJEw01NDggTWFya2V0IFN0MQ4wDAYDVQQREwU1NzI3NDEZMBcGA1UE\nChMQTGludXggRm91bmRhdGlvbjAeFw0yNTExMDMyMTA0MTVaFw0yNjExMDMyMTA0\nMTVaMH4xDDAKBgNVBAYTA1VTQTETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UE\nBxMNU2FuIEZyYW5jaXNjbzEWMBQGA1UECRMNNTQ4IE1hcmtldCBTdDEOMAwGA1UE\nERMFNTcyNzQxGTAXBgNVBAoTEExpbnV4IEZvdW5kYXRpb24wWTATBgcqhkjOPQIB\nBggqhkjOPQMBBwNCAASDfJhi/iziGM0bVM4sp3zS8PzsPI0htrPqLtLea12emea+\nV3WAfXal6csuvkQmD6oLPX4ue8+XTnx3Dk7CVqppo0UwQzAOBgNVHQ8BAf8EBAMC\nAQYwEgYDVR0TAQH/BAgwBgEB/wIBATAdBgNVHQ4EFgQUfGDJMIsMcgYERCfFDx4s\nIb6kocIwCgYIKoZIzj0EAwIDRwAwRAIgHJsg0Nu3ZyNik39aCIwzQj7TVrza7+tI\nn7NFEMPAIUYCIEM8+dSaoi2s/QeRL/7el2lM7yvyTWkM++qFyZwP1J/z\n-----END CERTIFICATE-----\n"
+              ],
+              "metadata": {
+                "Fulcio Issuer": "https://kubernetes.default.svc.cluster.local",
+                "Fulcio Issuer (V2)": "https://kubernetes.default.svc.cluster.local",
+                "Issuer": "O=Linux Foundation,POSTALCODE=57274,STREET=548 Market St,L=San Francisco,ST=California,C=USA",
+                "Not After": "${TIMESTAMP}",
+                "Not Before": "${TIMESTAMP}",
+                "Serial Number": "4cdbebc98e0889999892c6de6d093105b1deaa1",
+                "Subject Alternative Name": "URIs:https://kubernetes.io/namespaces/default/serviceaccounts/default"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "key": "",
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::github.com/conforma/policy//policy/release?ref=0de5461c14413484575e63e96ddb514d8ab954b5",
+          "git::github.com/conforma/policy//policy/lib?ref=0de5461c14413484575e63e96ddb514d8ab954b5"
+        ],
+        "config": {
+          "include": [
+            "slsa_provenance_available"
+          ]
+        }
+      }
+    ],
+    "rekorUrl": "${REKOR_URL}"
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[Keyless signing verification with local test image:results - 1]
 {
   "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":5,\"failures\":0,\"warnings\":0,\"result\":\"SUCCESS\"}\n"
 }

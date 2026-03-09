@@ -761,6 +761,11 @@ func createAndPushKeylessImage(ctx context.Context, imageName string) (context.C
 				continue
 			}
 
+			// Skip empty signatures (DSSE envelopes have empty signature annotations)
+			if signature == "" {
+				continue
+			}
+
 			sig := Signature{
 				Signature: signature,
 			}
@@ -947,7 +952,33 @@ func ImageSignatureFrom(ctx context.Context, imageName string) ([]byte, error) {
 }
 
 // unmarshallSignatures extracts the signatures from the raw attestation
+// dsseEnvelope represents the structure of a DSSE envelope for extracting signatures
+type dsseEnvelope struct {
+	Signatures []struct {
+		KeyID string `json:"keyid"`
+		Sig   string `json:"sig"`
+	} `json:"signatures"`
+}
+
 func unmarshallSignatures(rawCosignSignature []byte) (*cosign.Signatures, error) {
+	// Try to unmarshal as DSSE envelope first (for DSSE attestations)
+	var envelope dsseEnvelope
+	if err := json.Unmarshal(rawCosignSignature, &envelope); err == nil {
+		l := len(envelope.Signatures)
+		switch {
+		case l == 0:
+			return nil, nil
+		case l > 1:
+			return nil, fmt.Errorf("received %d signatures, not expecting more than 1", l)
+		default:
+			return &cosign.Signatures{
+				KeyID: envelope.Signatures[0].KeyID,
+				Sig:   envelope.Signatures[0].Sig,
+			}, nil
+		}
+	}
+
+	// Fallback to original cosign.AttestationPayload format
 	var attestationPayload cosign.AttestationPayload
 	if err := json.Unmarshal(rawCosignSignature, &attestationPayload); err != nil {
 		return nil, err
@@ -995,7 +1026,10 @@ func RawAttestationSignaturesFrom(ctx context.Context) map[string]string {
 
 	ret := map[string]string{}
 	for ref, signature := range state.AttestationSignatures {
-		ret[fmt.Sprintf("ATTESTATION_SIGNATURE_%s", ref)] = signature.Signature
+		// Only add the variable if the signature is not empty to avoid polluting snapshots
+		if signature.Signature != "" {
+			ret[fmt.Sprintf("ATTESTATION_SIGNATURE_%s", ref)] = signature.Signature
+		}
 	}
 
 	return ret

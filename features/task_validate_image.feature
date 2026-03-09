@@ -412,3 +412,38 @@ Feature: Verify Enterprise Contract Tekton Tasks
     Then the task should succeed
      And the task logs for step "report-json" should match the snapshot
      And the task results should match the snapshot
+
+  Scenario: Keyless signing verification with local test image
+    Given a working namespace
+    Given a signed and attested keyless image named "acceptance/ec-happy-day-keyless"
+    Given a initialized tuf root
+    Given a cluster policy with content:
+      ```
+      {
+        "sources": [
+          {
+            "policy": [
+              "github.com/conforma/policy//policy/release?ref=0de5461c14413484575e63e96ddb514d8ab954b5",
+              "github.com/conforma/policy//policy/lib?ref=0de5461c14413484575e63e96ddb514d8ab954b5"
+            ],
+            "config": {
+              "include": [
+                "slsa_provenance_available"
+              ]
+            }
+          }
+        ]
+      }
+      ```
+    When version 0.1 of the task named "verify-enterprise-contract" is run with parameters:
+      | IMAGES                  | {"components": [{"containerImage": "${REGISTRY}/acceptance/ec-happy-day-keyless"}]} |
+      | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                                         |
+      | CERTIFICATE_IDENTITY    | https://kubernetes.io/namespaces/default/serviceaccounts/default                    |
+      | CERTIFICATE_OIDC_ISSUER | https://kubernetes.default.svc.cluster.local                                        |
+      | TUF_MIRROR              | ${TUF}                                                                              |
+      | REKOR_HOST              | ${REKOR}                                                                            |
+      | IGNORE_REKOR            | false                                                                               |
+      | STRICT                  | true                                                                                |
+    Then the task should succeed
+     And the task logs for step "report-json" should match the snapshot
+     And the task results should match the snapshot
