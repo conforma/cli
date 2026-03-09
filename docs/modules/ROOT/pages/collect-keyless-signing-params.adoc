@@ -1,0 +1,39 @@
+= collect-keyless-signing-params
+
+Version: 0.1
+
+== Synopsis
+
+Tekton task to collect Konflux configuration parameters related to
+keyless signing using cosign. The task attempts to read the "cluster-config"
+ConfigMap in the "konflux-info" namespace to extract signing parameters.
+
+In case the ConfigMap is not found, the task will output empty strings for all parameters,
+allowing the pipeline to continue without signing parameters.
+
+
+== Params
+[horizontal]
+
+*configMapName* (`string`):: The name of the ConfigMap to read signing parameters from
++
+*Default*: `cluster-config`
+*configMapNamespace* (`string`):: The namespace where the ConfigMap is located
++
+*Default*: `konflux-info`
+
+== Results
+
+[horizontal]
+*defaultOIDCIssuer*:: A default OIDC issuer URL to be used for signing.
+
+*rekorExternalUrl*:: The external URL of the Rekor transparency log.
+
+*fulcioExternalUrl*:: The external URL of the Fulcio certificate authority.
+
+*tufExternalUrl*:: The external URL of the TUF repository.
+
+*buildIdentityRegexp*:: A regular expression to extract build identity from the OIDC token claims, if applicable.
+
+*keylessSigningEnabled*:: A flag indicating whether keyless signing is enabled based on the presence of signing parameters.
+
