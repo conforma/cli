@@ -22,6 +22,8 @@ information.
 |Fetch an Image Manifest from an OCI registry.
 |xref:ec_oci_image_manifests.adoc[ec.oci.image_manifests]
 |Fetch Image Manifests from an OCI registry in parallel.
+|xref:ec_oci_image_referrers.adoc[ec.oci.image_referrers]
+|Discover artifacts attached to an image via OCI Referrers API.
 |xref:ec_oci_image_tag_refs.adoc[ec.oci.image_tag_refs]
 |Discover artifacts attached to an image via legacy tag-based discovery (cosign .sig, .att, .sbom suffixes).
 |xref:ec_purl_is_valid.adoc[ec.purl.is_valid]

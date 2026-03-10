@@ -62,6 +62,7 @@ const (
 	ociImageFilesName          = "ec.oci.image_files"
 	ociImageIndexName          = "ec.oci.image_index"
 	ociImageTagRefsName        = "ec.oci.image_tag_refs"
+	ociImageReferrersName      = "ec.oci.image_referrers"
 	maxTarEntrySizeConst       = 500 * 1024 * 1024 // 500MB
 )
 
@@ -439,6 +440,41 @@ func registerOCIImageTagRefs() {
 	ast.RegisterBuiltin(&ast.Builtin{
 		Name:             decl.Name,
 		Description:      "Discover artifacts attached to an image via legacy tag-based discovery (cosign .sig, .att, .sbom suffixes).",
+		Decl:             decl.Decl,
+		Nondeterministic: decl.Nondeterministic,
+	})
+}
+
+func registerOCIImageReferrers() {
+	descriptor := types.NewObject(
+		[]*types.StaticProperty{
+			{Key: "mediaType", Value: types.S},
+			{Key: "size", Value: types.N},
+			{Key: "digest", Value: types.S},
+			{Key: "artifactType", Value: types.S},
+			{Key: "ref", Value: types.S},
+		},
+		nil,
+	)
+
+	resultType := types.NewArray([]types.Type{descriptor}, nil)
+
+	decl := rego.Function{
+		Name: ociImageReferrersName,
+		Decl: types.NewFunction(
+			types.Args(
+				types.Named("ref", types.S).Description("OCI image reference"),
+			),
+			types.Named("referrers", resultType).Description("list of referrer descriptors discovered via OCI Referrers API"),
+		),
+		Memoize:          true,
+		Nondeterministic: true,
+	}
+
+	rego.RegisterBuiltin1(&decl, ociImageReferrers)
+	ast.RegisterBuiltin(&ast.Builtin{
+		Name:             decl.Name,
+		Description:      "Discover artifacts attached to an image via OCI Referrers API.",
 		Decl:             decl.Decl,
 		Nondeterministic: decl.Nondeterministic,
 	})
@@ -1417,6 +1453,77 @@ func ociImageTagRefs(bctx rego.BuiltinContext, a *ast.Term) (*ast.Term, error) {
 	return ast.ArrayTerm(tagRefs...), nil
 }
 
+// ociImageReferrers discovers artifacts attached to an image using the OCI Referrers API.
+// It returns a list of referrer references (as digest references) for the given image.
+// Returns nil if the reference cannot be resolved or if the Referrers API call fails.
+func ociImageReferrers(bctx rego.BuiltinContext, a *ast.Term) (*ast.Term, error) {
+	logger := log.WithField("function", ociImageReferrersName)
+
+	uriValue, ok := a.Value.(ast.String)
+	if !ok {
+		logger.Error("input is not a string")
+		return nil, nil
+	}
+	refStr := string(uriValue)
+	logger = logger.WithField("input_ref", refStr)
+
+	client := oci.NewClient(bctx.Context)
+
+	// Resolve to digest if needed
+	resolvedStr, ref, err := resolveIfNeeded(client, refStr)
+	if err != nil {
+		logger.WithError(err).Error("failed to resolve reference")
+		return nil, nil
+	}
+
+	// Convert to digest reference (needed for the Referrers API)
+	var digestRef name.Digest
+	if d, ok := ref.(name.Digest); ok {
+		// Already a digest
+		digestRef = d
+	} else {
+		// Tag reference - parse the resolved string which includes the digest
+		digestRef, err = name.NewDigest(resolvedStr)
+		if err != nil {
+			logger.WithError(err).Error("failed to create digest reference from resolved string")
+			return nil, nil
+		}
+	}
+
+	// Use remote options from context
+	remoteOpts := oci.CreateRemoteOptions(bctx.Context)
+
+	// Get all referrers (empty string for artifactType means get all types)
+	indexManifest, err := ociremote.Referrers(digestRef, "", ociremote.WithRemoteOptions(remoteOpts...))
+	if err != nil {
+		logger.WithError(err).Error("failed to get referrers via OCI Referrers API")
+		return nil, nil
+	}
+
+	var referrerDescriptors []*ast.Term
+	for _, descriptor := range indexManifest.Manifests {
+		// Build a simplified descriptor object with essential fields
+		referrerRef := fmt.Sprintf("%s@%s", ref.Context().Name(), descriptor.Digest.String())
+
+		descriptorTerm := ast.ObjectTerm(
+			ast.Item(ast.StringTerm("mediaType"), ast.StringTerm(string(descriptor.MediaType))),
+			ast.Item(ast.StringTerm("size"), ast.NumberTerm(json.Number(fmt.Sprintf("%d", descriptor.Size)))),
+			ast.Item(ast.StringTerm("digest"), ast.StringTerm(descriptor.Digest.String())),
+			ast.Item(ast.StringTerm("artifactType"), ast.StringTerm(descriptor.ArtifactType)),
+			ast.Item(ast.StringTerm("ref"), ast.StringTerm(referrerRef)),
+		)
+
+		referrerDescriptors = append(referrerDescriptors, descriptorTerm)
+		logger.WithFields(log.Fields{
+			"referrer": referrerRef,
+			"type":     descriptor.ArtifactType,
+		}).Debug("found referrer via OCI Referrers API")
+	}
+
+	logger.WithField("found_count", len(referrerDescriptors)).Debug("OCI Referrers API discovery complete")
+	return ast.ArrayTerm(referrerDescriptors...), nil
+}
+
 func newPlatformTerm(p v1.Platform) *ast.Term {
 	osFeatures := []*ast.Term{}
 	for _, f := range p.OSFeatures {
@@ -1531,4 +1638,5 @@ func init() {
 	registerOCIImageManifestsBatch()
 	registerOCIImageIndex()
 	registerOCIImageTagRefs()
+	registerOCIImageReferrers()
 }

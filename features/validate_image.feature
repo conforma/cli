@@ -1174,6 +1174,33 @@ Feature: evaluate enterprise contract
     Then the exit status should be 0
     Then the output should match the snapshot
 
+  Scenario: discover artifact referrers via OCI Referrers API
+    Given a key pair named "referrers"
+    Given an image named "acceptance/image-referrers"
+    # Create referrer-based artifacts using OCI Referrers API - these will be discovered by ec.oci.image_referrers()
+    Given a valid image signature referrer of "acceptance/image-referrers" image signed by the "referrers" key
+    Given a valid attestation referrer of "acceptance/image-referrers" signed by the "referrers" key
+    # Also create legacy tag-based artifacts to satisfy built-in signature/attestation verification
+    Given a valid image signature of "acceptance/image-referrers" image signed by the "referrers" key
+    Given a valid attestation of "acceptance/image-referrers" signed by the "referrers" key
+    Given a git repository named "image-referrers-policy" with
+      | main.rego | examples/image_referrers.rego |
+    Given policy configuration named "ec-policy" with specification
+      """
+      {
+        "sources": [
+          {
+            "policy": [
+              "git::https://${GITHOST}/git/image-referrers-policy"
+            ]
+          }
+        ]
+      }
+      """
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/image-referrers --policy acceptance/ec-policy --public-key ${referrers_PUBLIC_KEY} --rekor-url ${REKOR} --show-successes --output json"
+    Then the exit status should be 0
+    Then the output should match the snapshot
+
   Scenario: tracing and debug logging
     Given a key pair named "trace_debug"
       And an image named "acceptance/trace-debug"

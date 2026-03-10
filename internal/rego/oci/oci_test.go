@@ -25,14 +25,21 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/registry"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	v1fake "github.com/google/go-containerregistry/pkg/v1/fake"
+	"github.com/google/go-containerregistry/pkg/v1/mutate"
+	"github.com/google/go-containerregistry/pkg/v1/partial"
+	"github.com/google/go-containerregistry/pkg/v1/random"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/types"
@@ -1250,6 +1257,7 @@ func TestFunctionsRegistered(t *testing.T) {
 		ociImageManifestsBatchName,
 		ociImageIndexName,
 		ociImageTagRefsName,
+		ociImageReferrersName,
 	}
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
@@ -1560,6 +1568,214 @@ func TestOCIImageTagRefs(t *testing.T) {
 
 			// Verify the refs match (order-independent)
 			require.ElementsMatch(t, c.want, gotRefs, "tag refs mismatch")
+		})
+	}
+}
+
+func TestOCIImageReferrers(t *testing.T) {
+	t.Cleanup(ClearCaches)
+	ClearCaches()
+
+	// Create a local OCI registry with Referrers API support
+	registryServer := httptest.NewServer(registry.New(
+		registry.WithReferrersSupport(true),
+	))
+	t.Cleanup(registryServer.Close)
+
+	u, err := url.Parse(registryServer.URL)
+	require.NoError(t, err)
+
+	// Push a base image
+	img, err := random.Image(1024, 2)
+	require.NoError(t, err)
+
+	baseRef, err := name.ParseReference(fmt.Sprintf("localhost:%s/test-repo/test-image:latest", u.Port()))
+	require.NoError(t, err)
+
+	require.NoError(t, remote.Push(baseRef, img))
+
+	// Get the digest of the pushed image
+	imgDigest, err := img.Digest()
+	require.NoError(t, err)
+
+	digestRef := fmt.Sprintf("localhost:%s/test-repo/test-image@%s", u.Port(), imgDigest)
+
+	// Create and attach referrers (signature and attestation)
+	// Get the base image descriptor for the subject field
+	imgDescriptor, err := partial.Descriptor(img)
+	require.NoError(t, err)
+
+	// Create signature referrer image with subject field
+	sigImg, err := random.Image(512, 1)
+	require.NoError(t, err)
+	sigImgWithSubject, ok := mutate.Subject(sigImg, *imgDescriptor).(v1.Image)
+	require.True(t, ok, "failed to assert signature image type")
+
+	// Get the digest of the signature manifest
+	sigDigest, err := sigImgWithSubject.Digest()
+	require.NoError(t, err)
+
+	// Push the signature referrer
+	sigRef := fmt.Sprintf("localhost:%s/test-repo/test-image@%s", u.Port(), sigDigest)
+	sigDigestRef, err := name.NewDigest(sigRef)
+	require.NoError(t, err)
+	err = remote.Write(sigDigestRef, sigImgWithSubject)
+	require.NoError(t, err)
+
+	// Create attestation referrer image with subject field
+	attImg, err := random.Image(512, 1)
+	require.NoError(t, err)
+	attImgWithSubject, ok := mutate.Subject(attImg, *imgDescriptor).(v1.Image)
+	require.True(t, ok, "failed to assert attestation image type")
+
+	// Get the digest of the attestation manifest
+	attDigest, err := attImgWithSubject.Digest()
+	require.NoError(t, err)
+
+	// Push the attestation referrer
+	attRef := fmt.Sprintf("localhost:%s/test-repo/test-image@%s", u.Port(), attDigest)
+	attDigestRef, err := name.NewDigest(attRef)
+	require.NoError(t, err)
+	err = remote.Write(attDigestRef, attImgWithSubject)
+	require.NoError(t, err)
+
+	// Create a separate registry WITHOUT Referrers API support for testing graceful degradation
+	registryNoAPI := httptest.NewServer(registry.New(
+		registry.WithReferrersSupport(false),
+	))
+	t.Cleanup(registryNoAPI.Close)
+
+	uNoAPI, err := url.Parse(registryNoAPI.URL)
+	require.NoError(t, err)
+
+	// Push an image to the no-API registry
+	imgNoAPI, err := random.Image(1024, 2)
+	require.NoError(t, err)
+
+	baseRefNoAPI, err := name.ParseReference(fmt.Sprintf("localhost:%s/no-api-repo/test-image:latest", uNoAPI.Port()))
+	require.NoError(t, err)
+
+	require.NoError(t, remote.Push(baseRefNoAPI, imgNoAPI))
+
+	imgNoAPIDigest, err := imgNoAPI.Digest()
+	require.NoError(t, err)
+
+	digestRefNoAPI := fmt.Sprintf("localhost:%s/no-api-repo/test-image@%s", uNoAPI.Port(), imgNoAPIDigest)
+
+	// Push an image with 0 referrers to the API-enabled registry
+	imgZeroRefs, err := random.Image(1024, 2)
+	require.NoError(t, err)
+
+	baseRefZero, err := name.ParseReference(fmt.Sprintf("localhost:%s/test-repo/zero-refs:latest", u.Port()))
+	require.NoError(t, err)
+
+	require.NoError(t, remote.Push(baseRefZero, imgZeroRefs))
+
+	imgZeroDigest, err := imgZeroRefs.Digest()
+	require.NoError(t, err)
+
+	digestRefZero := fmt.Sprintf("localhost:%s/test-repo/zero-refs@%s", u.Port(), imgZeroDigest)
+
+	cases := []struct {
+		name    string
+		ref     *ast.Term
+		wantErr error
+		want    []string
+	}{
+		{
+			name:    "valid digest reference with referrers",
+			ref:     ast.StringTerm(digestRef),
+			wantErr: nil,
+			want: []string{
+				fmt.Sprintf("localhost:%s/test-repo/test-image@%s", u.Port(), sigDigest),
+				fmt.Sprintf("localhost:%s/test-repo/test-image@%s", u.Port(), attDigest),
+			},
+		},
+		{
+			name:    "invalid ref type",
+			ref:     ast.IntNumberTerm(42),
+			wantErr: nil,
+			want:    nil,
+		},
+		{
+			name:    "tag reference resolves to digest and returns referrers",
+			ref:     ast.StringTerm(fmt.Sprintf("localhost:%s/test-repo/test-image:latest", u.Port())),
+			wantErr: nil,
+			want: []string{
+				fmt.Sprintf("localhost:%s/test-repo/test-image@%s", u.Port(), sigDigest),
+				fmt.Sprintf("localhost:%s/test-repo/test-image@%s", u.Port(), attDigest),
+			},
+		},
+		{
+			name:    "invalid reference format",
+			ref:     ast.StringTerm("...invalid..."),
+			wantErr: nil,
+			want:    nil,
+		},
+		{
+			name:    "registry without Referrers API support - graceful degradation",
+			ref:     ast.StringTerm(digestRefNoAPI),
+			wantErr: nil,
+			want:    []string{}, // cosign library falls back to legacy lookup, returns empty array
+		},
+		{
+			name:    "image with 0 referrers returns empty array",
+			ref:     ast.StringTerm(digestRefZero),
+			wantErr: nil,
+			want:    []string{},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ClearCaches()
+
+			bctx := rego.BuiltinContext{Context: context.Background()}
+
+			got, err := ociImageReferrers(bctx, c.ref)
+
+			if c.wantErr != nil {
+				require.Error(t, err)
+				require.Equal(t, c.wantErr, err)
+				return
+			}
+
+			require.NoError(t, err)
+
+			if c.want == nil {
+				require.Nil(t, got)
+			} else {
+				require.NotNil(t, got)
+
+				// Verify it's an array
+				arr, ok := got.Value.(*ast.Array)
+				require.True(t, ok, "result should be an array")
+
+				// Extract the actual referrer ref strings from the result
+				var gotRefs []string
+				for i := 0; i < arr.Len(); i++ {
+					// Each element is a descriptor object
+					obj, ok := arr.Elem(i).Value.(ast.Object)
+					require.True(t, ok, "referrer should be an object")
+
+					// Get the ref field from the descriptor (full reference)
+					refTerm := obj.Get(ast.StringTerm("ref"))
+					require.NotNil(t, refTerm, "descriptor should have ref field")
+
+					refStr, ok := refTerm.Value.(ast.String)
+					require.True(t, ok, "ref should be a string")
+					gotRefs = append(gotRefs, string(refStr))
+
+					// Verify the descriptor has the expected fields
+					require.NotNil(t, obj.Get(ast.StringTerm("digest")), "descriptor should have digest")
+					require.NotNil(t, obj.Get(ast.StringTerm("mediaType")), "descriptor should have mediaType")
+					require.NotNil(t, obj.Get(ast.StringTerm("size")), "descriptor should have size")
+					require.NotNil(t, obj.Get(ast.StringTerm("artifactType")), "descriptor should have artifactType")
+				}
+
+				// Verify the referrers match (order-independent)
+				require.ElementsMatch(t, c.want, gotRefs, "referrers mismatch")
+			}
 		})
 	}
 }

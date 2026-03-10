@@ -1,0 +1,15 @@
+= ec.oci.image_referrers
+
+Discover artifacts attached to an image via OCI Referrers API.
+
+== Usage
+
+  referrers = ec.oci.image_referrers(ref: string)
+
+== Parameters
+
+* `ref` (`string`): OCI image reference
+
+== Return
+
+`referrers` (`array<object<artifactType: string, digest: string, mediaType: string, ref: string, size: number>>`): list of referrer descriptors discovered via OCI Referrers API
