@@ -447,3 +447,43 @@ Feature: Verify Enterprise Contract Tekton Tasks
     Then the task should succeed
      And the task logs for step "report-json" should match the snapshot
      And the task results should match the snapshot
+
+  Scenario: Collect keyless signing parameters from ConfigMap
+    Given a working namespace
+    And a namespace named "konflux-info" exists
+    And a ConfigMap "cluster-config" in namespace "konflux-info" with content:
+      """
+      {
+        "defaultOIDCIssuer": "https://kubernetes.default.svc.cluster.local",
+        "rekorExternalUrl": "https://rekor.example.com",
+        "fulcioExternalUrl": "https://fulcio.example.com",
+        "tufExternalUrl": "https://tuf.example.com",
+        "buildIdentityRegexp": "^https://konflux-ci.dev/.*$",
+        "enableKeylessSigning": "true"
+      }
+      """
+    When version 0.1 of the task named "collect-keyless-signing-params" is run with parameters:
+      | configMapName      | cluster-config |
+      | configMapNamespace | konflux-info   |
+    Then the task should succeed
+     And the task logs for step "collect-signing-params" should match the snapshot
+     And the task result "defaultOIDCIssuer" should equal "https://kubernetes.default.svc.cluster.local"
+     And the task result "rekorExternalUrl" should equal "https://rekor.example.com"
+     And the task result "fulcioExternalUrl" should equal "https://fulcio.example.com"
+     And the task result "tufExternalUrl" should equal "https://tuf.example.com"
+     And the task result "buildIdentityRegexp" should equal "^https://konflux-ci.dev/.*$"
+     And the task result "keylessSigningEnabled" should equal "true"
+
+  Scenario: Collect keyless signing parameters when ConfigMap is missing
+    Given a working namespace
+    And a namespace named "konflux-info" exists
+    When version 0.1 of the task named "collect-keyless-signing-params" is run with parameters:
+      | configMapName      | missing-config |
+      | configMapNamespace | konflux-info   |
+    Then the task should succeed
+     And the task result "defaultOIDCIssuer" should equal ""
+     And the task result "rekorExternalUrl" should equal ""
+     And the task result "fulcioExternalUrl" should equal ""
+     And the task result "tufExternalUrl" should equal ""
+     And the task result "buildIdentityRegexp" should equal ""
+     And the task result "keylessSigningEnabled" should equal "false"

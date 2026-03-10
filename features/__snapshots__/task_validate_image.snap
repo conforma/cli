@@ -595,3 +595,9 @@ true
   "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":5,\"failures\":0,\"warnings\":0,\"result\":\"SUCCESS\"}\n"
 }
 ---
+
+[Collect keyless signing parameters from ConfigMap:collect-signing-params - 1]
+Getting cluster-config ConfigMap
+ConfigMap found, extracting signing parameters
+https://kubernetes.default.svc.cluster.localhttps://rekor.example.comhttps://fulcio.example.comhttps://tuf.example.com^https://konflux-ci.dev/.*$true
+---
