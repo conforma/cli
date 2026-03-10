@@ -174,6 +174,26 @@ func createNamedSnapshot(ctx context.Context, name string, specification *godog.
 	return c.cluster.CreateNamedSnapshot(ctx, name, specification.Content)
 }
 
+func createConfigMap(ctx context.Context, name, namespace string, content *godog.DocString) error {
+	c := testenv.FetchState[ClusterState](ctx)
+
+	if err := mustBeUp(ctx, *c); err != nil {
+		return err
+	}
+
+	return c.cluster.CreateConfigMap(ctx, name, namespace, content.Content)
+}
+
+func createNamedNamespace(ctx context.Context, name string) error {
+	c := testenv.FetchState[ClusterState](ctx)
+
+	if err := mustBeUp(ctx, *c); err != nil {
+		return err
+	}
+
+	return c.cluster.CreateNamedNamespace(ctx, name)
+}
+
 func createNamedSnapshotWithManyComponents(ctx context.Context, name string, amount int, key string) (context.Context, error) {
 	c := testenv.FetchState[ClusterState](ctx)
 
@@ -493,6 +513,8 @@ func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step(`^the task results should match the snapshot$`, taskResultsShouldMatchTheSnapshot)
 	sc.Step(`^the task result "([^"]*)" should equal "([^"]*)"$`, taskResultShouldEqual)
 	sc.Step(`^policy configuration named "([^"]*)" with (\d+) policy sources from "([^"]*)"(?:, patched with)$`, createNamedPolicyWithManySources)
+	sc.Step(`^a namespace named "([^"]*)" exists$`, createNamedNamespace)
+	sc.Step(`^a ConfigMap "([^"]*)" in namespace "([^"]*)" with content:$`, createConfigMap)
 	// stop usage of the cluster once a test is done, godog will call this
 	// function on failure and on the last step, so more than once if the
 	// failure is not on the last step and once if there was no failure or the

@@ -135,6 +135,14 @@ func (s stubCluster) CreateNamedSnapshot(ctx context.Context, name string, speci
 		}))).WithHeaders(map[string]string{"Content-Type": "application/json"}).WithStatus(200)))
 }
 
+func (s stubCluster) CreateConfigMap(_ context.Context, _, _, _ string) error {
+	return errors.New("ConfigMap creation is not supported when using the stub Kubernetes")
+}
+
+func (s stubCluster) CreateNamedNamespace(_ context.Context, _ string) error {
+	return errors.New("Named namespace creation is not supported when using the stub Kubernetes")
+}
+
 func (s stubCluster) CreatePolicy(_ context.Context, _ string) error {
 	return errors.New("use `Given policy configuration named \"<name>\" with specification` when using the stub Kubernetes")
 }
