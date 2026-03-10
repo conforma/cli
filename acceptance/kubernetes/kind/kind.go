@@ -166,7 +166,7 @@ func Start(givenCtx context.Context) (ctx context.Context, kCluster types.Cluste
 
 		var port int
 		if port, err = freeport.GetFreePort(); err != nil {
-			logger.Errorf("Unable to determine a free port: %v", err)
+			logger.Errorf("Unable to determine a free port for registry: %v", err)
 			return
 		} else {
 			kCluster.registryPort = int32(port) //nolint:gosec // G115 - ports shouldn't be larger than int32

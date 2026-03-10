@@ -39,7 +39,9 @@ import (
 	"github.com/conforma/cli/acceptance/crypto"
 	"github.com/conforma/cli/acceptance/kubernetes/types"
 	"github.com/conforma/cli/acceptance/kustomize"
+	"github.com/conforma/cli/acceptance/rekor"
 	"github.com/conforma/cli/acceptance/testenv"
+	"github.com/conforma/cli/acceptance/wiremock"
 )
 
 // createPolicyObject creates the EnterpriseContractPolicy object with the given
@@ -252,6 +254,19 @@ func stringParam(ctx context.Context, name, value string, t *testState) pipeline
 
 	if t.snapshotDigest != "" {
 		vars["BUILD_SNAPSHOT_DIGEST"] = t.snapshotDigest
+	}
+
+	// Add TUF and certificate variables for keyless verification
+	// For Tekton tasks, always use the cluster-internal TUF service
+	vars["TUF"] = "http://tuf.tuf-service.svc.cluster.local:8080"
+	vars["CERT_IDENTITY"] = "https://kubernetes.io/namespaces/default/serviceaccounts/default"
+	vars["CERT_ISSUER"] = "https://kubernetes.default.svc.cluster.local"
+
+	// Only set REKOR variable if stub rekord was started
+	if wiremock.IsRunning(ctx) {
+		if rekorURL, err := rekor.StubRekor(ctx); err == nil {
+			vars["REKOR"] = rekorURL
+		}
 	}
 
 	publicKeys := crypto.PublicKeysFrom(ctx)

@@ -187,6 +187,11 @@ func (c *client) UnmatchedRequests() ([]unmatchedRequest, error) {
 
 // StartWiremock starts the WireMock instance if one is not already running
 func StartWiremock(ctx context.Context) (context.Context, error) {
+	return StartWiremockOnPort(ctx, 0) // 0 means use any available port
+}
+
+// StartWiremockOnPort starts the WireMock instance on a specific port if one is not already running
+func StartWiremockOnPort(ctx context.Context, hostPort int) (context.Context, error) {
 	var state *wiremockState
 	ctx, err := testenv.SetupState(ctx, &state)
 	if err != nil {
@@ -204,9 +209,18 @@ func StartWiremock(ctx context.Context) (context.Context, error) {
 		return ctx, err
 	}
 
+	var exposedPorts []string
+	if hostPort > 0 {
+		// Use specific port
+		exposedPorts = []string{fmt.Sprintf("0.0.0.0:%d:8080/tcp", hostPort), "0.0.0.0::8443/tcp"}
+	} else {
+		// Use any available port
+		exposedPorts = []string{"0.0.0.0::8080/tcp", "0.0.0.0::8443/tcp"}
+	}
+
 	req := testenv.TestContainersRequest(ctx, testcontainers.ContainerRequest{
 		Image:        wireMockImage,
-		ExposedPorts: []string{"0.0.0.0::8080/tcp", "0.0.0.0::8443/tcp"},
+		ExposedPorts: exposedPorts,
 		WaitingFor:   wait.ForHTTP("/__admin/mappings").WithPort("8080/tcp"),
 		Binds:        []string{fmt.Sprintf("%s:/recordings:z", recordings)},
 		Cmd: []string{
@@ -225,12 +239,18 @@ func StartWiremock(ctx context.Context) (context.Context, error) {
 		return ctx, fmt.Errorf("unable to run GenericContainer: %v", err)
 	}
 
-	port, err := w.MappedPort(ctx, "8080/tcp")
-	if err != nil {
-		return ctx, err
+	var url string
+	if hostPort > 0 {
+		// Use the specific port that was requested
+		url = fmt.Sprintf("http://localhost:%d", hostPort)
+	} else {
+		// Get the dynamically assigned port
+		port, err := w.MappedPort(ctx, "8080/tcp")
+		if err != nil {
+			return ctx, err
+		}
+		url = fmt.Sprintf("http://localhost:%d", port.Int())
 	}
-
-	url := fmt.Sprintf("http://localhost:%d", port.Int())
 	state.URL = url
 
 	return ctx, nil

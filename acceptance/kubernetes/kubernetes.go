@@ -36,6 +36,7 @@ import (
 	"github.com/conforma/cli/acceptance/kubernetes/stub"
 	"github.com/conforma/cli/acceptance/kubernetes/types"
 	"github.com/conforma/cli/acceptance/registry"
+	"github.com/conforma/cli/acceptance/rekor"
 	"github.com/conforma/cli/acceptance/snaps"
 	"github.com/conforma/cli/acceptance/testenv"
 )
@@ -365,6 +366,11 @@ func taskLogsShouldMatchTheSnapshot(ctx context.Context, stepName string) error 
 	}
 
 	vars["EC_VERSION"] = v
+
+	// Add Rekor URL for snapshot normalization
+	if rekorURL, err := rekor.StubRekor(ctx); err == nil {
+		vars["REKOR"] = rekorURL
+	}
 
 	for _, step := range info.Steps {
 		if step.Name == stepName {

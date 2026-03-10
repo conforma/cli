@@ -19,8 +19,9 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - ../tekton
-  - ../ecc
-  - ../registry
-  - ../tuf
-  - ../work
+  - namespace.yaml
+  - tuf.yaml
+  # These two files are generated using `make tuf-yaml` from wiremock data.
+  # See also the hack/tuf/create-tuf-files.sh script in this directory.
+  - tuf-files-configmap.yaml
+  - tuf-root-configmap.yaml
