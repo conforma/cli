@@ -39,6 +39,7 @@ import (
 	"github.com/conforma/cli/acceptance/crypto"
 	"github.com/conforma/cli/acceptance/kubernetes/types"
 	"github.com/conforma/cli/acceptance/kustomize"
+	"github.com/conforma/cli/acceptance/rekor"
 	"github.com/conforma/cli/acceptance/testenv"
 )
 
@@ -252,6 +253,16 @@ func stringParam(ctx context.Context, name, value string, t *testState) pipeline
 
 	if t.snapshotDigest != "" {
 		vars["BUILD_SNAPSHOT_DIGEST"] = t.snapshotDigest
+	}
+
+	// Add TUF and certificate variables for keyless verification
+	// For Tekton tasks, always use the cluster-internal TUF service
+	vars["TUF"] = "http://tuf.tuf-service.svc.cluster.local:8080"
+	vars["CERT_IDENTITY"] = "https://kubernetes.io/namespaces/default/serviceaccounts/default"
+	vars["CERT_ISSUER"] = "https://kubernetes.default.svc.cluster.local"
+
+	if rekorURL, err := rekor.StubRekor(ctx); err == nil {
+		vars["REKOR"] = rekorURL
 	}
 
 	publicKeys := crypto.PublicKeysFrom(ctx)
