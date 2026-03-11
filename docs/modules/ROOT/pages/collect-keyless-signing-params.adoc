@@ -33,6 +33,8 @@ allowing the pipeline to continue without signing parameters.
 
 *tufExternalUrl*:: The external URL of the TUF repository.
 
+*buildIdentity*:: The build identity from the OIDC token claims, if applicable.
+
 *buildIdentityRegexp*:: A regular expression to extract build identity from the OIDC token claims, if applicable.
 
 *keylessSigningEnabled*:: A flag indicating whether keyless signing is enabled based on the presence of signing parameters.

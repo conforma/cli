@@ -604,6 +604,7 @@ results.defaultOIDCIssuer: https://kubernetes.default.svc.cluster.local
 results.rekorExternalUrl: https://rekor.example.com
 results.fulcioExternalUrl: https://fulcio.example.com
 results.tufExternalUrl: https://tuf.example.com
+results.buildIdentity: https://kubernetes.io/namespaces/openshift-pipelines/serviceaccounts/tekton-chains-controller
 results.buildIdentityRegexp: ^https://konflux-ci.dev/.*$
 
 ---
@@ -616,6 +617,7 @@ results.defaultOIDCIssuer:
 results.rekorExternalUrl: 
 results.fulcioExternalUrl: 
 results.tufExternalUrl: 
+results.buildIdentity: 
 results.buildIdentityRegexp: 
 
 ---
@@ -629,6 +631,7 @@ results.defaultOIDCIssuer:
 results.rekorExternalUrl: 
 results.fulcioExternalUrl: 
 results.tufExternalUrl: 
+results.buildIdentity: 
 results.buildIdentityRegexp: 
 
 ---
@@ -642,6 +645,7 @@ results.defaultOIDCIssuer:
 results.rekorExternalUrl: 
 results.fulcioExternalUrl: 
 results.tufExternalUrl: 
+results.buildIdentity: 
 results.buildIdentityRegexp: 
 
 ---

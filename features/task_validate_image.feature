@@ -468,6 +468,7 @@ Feature: Verify Enterprise Contract Tekton Tasks
         "rekorExternalUrl": "https://rekor.example.com",
         "fulcioExternalUrl": "https://fulcio.example.com",
         "tufExternalUrl": "https://tuf.example.com",
+        "buildIdentity": "https://kubernetes.io/namespaces/openshift-pipelines/serviceaccounts/tekton-chains-controller",
         "buildIdentityRegexp": "^https://konflux-ci.dev/.*$",
         "enableKeylessSigning": "true"
       }
@@ -480,6 +481,7 @@ Feature: Verify Enterprise Contract Tekton Tasks
      And the task result "rekorExternalUrl" should equal "https://rekor.example.com"
      And the task result "fulcioExternalUrl" should equal "https://fulcio.example.com"
      And the task result "tufExternalUrl" should equal "https://tuf.example.com"
+     And the task result "buildIdentity" should equal "https://kubernetes.io/namespaces/openshift-pipelines/serviceaccounts/tekton-chains-controller"
      And the task result "buildIdentityRegexp" should equal "^https://konflux-ci.dev/.*$"
      And the task result "keylessSigningEnabled" should equal "true"
 
@@ -495,6 +497,7 @@ Feature: Verify Enterprise Contract Tekton Tasks
         "rekorExternalUrl": "https://rekor.example.com",
         "fulcioExternalUrl": "https://fulcio.example.com",
         "tufExternalUrl": "https://tuf.example.com",
+        "buildIdentity": "https://kubernetes.io/namespaces/openshift-pipelines/serviceaccounts/tekton-chains-controller",
         "buildIdentityRegexp": "^https://konflux-ci.dev/.*$",
         "enableKeylessSigning": "false"
       }

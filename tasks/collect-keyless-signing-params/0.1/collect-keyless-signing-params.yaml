@@ -67,6 +67,11 @@ spec:
       description: |
         The external URL of the TUF repository.
 
+    - name: buildIdentity
+      type: string
+      description: |
+        The build identity from the OIDC token claims, if applicable.
+
     - name: buildIdentityRegexp
       type: string
       description: |
@@ -103,6 +108,7 @@ spec:
         rekorExternalUrl=""
         fulcioExternalUrl=""
         tufExternalUrl=""
+        buildIdentity=""
         buildIdentityRegexp=""
 
         # Read from the ConfigMap
@@ -120,6 +126,7 @@ spec:
               rekorExternalUrl=$(jq -r '.data.rekorExternalUrl // ""' "$KFLX_CONFIG_PATH")
               fulcioExternalUrl=$(jq -r '.data.fulcioExternalUrl // ""' "$KFLX_CONFIG_PATH")
               tufExternalUrl=$(jq -r '.data.tufExternalUrl // ""' "$KFLX_CONFIG_PATH")
+              buildIdentity=$(jq -r '.data.buildIdentity // ""' "$KFLX_CONFIG_PATH")
               buildIdentityRegexp=$(jq -r '.data.buildIdentityRegexp // ""' "$KFLX_CONFIG_PATH")
             else
               # Otherwise we ignore the reast of the ConfigMap
@@ -135,6 +142,7 @@ spec:
         echo -n "$rekorExternalUrl" > "$(results.rekorExternalUrl.path)"
         echo -n "$fulcioExternalUrl" > "$(results.fulcioExternalUrl.path)"
         echo -n "$tufExternalUrl" > "$(results.tufExternalUrl.path)"
+        echo -n "$buildIdentity" > "$(results.buildIdentity.path)"
         echo -n "$buildIdentityRegexp" > "$(results.buildIdentityRegexp.path)"
 
         # Output for troubleshooting/debugging
@@ -143,6 +151,7 @@ spec:
         echo "results.rekorExternalUrl: $rekorExternalUrl"
         echo "results.fulcioExternalUrl: $fulcioExternalUrl"
         echo "results.tufExternalUrl: $tufExternalUrl"
+        echo "results.buildIdentity: $buildIdentity"
         echo "results.buildIdentityRegexp: $buildIdentityRegexp"
       env:
         - name: configMapNamespace
