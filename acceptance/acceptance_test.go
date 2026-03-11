@@ -138,10 +138,18 @@ func initializeScenario(sc *godog.ScenarioContext) {
 	sc.After(func(ctx context.Context, scenario *godog.Scenario, scenarioErr error) (context.Context, error) {
 		// Log scenario end with status - write to /dev/tty to bypass capture
 		if tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
+			// Strip the working directory prefix to show relative paths
+			uri := scenario.Uri
+			if cwd, err := os.Getwd(); err == nil {
+				if rel, err := filepath.Rel(cwd, uri); err == nil {
+					uri = rel
+				}
+			}
+
 			if scenarioErr != nil {
-				fmt.Fprintf(tty, "✗ FAILED: %s (%s)\n", scenario.Name, scenario.Uri)
+				fmt.Fprintf(tty, "✗ FAILED: %s (%s)\n", scenario.Name, uri)
 			} else {
-				fmt.Fprintf(tty, "✓ PASSED: %s (%s)\n", scenario.Name, scenario.Uri)
+				fmt.Fprintf(tty, "✓ PASSED: %s (%s)\n", scenario.Name, uri)
 			}
 			tty.Close()
 		}
