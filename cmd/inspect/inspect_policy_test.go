@@ -56,10 +56,10 @@ func TestFetchSourcesFromPolicy(t *testing.T) {
 	createDir := func(args mock.Arguments) {
 		dir := args.String(0)
 
-		if err := fs.MkdirAll(dir, 0755); err != nil {
+		if err := fs.MkdirAll(dir, 0o755); err != nil {
 			panic(err)
 		}
-		if err := afero.WriteFile(fs, fmt.Sprintf("%s/foo.rego", args.String(0)), []byte("package foo\n\nbar = 1"), 0644); err != nil {
+		if err := afero.WriteFile(fs, fmt.Sprintf("%s/foo.rego", args.String(0)), []byte("package foo\n\nbar = 1"), 0o644); err != nil {
 			panic(err)
 		}
 	}
@@ -98,10 +98,10 @@ func TestFetchSources(t *testing.T) {
 	createDir := func(args mock.Arguments) {
 		dir := args.String(0)
 
-		if err := fs.MkdirAll(dir, 0755); err != nil {
+		if err := fs.MkdirAll(dir, 0o755); err != nil {
 			panic(err)
 		}
-		if err := afero.WriteFile(fs, fmt.Sprintf("%s/foo.rego", args.String(0)), []byte("package foo\n\nbar = 1"), 0644); err != nil {
+		if err := afero.WriteFile(fs, fmt.Sprintf("%s/foo.rego", args.String(0)), []byte("package foo\n\nbar = 1"), 0o644); err != nil {
 			panic(err)
 		}
 	}
@@ -144,7 +144,7 @@ func TestSourcesAndPolicyCantBeBothProvided(t *testing.T) {
 	createDir := func(args mock.Arguments) {
 		dir := args.String(0)
 
-		if err := fs.MkdirAll(dir, 0755); err != nil {
+		if err := fs.MkdirAll(dir, 0o755); err != nil {
 			panic(err)
 		}
 	}

@@ -200,7 +200,7 @@ func NewTestCommand(ctx context.Context) *cobra.Command {
 
 					if outputFilePath != "" {
 						// Output to a file
-						err := os.WriteFile(outputFilePath, reportOutput, 0600)
+						err := os.WriteFile(outputFilePath, reportOutput, 0o600)
 						if err != nil {
 							return fmt.Errorf("creating output file: %w", err)
 						}

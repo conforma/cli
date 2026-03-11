@@ -259,14 +259,14 @@ warn contains result if {
 }`
 
 	policyFile := filepath.Join(tempDir, "simple.rego")
-	err := os.WriteFile(policyFile, []byte(policyContent), 0600)
+	err := os.WriteFile(policyFile, []byte(policyContent), 0o600)
 	require.NoError(t, err)
 
 	// Create input directory structure
 	inputDir := filepath.Join(tempDir, "inputs")
-	require.NoError(t, os.MkdirAll(inputDir, 0755))
+	require.NoError(t, os.MkdirAll(inputDir, 0o755))
 	inputFile := filepath.Join(inputDir, "data.json")
-	err = os.WriteFile(inputFile, []byte("{}"), 0600)
+	err = os.WriteFile(inputFile, []byte("{}"), 0o600)
 	require.NoError(t, err)
 
 	// Create evaluator using the proper constructor
@@ -339,14 +339,14 @@ warn contains result if {
 }`
 
 	policyFile := filepath.Join(tempDir, "warn.rego")
-	err := os.WriteFile(policyFile, []byte(policyContent), 0600)
+	err := os.WriteFile(policyFile, []byte(policyContent), 0o600)
 	require.NoError(t, err)
 
 	// Create input directory structure
 	inputDir := filepath.Join(tempDir, "inputs")
-	require.NoError(t, os.MkdirAll(inputDir, 0755))
+	require.NoError(t, os.MkdirAll(inputDir, 0o755))
 	inputFile := filepath.Join(inputDir, "data.json")
-	err = os.WriteFile(inputFile, []byte("{}"), 0600)
+	err = os.WriteFile(inputFile, []byte("{}"), 0o600)
 	require.NoError(t, err)
 
 	// Create evaluator using the proper constructor
