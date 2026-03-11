@@ -32,6 +32,7 @@ import (
 	pipeline "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	tekton "github.com/tektoncd/pipeline/pkg/client/clientset/versioned/typed/pipeline/v1"
 	v1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,6 +40,7 @@ import (
 	"github.com/conforma/cli/acceptance/crypto"
 	"github.com/conforma/cli/acceptance/kubernetes/types"
 	"github.com/conforma/cli/acceptance/kustomize"
+	"github.com/conforma/cli/acceptance/rekor"
 	"github.com/conforma/cli/acceptance/testenv"
 )
 
@@ -189,6 +191,130 @@ func (k *kindCluster) CreateNamedSnapshot(ctx context.Context, name string, spec
 	return k.createSnapshot(ctx, snapshot)
 }
 
+// CreateConfigMap creates a ConfigMap with the given name and namespace with the provided content
+// Also creates necessary RBAC permissions for cross-namespace access
+func (k *kindCluster) CreateConfigMap(ctx context.Context, name, namespace, content string) error {
+	var data map[string]string
+
+	// Parse JSON content and extract individual fields as ConfigMap data keys
+	if strings.HasPrefix(strings.TrimSpace(content), "{") {
+		// Parse JSON content
+		var jsonData map[string]interface{}
+		if err := json.Unmarshal([]byte(content), &jsonData); err != nil {
+			return fmt.Errorf("failed to parse JSON content: %w", err)
+		}
+
+		// Convert to string map for ConfigMap data
+		data = make(map[string]string)
+		for key, value := range jsonData {
+			if value != nil {
+				data[key] = fmt.Sprintf("%v", value)
+			}
+		}
+	} else {
+		// For non-JSON content, store as-is under a single key
+		data = map[string]string{
+			"content": content,
+		}
+	}
+
+	configMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Data: data,
+	}
+
+	// Create the ConfigMap (or update if it already exists)
+	if _, err := k.client.CoreV1().ConfigMaps(namespace).Create(ctx, configMap, metav1.CreateOptions{}); err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			// ConfigMap exists, so update it with the new content
+			if _, err := k.client.CoreV1().ConfigMaps(namespace).Update(ctx, configMap, metav1.UpdateOptions{}); err != nil {
+				return fmt.Errorf("failed to update existing ConfigMap: %w", err)
+			}
+		} else {
+			return err
+		}
+	}
+
+	// Create RBAC permissions for cross-namespace ConfigMap access
+	// This allows any service account to read ConfigMaps from any namespace
+	if err := k.ensureConfigMapRBAC(ctx); err != nil {
+		return fmt.Errorf("failed to create RBAC permissions: %w", err)
+	}
+
+	return nil
+}
+
+// ensureConfigMapRBAC creates necessary RBAC permissions for ConfigMap access across namespaces
+func (k *kindCluster) ensureConfigMapRBAC(ctx context.Context) error {
+	// Create ClusterRole for ConfigMap reading (idempotent)
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "acceptance-configmap-reader",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get", "list"},
+			},
+		},
+	}
+
+	if _, err := k.client.RbacV1().ClusterRoles().Create(ctx, clusterRole, metav1.CreateOptions{}); err != nil {
+		// Ignore error if ClusterRole already exists
+		if !strings.Contains(err.Error(), "already exists") {
+			return fmt.Errorf("failed to create ClusterRole: %w", err)
+		}
+	}
+
+	// Create ClusterRoleBinding for all service accounts (idempotent)
+	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "acceptance-configmap-reader-binding",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "acceptance-configmap-reader",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:     "Group",
+				Name:     "system:serviceaccounts",
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+		},
+	}
+
+	if _, err := k.client.RbacV1().ClusterRoleBindings().Create(ctx, clusterRoleBinding, metav1.CreateOptions{}); err != nil {
+		// Ignore error if ClusterRoleBinding already exists
+		if !strings.Contains(err.Error(), "already exists") {
+			return fmt.Errorf("failed to create ClusterRoleBinding: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// CreateNamedNamespace creates a namespace with the specified name
+func (k *kindCluster) CreateNamedNamespace(ctx context.Context, name string) error {
+	_, err := k.client.CoreV1().Namespaces().Create(ctx, &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+	}, metav1.CreateOptions{})
+
+	// Ignore error if namespace already exists
+	if err != nil && strings.Contains(err.Error(), "already exists") {
+		return nil
+	}
+
+	return err
+}
+
 // CreateNamespace creates a randomly-named namespace for the test to execute in
 // and stores it in the test context
 func (k *kindCluster) CreateNamespace(ctx context.Context) (context.Context, error) {
@@ -252,6 +378,16 @@ func stringParam(ctx context.Context, name, value string, t *testState) pipeline
 
 	if t.snapshotDigest != "" {
 		vars["BUILD_SNAPSHOT_DIGEST"] = t.snapshotDigest
+	}
+
+	// Add TUF and certificate variables for keyless verification
+	// For Tekton tasks, always use the cluster-internal TUF service
+	vars["TUF"] = "http://tuf.tuf-service.svc.cluster.local:8080"
+	vars["CERT_IDENTITY"] = "https://kubernetes.io/namespaces/default/serviceaccounts/default"
+	vars["CERT_ISSUER"] = "https://kubernetes.default.svc.cluster.local"
+
+	if rekorURL, err := rekor.StubRekor(ctx); err == nil {
+		vars["REKOR"] = rekorURL
 	}
 
 	publicKeys := crypto.PublicKeysFrom(ctx)

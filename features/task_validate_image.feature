@@ -338,6 +338,10 @@ Feature: Verify Enterprise Contract Tekton Tasks
       And the task logs for step "report" should match the snapshot
       And the task results should match the snapshot
 
+  ####################################################################################################################
+  # Keylessly signed image verification
+  ####################################################################################################################
+
   # See hack/keyless-test-image for how the quay.io/conforma/test:keyless_v2
   # and quay.io/conforma/test:keyless_v3 test images where created. It's not
   # ideal that this test requires an external image, but we already do this
@@ -412,3 +416,135 @@ Feature: Verify Enterprise Contract Tekton Tasks
     Then the task should succeed
      And the task logs for step "report-json" should match the snapshot
      And the task results should match the snapshot
+
+  Scenario: Keyless signing verification with local test image
+    Given a working namespace
+    Given a signed and attested keyless image named "acceptance/ec-happy-day-keyless"
+    Given a initialized tuf root
+    Given a cluster policy with content:
+      ```
+      {
+        "sources": [
+          {
+            "policy": [
+              "github.com/conforma/policy//policy/release?ref=0de5461c14413484575e63e96ddb514d8ab954b5",
+              "github.com/conforma/policy//policy/lib?ref=0de5461c14413484575e63e96ddb514d8ab954b5"
+            ],
+            "config": {
+              "include": [
+                "slsa_provenance_available"
+              ]
+            }
+          }
+        ]
+      }
+      ```
+    When version 0.1 of the task named "verify-enterprise-contract" is run with parameters:
+      | IMAGES                  | {"components": [{"containerImage": "${REGISTRY}/acceptance/ec-happy-day-keyless"}]} |
+      | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                                         |
+      | CERTIFICATE_IDENTITY    | https://kubernetes.io/namespaces/default/serviceaccounts/default                    |
+      | CERTIFICATE_OIDC_ISSUER | https://kubernetes.default.svc.cluster.local                                        |
+      | TUF_MIRROR              | ${TUF}                                                                              |
+      | REKOR_HOST              | ${REKOR}                                                                            |
+      | IGNORE_REKOR            | false                                                                               |
+      | STRICT                  | true                                                                                |
+    Then the task should succeed
+     And the task logs for step "report-json" should match the snapshot
+     And the task results should match the snapshot
+
+  ####################################################################################################################
+  # collect-keyless-signing-params task
+  ####################################################################################################################
+
+  Scenario: Collect keyless signing parameters from ConfigMap
+    Given a working namespace
+    And a namespace named "konflux-info" exists
+    # Note: These scenarios might run in parallel so let's use a different config map
+    # for each scenario so we don't have to worry about them clashing with each other
+    And a ConfigMap "cluster-config" in namespace "konflux-info" with content:
+      """
+      {
+        "defaultOIDCIssuer": "https://kubernetes.default.svc.cluster.local",
+        "rekorExternalUrl": "https://rekor.example.com",
+        "fulcioExternalUrl": "https://fulcio.example.com",
+        "tufExternalUrl": "https://tuf.example.com",
+        "buildIdentity": "https://kubernetes.io/namespaces/openshift-pipelines/serviceaccounts/tekton-chains-controller",
+        "buildIdentityRegexp": "^https://konflux-ci.dev/.*$",
+        "enableKeylessSigning": "true"
+      }
+      """
+    When version 0.1 of the task named "collect-keyless-signing-params" is run with parameters:
+      | configMapName      | cluster-config |
+    Then the task should succeed
+     And the task logs for step "collect-signing-params" should match the snapshot
+     And the task result "defaultOIDCIssuer" should equal "https://kubernetes.default.svc.cluster.local"
+     And the task result "rekorExternalUrl" should equal "https://rekor.example.com"
+     And the task result "fulcioExternalUrl" should equal "https://fulcio.example.com"
+     And the task result "tufExternalUrl" should equal "https://tuf.example.com"
+     And the task result "buildIdentity" should equal "https://kubernetes.io/namespaces/openshift-pipelines/serviceaccounts/tekton-chains-controller"
+     And the task result "buildIdentityRegexp" should equal "^https://konflux-ci.dev/.*$"
+     And the task result "keylessSigningEnabled" should equal "true"
+
+  Scenario: Collect keyless signing parameters from ConfigMap with keyless signing disabled
+    Given a working namespace
+    And a namespace named "konflux-info" exists
+    # Note: These scenarios might run in parallel so let's use a different config map
+    # for each scenario so we don't have to worry about them clashing with each other
+    And a ConfigMap "cluster-config-2" in namespace "konflux-info" with content:
+      """
+      {
+        "defaultOIDCIssuer": "https://kubernetes.default.svc.cluster.local",
+        "rekorExternalUrl": "https://rekor.example.com",
+        "fulcioExternalUrl": "https://fulcio.example.com",
+        "tufExternalUrl": "https://tuf.example.com",
+        "buildIdentity": "https://kubernetes.io/namespaces/openshift-pipelines/serviceaccounts/tekton-chains-controller",
+        "buildIdentityRegexp": "^https://konflux-ci.dev/.*$",
+        "enableKeylessSigning": "false"
+      }
+      """
+    When version 0.1 of the task named "collect-keyless-signing-params" is run with parameters:
+      | configMapName      | cluster-config-2 |
+    Then the task should succeed
+     And the task logs for step "collect-signing-params" should match the snapshot
+     And the task result "defaultOIDCIssuer" should equal ""
+     And the task result "rekorExternalUrl" should equal ""
+     And the task result "fulcioExternalUrl" should equal ""
+     And the task result "tufExternalUrl" should equal ""
+     And the task result "buildIdentityRegexp" should equal ""
+     And the task result "keylessSigningEnabled" should equal "false"
+
+  Scenario: Collect keyless signing parameters when there is a malformed ConfigMap
+    Given a working namespace
+    And a namespace named "konflux-info" exists
+    # Note: These scenarios might run in parallel so let's use a different config map
+    # for each scenario so we don't have to worry about them clashing with each other
+    And a ConfigMap "cluster-config-3" in namespace "konflux-info" with content:
+      """
+      {
+        "foo": "bar"
+      }
+      """
+    When version 0.1 of the task named "collect-keyless-signing-params" is run with parameters:
+      | configMapName      | cluster-config-3 |
+    Then the task should succeed
+     And the task logs for step "collect-signing-params" should match the snapshot
+     And the task result "defaultOIDCIssuer" should equal ""
+     And the task result "rekorExternalUrl" should equal ""
+     And the task result "fulcioExternalUrl" should equal ""
+     And the task result "tufExternalUrl" should equal ""
+     And the task result "buildIdentityRegexp" should equal ""
+     And the task result "keylessSigningEnabled" should equal "false"
+
+  Scenario: Collect keyless signing parameters when ConfigMap is missing
+    Given a working namespace
+    And a namespace named "konflux-info" exists
+    When version 0.1 of the task named "collect-keyless-signing-params" is run with parameters:
+      | configMapName      | doesnt-exist-config |
+    Then the task should succeed
+     And the task logs for step "collect-signing-params" should match the snapshot
+     And the task result "defaultOIDCIssuer" should equal ""
+     And the task result "rekorExternalUrl" should equal ""
+     And the task result "fulcioExternalUrl" should equal ""
+     And the task result "tufExternalUrl" should equal ""
+     And the task result "buildIdentityRegexp" should equal ""
+     And the task result "keylessSigningEnabled" should equal "false"

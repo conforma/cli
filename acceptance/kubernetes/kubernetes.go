@@ -36,6 +36,7 @@ import (
 	"github.com/conforma/cli/acceptance/kubernetes/stub"
 	"github.com/conforma/cli/acceptance/kubernetes/types"
 	"github.com/conforma/cli/acceptance/registry"
+	"github.com/conforma/cli/acceptance/rekor"
 	"github.com/conforma/cli/acceptance/snaps"
 	"github.com/conforma/cli/acceptance/testenv"
 )
@@ -172,6 +173,26 @@ func createNamedSnapshot(ctx context.Context, name string, specification *godog.
 	}
 
 	return c.cluster.CreateNamedSnapshot(ctx, name, specification.Content)
+}
+
+func createConfigMap(ctx context.Context, name, namespace string, content *godog.DocString) error {
+	c := testenv.FetchState[ClusterState](ctx)
+
+	if err := mustBeUp(ctx, *c); err != nil {
+		return err
+	}
+
+	return c.cluster.CreateConfigMap(ctx, name, namespace, content.Content)
+}
+
+func createNamedNamespace(ctx context.Context, name string) error {
+	c := testenv.FetchState[ClusterState](ctx)
+
+	if err := mustBeUp(ctx, *c); err != nil {
+		return err
+	}
+
+	return c.cluster.CreateNamedNamespace(ctx, name)
 }
 
 func createNamedSnapshotWithManyComponents(ctx context.Context, name string, amount int, key string) (context.Context, error) {
@@ -366,6 +387,11 @@ func taskLogsShouldMatchTheSnapshot(ctx context.Context, stepName string) error 
 
 	vars["EC_VERSION"] = v
 
+	// Add Rekor URL for snapshot normalization
+	if rekorURL, err := rekor.StubRekor(ctx); err == nil {
+		vars["REKOR_URL"] = rekorURL
+	}
+
 	for _, step := range info.Steps {
 		if step.Name == stepName {
 			return snaps.MatchSnapshot(ctx, step.Name, step.Logs, vars)
@@ -493,6 +519,8 @@ func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step(`^the task results should match the snapshot$`, taskResultsShouldMatchTheSnapshot)
 	sc.Step(`^the task result "([^"]*)" should equal "([^"]*)"$`, taskResultShouldEqual)
 	sc.Step(`^policy configuration named "([^"]*)" with (\d+) policy sources from "([^"]*)"(?:, patched with)$`, createNamedPolicyWithManySources)
+	sc.Step(`^a namespace named "([^"]*)" exists$`, createNamedNamespace)
+	sc.Step(`^a ConfigMap "([^"]*)" in namespace "([^"]*)" with content:$`, createConfigMap)
 	// stop usage of the cluster once a test is done, godog will call this
 	// function on failure and on the last step, so more than once if the
 	// failure is not on the last step and once if there was no failure or the
