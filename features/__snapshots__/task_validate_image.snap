@@ -597,7 +597,51 @@ true
 ---
 
 [Collect keyless signing parameters from ConfigMap:collect-signing-params - 1]
-Getting cluster-config ConfigMap
-ConfigMap found, extracting signing parameters
-https://kubernetes.default.svc.cluster.localhttps://rekor.example.comhttps://fulcio.example.comhttps://tuf.example.com^https://konflux-ci.dev/.*$true
+Reading ConfigMap konflux-info/cluster-config
+ConfigMap found, extracting keyless signing parameters
+results.keylessSigningEnabled: true
+results.defaultOIDCIssuer: https://kubernetes.default.svc.cluster.local
+results.rekorExternalUrl: https://rekor.example.com
+results.fulcioExternalUrl: https://fulcio.example.com
+results.tufExternalUrl: https://tuf.example.com
+results.buildIdentityRegexp: ^https://konflux-ci.dev/.*$
+
+---
+
+[Collect keyless signing parameters when ConfigMap is missing:collect-signing-params - 1]
+Reading ConfigMap konflux-info/doesnt-exist-config
+ConfigMap not found, using default empty values
+results.keylessSigningEnabled: false
+results.defaultOIDCIssuer: 
+results.rekorExternalUrl: 
+results.fulcioExternalUrl: 
+results.tufExternalUrl: 
+results.buildIdentityRegexp: 
+
+---
+
+[Collect keyless signing parameters when there is a malformed ConfigMap:collect-signing-params - 1]
+Reading ConfigMap konflux-info/cluster-config-3
+ConfigMap found, extracting keyless signing parameters
+enableKeylessSigning is not set, using default empty values
+results.keylessSigningEnabled: false
+results.defaultOIDCIssuer: 
+results.rekorExternalUrl: 
+results.fulcioExternalUrl: 
+results.tufExternalUrl: 
+results.buildIdentityRegexp: 
+
+---
+
+[Collect keyless signing parameters from ConfigMap with keyless signing disabled:collect-signing-params - 1]
+Reading ConfigMap konflux-info/cluster-config-2
+ConfigMap found, extracting keyless signing parameters
+enableKeylessSigning is not set, using default empty values
+results.keylessSigningEnabled: false
+results.defaultOIDCIssuer: 
+results.rekorExternalUrl: 
+results.fulcioExternalUrl: 
+results.tufExternalUrl: 
+results.buildIdentityRegexp: 
+
 ---

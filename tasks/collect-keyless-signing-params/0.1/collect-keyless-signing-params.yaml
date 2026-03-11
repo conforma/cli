@@ -92,38 +92,60 @@ spec:
           memory: 128Mi
           cpu: 50m
       script: |
-        #!/usr/bin/env bash
-        echo "Getting cluster-config ConfigMap"
-        KFLX_CONFIG_PATH='/tmp/konflux_config.json'
+        #!/bin/bash
+        set -euo pipefail
 
-        # Attempt to fetch the ConfigMap, capture exit code
-        if kubectl get configmap "$(params.configMapName)" -n "$(params.configMapNamespace)" -o json > \
-        "$KFLX_CONFIG_PATH" 2>/dev/null; then
-            echo "ConfigMap found, extracting signing parameters"
+        # Default value is "false"
+        keylessSigningEnabled="false"
 
-            # Extract signing parameters from ConfigMap data, defaulting to empty string if not found
-            defaultOIDCIssuer=$(jq -r '.data.defaultOIDCIssuer // ""' "$KFLX_CONFIG_PATH")
-            rekorExternalUrl=$(jq -r '.data.rekorExternalUrl // ""' "$KFLX_CONFIG_PATH")
-            fulcioExternalUrl=$(jq -r '.data.fulcioExternalUrl // ""' "$KFLX_CONFIG_PATH")
-            tufExternalUrl=$(jq -r '.data.tufExternalUrl // ""' "$KFLX_CONFIG_PATH")
-            buildIdentityRegexp=$(jq -r '.data.buildIdentityRegexp // ""' "$KFLX_CONFIG_PATH")
-            keylessSigningEnabled=$(jq -r '.data.enableKeylessSigning // ""' "$KFLX_CONFIG_PATH")
+        # Default values are empty strings
+        defaultOIDCIssuer=""
+        rekorExternalUrl=""
+        fulcioExternalUrl=""
+        tufExternalUrl=""
+        buildIdentityRegexp=""
+
+        # Read from the ConfigMap
+        echo "Reading ConfigMap ${configMapNamespace}/${configMapName}"
+        KFLX_CONFIG_PATH='/tmp/cluster-config.json'
+        if kubectl get configmap "${configMapName}" -n "${configMapNamespace}" -o json > "${KFLX_CONFIG_PATH}" 2>/dev/null; then
+            echo "ConfigMap found, extracting keyless signing parameters"
+
+            # First we read "keylessSigningEnabled"
+            keylessSigningEnabled=$(jq -r '.data.enableKeylessSigning // "false"' "$KFLX_CONFIG_PATH")
+
+            if [ "$keylessSigningEnabled" = "true" ]; then
+              # If that is set to "true" then read the other values
+              defaultOIDCIssuer=$(jq -r '.data.defaultOIDCIssuer // ""' "$KFLX_CONFIG_PATH")
+              rekorExternalUrl=$(jq -r '.data.rekorExternalUrl // ""' "$KFLX_CONFIG_PATH")
+              fulcioExternalUrl=$(jq -r '.data.fulcioExternalUrl // ""' "$KFLX_CONFIG_PATH")
+              tufExternalUrl=$(jq -r '.data.tufExternalUrl // ""' "$KFLX_CONFIG_PATH")
+              buildIdentityRegexp=$(jq -r '.data.buildIdentityRegexp // ""' "$KFLX_CONFIG_PATH")
+            else
+              # Otherwise we ignore the reast of the ConfigMap
+              echo "enableKeylessSigning is not set, using default empty values"
+            fi
         else
             echo "ConfigMap not found, using default empty values"
-
-            # Set all parameters to empty strings when ConfigMap doesn't exist
-            defaultOIDCIssuer=""
-            rekorExternalUrl=""
-            fulcioExternalUrl=""
-            tufExternalUrl=""
-            buildIdentityRegexp=""
-            keylessSigningEnabled="false"
         fi
 
-        # Write the values to the respective result paths and print them
-        echo -n "$defaultOIDCIssuer" | tee "$(results.defaultOIDCIssuer.path)"
-        echo -n "$rekorExternalUrl" | tee "$(results.rekorExternalUrl.path)"
-        echo -n "$fulcioExternalUrl" | tee "$(results.fulcioExternalUrl.path)"
-        echo -n "$tufExternalUrl" | tee "$(results.tufExternalUrl.path)"
-        echo -n "$buildIdentityRegexp" | tee "$(results.buildIdentityRegexp.path)"
-        echo -n "$keylessSigningEnabled" | tee "$(results.keylessSigningEnabled.path)"
+        # Write to task results
+        echo -n "$keylessSigningEnabled" > "$(results.keylessSigningEnabled.path)"
+        echo -n "$defaultOIDCIssuer" > "$(results.defaultOIDCIssuer.path)"
+        echo -n "$rekorExternalUrl" > "$(results.rekorExternalUrl.path)"
+        echo -n "$fulcioExternalUrl" > "$(results.fulcioExternalUrl.path)"
+        echo -n "$tufExternalUrl" > "$(results.tufExternalUrl.path)"
+        echo -n "$buildIdentityRegexp" > "$(results.buildIdentityRegexp.path)"
+
+        # Output for troubleshooting/debugging
+        echo "results.keylessSigningEnabled: $keylessSigningEnabled"
+        echo "results.defaultOIDCIssuer: $defaultOIDCIssuer"
+        echo "results.rekorExternalUrl: $rekorExternalUrl"
+        echo "results.fulcioExternalUrl: $fulcioExternalUrl"
+        echo "results.tufExternalUrl: $tufExternalUrl"
+        echo "results.buildIdentityRegexp: $buildIdentityRegexp"
+      env:
+        - name: configMapNamespace
+          value: "$(params.configMapNamespace)"
+        - name: configMapName
+          value: "$(params.configMapName)"
