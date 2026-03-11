@@ -684,6 +684,33 @@ Feature: evaluate enterprise contract
     Then the exit status should be 0
     Then the output should match the snapshot
 
+  # Ensures the image layer cache is safe under concurrent use when validating multiple
+  # components that share the same image (same layers). See https://github.com/conforma/cli/issues/1109.
+  # Step uses same JSON-in-quotes pattern as "json-input single component" scenario (line ~649).
+  Scenario: parallel validation with cache and shared image layers
+    Given a key pair named "known"
+    Given an image named "acceptance/ec-happy-day"
+    Given a valid image signature of "acceptance/ec-happy-day" image signed by the "known" key
+    Given a valid attestation of "acceptance/ec-happy-day" signed by the "known" key
+    Given a git repository named "happy-day-policy" with
+      | main.rego | examples/happy_day.rego |
+    Given policy configuration named "ec-policy" with specification
+    """
+    {
+      "sources": [
+        {
+          "policy": [
+            "git::https://${GITHOST}/git/happy-day-policy.git"
+          ]
+        }
+      ]
+    }
+    """
+    And the environment variable is set "EC_CACHE=true"
+    When ec command is run with "validate image --json-input {"components":[{"name":"A","containerImage":"${REGISTRY}/acceptance/ec-happy-day"},{"name":"B","containerImage":"${REGISTRY}/acceptance/ec-happy-day"}]} --policy acceptance/ec-policy --rekor-url ${REKOR} --public-key ${known_PUBLIC_KEY} --show-successes --output json"
+    Then the exit status should be 0
+    Then the output should match the snapshot
+
   Scenario: JUnit and AppStudio output format
     Given a key pair named "known"
     Given an image named "acceptance/image"
