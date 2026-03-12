@@ -172,6 +172,7 @@ JSON of the "spec" or a reference to a Kubernetes object [<namespace>/]<name>
 --retry-jitter:: randomness factor for backoff calculation (0.0-1.0) (Default: 0.1)
 --retry-max-retry:: maximum number of retry attempts (Default: 3)
 --retry-max-wait:: maximum wait time between retries (Default: 3s)
+--show-policy-docs-link:: Show the policy documentation link when there are failures or warnings (Default: true)
 --show-successes::  (Default: false)
 --show-warnings::  (Default: true)
 --timeout:: max overall execution duration (Default: 5m0s)

@@ -22,6 +22,6 @@ Results:{{ nl -}}
 {{- end -}}
 {{- end -}}
 
-{{- if or (gt $t.Failures 0) (and (gt $t.Warnings 0) $r.ShowWarnings) -}}
+{{- if and $r.ShowPolicyDocsLink (or (gt $t.Failures 0) (and (gt $t.Warnings 0) $r.ShowWarnings)) -}}
 For more information about policy issues, see the policy documentation: https://conforma.dev/docs/policy/{{ nl -}}
 {{- end -}}

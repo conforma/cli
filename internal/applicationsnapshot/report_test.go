@@ -52,7 +52,7 @@ func Test_ReportJson(t *testing.T) {
 
 	ctx := context.Background()
 	testPolicy := createTestPolicy(t, ctx)
-	report, err := NewReport("snappy", components, testPolicy, nil, true, true, nil)
+	report, err := NewReport("snappy", components, testPolicy, nil, true, true, true, nil)
 	assert.NoError(t, err)
 
 	testEffectiveTime := testPolicy.EffectiveTime().UTC().Format(time.RFC3339Nano)
@@ -110,7 +110,7 @@ func Test_ReportYaml(t *testing.T) {
 
 	ctx := context.Background()
 	testPolicy := createTestPolicy(t, ctx)
-	report, err := NewReport("snappy", components, testPolicy, nil, true, true, nil)
+	report, err := NewReport("snappy", components, testPolicy, nil, true, true, true, nil)
 	assert.NoError(t, err)
 
 	testEffectiveTime := testPolicy.EffectiveTime().UTC().Format(time.RFC3339Nano)
@@ -257,7 +257,7 @@ func Test_GenerateMarkdownSummary(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			ctx := context.Background()
-			report, err := NewReport(c.snapshot, c.components, createTestPolicy(t, ctx), nil, true, true, nil)
+			report, err := NewReport(c.snapshot, c.components, createTestPolicy(t, ctx), nil, true, true, true, nil)
 			assert.NoError(t, err)
 			report.created = time.Unix(0, 0).UTC()
 
@@ -504,7 +504,7 @@ func Test_ReportSummary(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf("NewReport=%s", tc.name), func(t *testing.T) {
 			ctx := context.Background()
-			report, err := NewReport(tc.snapshot, []Component{tc.input}, createTestPolicy(t, ctx), nil, true, true, nil)
+			report, err := NewReport(tc.snapshot, []Component{tc.input}, createTestPolicy(t, ctx), nil, true, true, true, nil)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.want, report.toSummary())
 		})
@@ -641,7 +641,7 @@ func Test_ReportAppstudio(t *testing.T) {
 			assert.NoError(t, err)
 
 			ctx := context.Background()
-			report, err := NewReport(c.snapshot, c.components, createTestPolicy(t, ctx), nil, true, true, nil)
+			report, err := NewReport(c.snapshot, c.components, createTestPolicy(t, ctx), nil, true, true, true, nil)
 			assert.NoError(t, err)
 			assert.False(t, report.created.IsZero())
 			assert.Equal(t, c.success, report.Success)
@@ -789,7 +789,7 @@ func Test_ReportHACBS(t *testing.T) {
 			assert.NoError(t, err)
 
 			ctx := context.Background()
-			report, err := NewReport(c.snapshot, c.components, createTestPolicy(t, ctx), nil, true, true, nil)
+			report, err := NewReport(c.snapshot, c.components, createTestPolicy(t, ctx), nil, true, true, true, nil)
 			assert.NoError(t, err)
 			assert.False(t, report.created.IsZero())
 			assert.Equal(t, c.success, report.Success)
@@ -821,7 +821,7 @@ func Test_ReportPolicyInput(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	report, err := NewReport("snapshot", nil, createTestPolicy(t, ctx), policyInput, true, true, nil)
+	report, err := NewReport("snapshot", nil, createTestPolicy(t, ctx), policyInput, true, true, true, nil)
 	require.NoError(t, err)
 
 	p := format.NewTargetParser(JSON, format.Options{}, defaultWriter, fs)
@@ -890,8 +890,9 @@ func Test_TextReport(t *testing.T) {
 	}{
 		{"nothing", Report{}},
 		{"bunch", Report{
-			ShowSuccesses: true,
-			ShowWarnings:  true,
+			ShowSuccesses:      true,
+			ShowWarnings:       true,
+			ShowPolicyDocsLink: true,
 			Components: []Component{
 				{
 					SnapshotComponent: app.SnapshotComponent{
@@ -1032,7 +1033,8 @@ func Test_DocumentationLink_OnlySuccesses(t *testing.T) {
 func Test_DocumentationLink_OnlyWarnings(t *testing.T) {
 	// Test case: Only warnings - should show documentation link
 	r := Report{
-		ShowWarnings: true,
+		ShowWarnings:       true,
+		ShowPolicyDocsLink: true,
 		Components: []Component{
 			{
 				Warnings: []evaluator.Result{
@@ -1060,6 +1062,7 @@ func Test_DocumentationLink_OnlyWarnings(t *testing.T) {
 func Test_DocumentationLink_OnlyFailures(t *testing.T) {
 	// Test case: Only failures - should show documentation link
 	r := Report{
+		ShowPolicyDocsLink: true,
 		Components: []Component{
 			{
 				Violations: []evaluator.Result{
@@ -1087,6 +1090,7 @@ func Test_DocumentationLink_OnlyFailures(t *testing.T) {
 func Test_DocumentationLink_WarningsAndFailures(t *testing.T) {
 	// Test case: Both warnings and failures - should show documentation link
 	r := Report{
+		ShowPolicyDocsLink: true,
 		Components: []Component{
 			{
 				Violations: []evaluator.Result{
@@ -1122,8 +1126,9 @@ func Test_DocumentationLink_WarningsAndFailures(t *testing.T) {
 func Test_DocumentationLink_MultipleComponents(t *testing.T) {
 	// Test case: Multiple components with mixed results - should show documentation link
 	r := Report{
-		ShowSuccesses: true,
-		ShowWarnings:  true,
+		ShowSuccesses:      true,
+		ShowWarnings:       true,
+		ShowPolicyDocsLink: true,
 		Components: []Component{
 			{
 				// Component 1: Only successes
@@ -1345,12 +1350,12 @@ func Test_NewReport_ShowWarningsParameter(t *testing.T) {
 	}
 
 	// Test with showWarnings=true
-	report1, err := NewReport("test", components, testPolicy, nil, false, true, nil)
+	report1, err := NewReport("test", components, testPolicy, nil, false, true, true, nil)
 	require.NoError(t, err)
 	assert.True(t, report1.ShowWarnings, "ShowWarnings should be true when passed as true")
 
 	// Test with showWarnings=false
-	report2, err := NewReport("test", components, testPolicy, nil, false, false, nil)
+	report2, err := NewReport("test", components, testPolicy, nil, false, false, true, nil)
 	require.NoError(t, err)
 	assert.False(t, report2.ShowWarnings, "ShowWarnings should be false when passed as false")
 }
