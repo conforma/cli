@@ -40,7 +40,8 @@ import (
 )
 
 // the image we're using to launch the stub image registry
-const registryImage = "docker.io/registry:2.8.1"
+// Using Zot which has proper OCI Referrers API support
+const registryImage = "ghcr.io/project-zot/zot:v2.1.15"
 
 type key int
 

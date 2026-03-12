@@ -91,11 +91,17 @@ type Signature struct {
 // "registry:port/acceptance/sha256-hash.att" and the Signature values hold more
 // information about the signature of the image/data itself.
 type imageState struct {
+	// Legacy tag-based artifacts (e.g., sha256-<hash>.sig, sha256-<hash>.att)
 	AttestationSignatures map[string]Signature
 	Attestations          map[string]string
 	Images                map[string]string
 	ImageSignatures       map[string]Signature
 	Signatures            map[string]string
+	// OCI Referrers API artifacts (attached via manifest subject field)
+	ReferrerAttestationSignatures map[string]Signature
+	ReferrerAttestations          map[string]string
+	ReferrerImageSignatures       map[string]Signature
+	ReferrerSignatures            map[string]string
 }
 
 func (i *imageState) Initialize() {
@@ -113,6 +119,18 @@ func (i *imageState) Initialize() {
 	}
 	if i.Signatures == nil {
 		i.Signatures = map[string]string{}
+	}
+	if i.ReferrerAttestationSignatures == nil {
+		i.ReferrerAttestationSignatures = map[string]Signature{}
+	}
+	if i.ReferrerAttestations == nil {
+		i.ReferrerAttestations = map[string]string{}
+	}
+	if i.ReferrerImageSignatures == nil {
+		i.ReferrerImageSignatures = map[string]Signature{}
+	}
+	if i.ReferrerSignatures == nil {
+		i.ReferrerSignatures = map[string]string{}
 	}
 }
 
@@ -140,6 +158,90 @@ func imageFrom(ctx context.Context, imageName string) (v1.Image, error) {
 // image, same as `cosign sign` or Tekton Chains would, of that named image and pushes it
 // to the stub registry as a new tag for that image akin to how cosign and Tekton Chains
 // do it. This implementation includes transparency log upload to generate bundle information.
+// signatureData holds the signature payload, layer, annotations and bundle
+type signatureData struct {
+	payload         []byte
+	rawSignature    []byte
+	signatureBase64 string
+	signatureStruct Signature
+	signatureLayer  v1.Layer
+	rekorBundle     *bundle.RekorBundle
+	annotations     map[string]string
+}
+
+// createSignatureData creates and signs the image signature with bundle information
+func createSignatureData(ctx context.Context, imageName string, digestImage name.Digest, signer signature.SignerVerifier) (*signatureData, error) {
+	// Create the cosign signature payload and sign it
+	payload, rawSignature, err := signature.SignImage(signer, digestImage, map[string]interface{}{})
+	if err != nil {
+		return nil, err
+	}
+
+	signatureBase64 := base64.StdEncoding.EncodeToString(rawSignature)
+
+	// Create the signature structure for the stub rekor entry
+	signatureStruct := Signature{
+		KeyID:     "",
+		Signature: signatureBase64,
+	}
+
+	signatureJSON, err := json.Marshal(signatureStruct)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal signature structure: %w", err)
+	}
+
+	// Get the public key from the signer for hashedrekord validation
+	publicKey, err := signer.PublicKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get public key: %w", err)
+	}
+
+	publicKeyBytes, err := cryptoutils.MarshalPublicKeyToPEM(publicKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal public key: %w", err)
+	}
+
+	// Create stubs for both Rekor entry signature creation and retrieval endpoints
+	err = rekor.StubRekorEntryCreationForSignature(ctx, payload, rawSignature, signatureJSON, publicKeyBytes)
+	if err != nil {
+		return nil, fmt.Errorf("error stubbing rekor endpoints: %w", err)
+	}
+
+	// Upload to transparency log to get bundle information like Tekton Chains does
+	rekorBundle, err := uploadToTransparencyLog(ctx, payload, rawSignature, signer)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the signature layer with bundle information using static.WithBundle
+	signatureLayer, err := static.NewSignature(payload, signatureBase64, static.WithBundle(rekorBundle))
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract bundle information from signatureLayer to include in annotations
+	annotations := map[string]string{
+		static.SignatureAnnotationKey: signatureBase64,
+	}
+
+	// Add bundle annotation if bundle information exists
+	bundleJSON, err := json.Marshal(rekorBundle)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal bundle for annotation: %w", err)
+	}
+	annotations[static.BundleAnnotationKey] = string(bundleJSON)
+
+	return &signatureData{
+		payload:         payload,
+		rawSignature:    rawSignature,
+		signatureBase64: signatureBase64,
+		signatureStruct: signatureStruct,
+		signatureLayer:  signatureLayer,
+		rekorBundle:     rekorBundle,
+		annotations:     annotations,
+	}, nil
+}
+
 func CreateAndPushImageSignature(ctx context.Context, imageName string, keyName string) (context.Context, error) {
 	var state *imageState
 	ctx, err := testenv.SetupState(ctx, &state)
@@ -152,18 +254,7 @@ func CreateAndPushImageSignature(ctx context.Context, imageName string, keyName 
 		return ctx, nil
 	}
 
-	image, err := imageFrom(ctx, imageName)
-	if err != nil {
-		return ctx, err
-	}
-
-	digest, err := image.Digest()
-	if err != nil {
-		return ctx, err
-	}
-
-	// the name of the image to sign referenced by the digest
-	digestImage, err := name.NewDigest(fmt.Sprintf("%s@%s", imageName, digest.String()))
+	_, digest, digestImage, err := getImageDigestAndRef(ctx, imageName)
 	if err != nil {
 		return ctx, err
 	}
@@ -173,101 +264,18 @@ func CreateAndPushImageSignature(ctx context.Context, imageName string, keyName 
 		return ctx, err
 	}
 
-	// Create the cosign signature payload and sign it
-	payload, rawSignature, err := signature.SignImage(signer, digestImage, map[string]interface{}{})
+	sigData, err := createSignatureData(ctx, imageName, digestImage, signer)
 	if err != nil {
 		return ctx, err
 	}
-
-	signatureBase64 := base64.StdEncoding.EncodeToString(rawSignature)
-
-	// Create the signature structure for the stub rekor entry
-	signature := Signature{
-		KeyID:     "",
-		Signature: signatureBase64,
-	}
-
-	signatureJSON, err := json.Marshal(signature)
-	if err != nil {
-		return ctx, fmt.Errorf("failed to marshal signature structure: %w", err)
-	}
-
-	// Get the public key from the signer for hashedrekord validation
-	publicKey, err := signer.PublicKey()
-	if err != nil {
-		return ctx, fmt.Errorf("failed to get public key: %w", err)
-	}
-
-	publicKeyBytes, err := cryptoutils.MarshalPublicKeyToPEM(publicKey)
-	if err != nil {
-		return ctx, fmt.Errorf("failed to marshal public key: %w", err)
-	}
-
-	// Create stubs for both Rekor entry signature creation and retrieval endpoints
-	err = rekor.StubRekorEntryCreationForSignature(ctx, payload, rawSignature, signatureJSON, publicKeyBytes)
-	if err != nil {
-		return ctx, fmt.Errorf("error stubbing rekor endpoints: %w", err)
-	}
-
-	// Upload to transparency log to get bundle information like Tekton Chains does
-	rekorURL, err := rekor.StubRekor(ctx)
-	if err != nil {
-		return ctx, fmt.Errorf("failed to get stub rekor URL: %w", err)
-	}
-
-	rekorClient, err := rc.GetRekorClient(rekorURL)
-	if err != nil {
-		return ctx, fmt.Errorf("failed to get rekor client: %w", err)
-	}
-
-	// Get public key or cert for transparency log upload
-	pkoc, err := getPublicKeyOrCert(signer)
-	if err != nil {
-		return ctx, fmt.Errorf("failed to get public key or cert: %w", err)
-	}
-
-	// Compute payload checksum
-	checksum := sha256.New()
-	if _, err := checksum.Write(payload); err != nil {
-		return ctx, fmt.Errorf("error checksuming payload: %w", err)
-	}
-
-	tlogEntry, err := cosign.TLogUpload(ctx, rekorClient, rawSignature, checksum, pkoc)
-	if err != nil {
-		return ctx, fmt.Errorf("failed to upload to transparency log: %w", err)
-	}
-
-	// Create bundle from the actual transparency log entry
-	rekorBundle := bundle.EntryToBundle(tlogEntry)
-	if rekorBundle == nil {
-		return ctx, fmt.Errorf("rekorBundle is nil after EntryToBundle")
-	}
-
-	// Create the signature layer with bundle information using static.WithBundle
-	signatureLayer, err := static.NewSignature(payload, signatureBase64, static.WithBundle(rekorBundle))
-	if err != nil {
-		return ctx, err
-	}
-
-	// Extract bundle information from signatureLayer to include in annotations
-	annotations := map[string]string{
-		static.SignatureAnnotationKey: signatureBase64,
-	}
-
-	// Add bundle annotation if bundle information exists
-	bundleJSON, err := json.Marshal(rekorBundle)
-	if err != nil {
-		return ctx, fmt.Errorf("failed to marshal bundle for annotation: %w", err)
-	}
-	annotations[static.BundleAnnotationKey] = string(bundleJSON)
 
 	// creates the signature image with the correct media type and config and appends
 	// the signature layer to it
 	signatureImage := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
 	signatureImage = mutate.ConfigMediaType(signatureImage, types.OCIConfigJSON)
 	signatureImage, err = mutate.Append(signatureImage, mutate.Addendum{
-		Layer:       signatureLayer,
-		Annotations: annotations,
+		Layer:       sigData.signatureLayer,
+		Annotations: sigData.annotations,
 	})
 	if err != nil {
 		return ctx, err
@@ -286,7 +294,132 @@ func CreateAndPushImageSignature(ctx context.Context, imageName string, keyName 
 	}
 
 	state.Signatures[imageName] = ref.String()
-	state.ImageSignatures[imageName] = signature
+	state.ImageSignatures[imageName] = sigData.signatureStruct
+
+	return ctx, nil
+}
+
+// uploadToTransparencyLog uploads a signature to the transparency log and returns the bundle
+func uploadToTransparencyLog(ctx context.Context, payload []byte, rawSignature []byte, signer signature.SignerVerifier) (*bundle.RekorBundle, error) {
+	// Get public key or cert for transparency log upload
+	pkoc, err := getPublicKeyOrCert(signer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get public key or cert: %w", err)
+	}
+
+	// Get Rekor URL
+	rekorURL, err := rekor.StubRekor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stub rekor URL: %w", err)
+	}
+
+	rekorClient, err := rc.GetRekorClient(rekorURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get rekor client: %w", err)
+	}
+
+	// Compute payload checksum
+	checksum := sha256.New()
+	if _, err := checksum.Write(payload); err != nil {
+		return nil, fmt.Errorf("error checksuming payload: %w", err)
+	}
+
+	tlogEntry, err := cosign.TLogUpload(ctx, rekorClient, rawSignature, checksum, pkoc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload to transparency log: %w", err)
+	}
+
+	// Create bundle from the actual transparency log entry
+	rekorBundle := bundle.EntryToBundle(tlogEntry)
+	if rekorBundle == nil {
+		return nil, fmt.Errorf("rekorBundle is nil after EntryToBundle")
+	}
+
+	return rekorBundle, nil
+}
+
+// getImageDigestAndRef returns the image, its digest, and digest reference for signing
+func getImageDigestAndRef(ctx context.Context, imageName string) (v1.Image, v1.Hash, name.Digest, error) {
+	image, err := imageFrom(ctx, imageName)
+	if err != nil {
+		return nil, v1.Hash{}, name.Digest{}, err
+	}
+
+	digest, err := image.Digest()
+	if err != nil {
+		return nil, v1.Hash{}, name.Digest{}, err
+	}
+
+	// the name of the image to sign referenced by the digest
+	digestImage, err := name.NewDigest(fmt.Sprintf("%s@%s", imageName, digest.String()))
+	if err != nil {
+		return nil, v1.Hash{}, name.Digest{}, err
+	}
+
+	return image, digest, digestImage, nil
+}
+
+// getDigestRefForImage returns the digest reference for an image in the stub registry
+func getDigestRefForImage(ctx context.Context, imageName string, digest v1.Hash) (name.Digest, error) {
+	// Get the registry reference for the image
+	ref, err := registry.ImageReferenceInStubRegistry(ctx, imageName)
+	if err != nil {
+		return name.Digest{}, err
+	}
+
+	// Convert to digest reference
+	return name.NewDigest(fmt.Sprintf("%s@%s", ref.Context().Name(), digest.String()))
+}
+
+// CreateAndPushImageSignatureReferrer creates a signature for a named image using OCI Referrers API
+func CreateAndPushImageSignatureReferrer(ctx context.Context, imageName string, keyName string) (context.Context, error) {
+	var state *imageState
+	ctx, err := testenv.SetupState(ctx, &state)
+	if err != nil {
+		return ctx, err
+	}
+
+	if _, ok := state.ReferrerSignatures[imageName]; ok {
+		// we already created the referrer signature
+		return ctx, nil
+	}
+
+	_, digest, digestImage, err := getImageDigestAndRef(ctx, imageName)
+	if err != nil {
+		return ctx, err
+	}
+
+	signer, err := crypto.SignerWithKey(ctx, keyName)
+	if err != nil {
+		return ctx, err
+	}
+
+	sigData, err := createSignatureData(ctx, imageName, digestImage, signer)
+	if err != nil {
+		return ctx, err
+	}
+
+	digestRef, err := getDigestRefForImage(ctx, imageName, digest)
+	if err != nil {
+		return ctx, err
+	}
+
+	// Attach signature using OCI Referrers API
+	err = cosignRemote.WriteReferrer(
+		digestRef,
+		"application/vnd.dev.cosign.simplesigning.v1+json",
+		[]v1.Layer{sigData.signatureLayer},
+		sigData.annotations,
+		cosignRemote.WithRemoteOptions(remote.WithContext(ctx)),
+	)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to write signature referrer: %w", err)
+	}
+
+	// NOTE: We store the subject image digest here for deduplication purposes only.
+	// This is NOT the referrer artifact's digest.
+	state.ReferrerSignatures[imageName] = digestRef.String()
+	state.ReferrerImageSignatures[imageName] = sigData.signatureStruct
 
 	return ctx, nil
 }
@@ -321,7 +454,7 @@ func createAndPushAttestationInternal(ctx context.Context, imageName, keyName st
 		return ctx, nil
 	}
 
-	image, err := imageFrom(ctx, imageName)
+	image, digest, _, err := getImageDigestAndRef(ctx, imageName)
 	if err != nil {
 		return ctx, err
 	}
@@ -400,37 +533,9 @@ func createAndPushAttestationInternal(ctx context.Context, imageName, keyName st
 	}
 
 	// Upload to transparency log to get bundle information like Tekton Chains does
-	rekorURL, err := rekor.StubRekor(ctx)
+	rekorBundle, err := uploadToTransparencyLog(ctx, signedAttestation, rawSignature, signer)
 	if err != nil {
-		return ctx, fmt.Errorf("failed to get stub rekor URL: %w", err)
-	}
-
-	rekorClient, err := rc.GetRekorClient(rekorURL)
-	if err != nil {
-		return ctx, fmt.Errorf("failed to get rekor client: %w", err)
-	}
-
-	// Get public key or cert for transparency log upload
-	pkoc, err := getPublicKeyOrCert(signer)
-	if err != nil {
-		return ctx, fmt.Errorf("failed to get public key or cert: %w", err)
-	}
-
-	// Compute payload checksum
-	checksum := sha256.New()
-	if _, err := checksum.Write(signedAttestation); err != nil {
-		return ctx, fmt.Errorf("error checksuming attestation: %w", err)
-	}
-
-	tlogEntry, err := cosign.TLogUpload(ctx, rekorClient, rawSignature, checksum, pkoc)
-	if err != nil {
-		return ctx, fmt.Errorf("failed to upload attestation to transparency log: %w", err)
-	}
-
-	// Create bundle from the actual transparency log entry
-	rekorBundle := bundle.EntryToBundle(tlogEntry)
-	if rekorBundle == nil {
-		return ctx, fmt.Errorf("rekorBundle is nil after EntryToBundle")
+		return ctx, err
 	}
 
 	// Create the attestation layer with bundle information using static.WithBundle
@@ -468,11 +573,6 @@ func createAndPushAttestationInternal(ctx context.Context, imageName, keyName st
 		return ctx, err
 	}
 
-	digest, err := image.Digest()
-	if err != nil {
-		return ctx, err
-	}
-
 	// the name of the image + the <hash>.att tag
 	ref, err := registry.ImageReferenceInStubRegistry(ctx, fmt.Sprintf("%s:%s-%s.att", imageName, digest.Algorithm, digest.Hex))
 	if err != nil {
@@ -490,6 +590,129 @@ func createAndPushAttestationInternal(ctx context.Context, imageName, keyName st
 	}
 
 	state.Attestations[imageName] = ref.String()
+
+	return ctx, nil
+}
+
+// CreateAndPushAttestationReferrer creates an attestation for a named image using OCI Referrers API
+func CreateAndPushAttestationReferrer(ctx context.Context, imageName, keyName string) (context.Context, error) {
+	var state *imageState
+	ctx, err := testenv.SetupState(ctx, &state)
+	if err != nil {
+		return ctx, err
+	}
+
+	if state.ReferrerAttestations[imageName] != "" {
+		// we already created the referrer attestation
+		return ctx, nil
+	}
+
+	image, digest, _, err := getImageDigestAndRef(ctx, imageName)
+	if err != nil {
+		return ctx, err
+	}
+
+	// Create SLSA v0.2 statement
+	statement, err := attestation.CreateStatementFor(imageName, image)
+	if err != nil {
+		return ctx, err
+	}
+
+	signedAttestation, err := attestation.SignStatement(ctx, keyName, statement)
+	if err != nil {
+		return ctx, err
+	}
+
+	// Extract signature information from the signed attestation
+	var sig *cosign.Signatures
+	sig, err = unmarshallSignatures(signedAttestation)
+	if err != nil {
+		return ctx, err
+	}
+	if sig == nil {
+		return ctx, fmt.Errorf("failed to extract signature from attestation: no signatures found")
+	}
+
+	state.ReferrerAttestationSignatures[imageName] = Signature{
+		KeyID:     sig.KeyID,
+		Signature: sig.Sig,
+	}
+
+	// Extract raw signature from the signed attestation for transparency log upload
+	var rawSignature []byte
+	if sig.Sig != "" {
+		rawSignature, err = base64.StdEncoding.DecodeString(sig.Sig)
+		if err != nil {
+			return ctx, fmt.Errorf("failed to decode signature: %w", err)
+		}
+	}
+
+	// Get the signer for transparency log operations
+	signer, err := crypto.SignerWithKey(ctx, keyName)
+	if err != nil {
+		return ctx, err
+	}
+
+	// Get the public key from the signer for intoto validation
+	publicKey, err := signer.PublicKey()
+	if err != nil {
+		return ctx, fmt.Errorf("failed to get public key: %w", err)
+	}
+
+	publicKeyBytes, err := cryptoutils.MarshalPublicKeyToPEM(publicKey)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to marshal public key: %w", err)
+	}
+
+	// Create stubs for both Rekor entry creation and retrieval endpoints for attestations
+	err = rekor.StubRekorEntryCreationForAttestation(ctx, signedAttestation, publicKeyBytes)
+	if err != nil {
+		return ctx, fmt.Errorf("error stubbing rekor endpoints for attestation: %w", err)
+	}
+
+	// Upload to transparency log to get bundle information
+	rekorBundle, err := uploadToTransparencyLog(ctx, signedAttestation, rawSignature, signer)
+	if err != nil {
+		return ctx, err
+	}
+
+	// Create the attestation layer with bundle information
+	attestationLayer, err := static.NewAttestation(signedAttestation, static.WithBundle(rekorBundle))
+	if err != nil {
+		return ctx, err
+	}
+
+	digestRef, err := getDigestRefForImage(ctx, imageName, digest)
+	if err != nil {
+		return ctx, err
+	}
+
+	// Attach attestation using OCI Referrers API
+	annotations := map[string]string{
+		"predicateType": statement.PredicateType,
+	}
+
+	// Add bundle annotation if bundle information exists
+	bundleJSON, err := json.Marshal(rekorBundle)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to marshal bundle for annotation: %w", err)
+	}
+	annotations[static.BundleAnnotationKey] = string(bundleJSON)
+
+	err = cosignRemote.WriteReferrer(
+		digestRef,
+		"application/vnd.dsse.envelope.v1+json",
+		[]v1.Layer{attestationLayer},
+		annotations,
+		cosignRemote.WithRemoteOptions(remote.WithContext(ctx)),
+	)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to write attestation referrer: %w", err)
+	}
+
+	// NOTE: We store the subject image digest here for deduplication purposes only.
+	// This is NOT the referrer artifact's digest.
+	state.ReferrerAttestations[imageName] = digestRef.String()
 
 	return ctx, nil
 }
@@ -1187,4 +1410,6 @@ func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step(`^an image named "([^"]*)" with attestation from "([^"]*)"$`, steal("att"))
 	sc.Step(`^all images relating to "([^"]*)" are copied to "([^"]*)"$`, copyAllImages)
 	sc.Step(`^an OCI blob with content "([^"]*)" in the repo "([^"]*)"$`, createAndPushLayer)
+	sc.Step(`^a valid image signature referrer of "([^"]*)" image signed by the "([^"]*)" key$`, CreateAndPushImageSignatureReferrer)
+	sc.Step(`^a valid attestation referrer of "([^"]*)" signed by the "([^"]*)" key$`, CreateAndPushAttestationReferrer)
 }
