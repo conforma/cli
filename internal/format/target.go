@@ -34,8 +34,9 @@ type Target struct {
 
 // options that can be configured per Target
 type Options struct {
-	ShowSuccesses bool
-	ShowWarnings  bool
+	ShowSuccesses      bool
+	ShowWarnings       bool
+	ShowPolicyDocsLink bool
 }
 
 // mutate parses the given string as URL query parameters and sets the fields
@@ -57,6 +58,14 @@ func (o *Options) mutate(given string) error {
 	if v := vals.Get("show-warnings"); v != "" {
 		if f, err := strconv.ParseBool(v); err == nil {
 			o.ShowWarnings = f
+		} else {
+			return err
+		}
+	}
+
+	if v := vals.Get("show-policy-docs-link"); v != "" {
+		if f, err := strconv.ParseBool(v); err == nil {
+			o.ShowPolicyDocsLink = f
 		} else {
 			return err
 		}

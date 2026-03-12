@@ -121,6 +121,7 @@ func validateInputCmd(validate InputValidationFunc) *cobra.Command {
 
 			showSuccesses, _ := cmd.Flags().GetBool("show-successes")
 			showWarnings, _ := cmd.Flags().GetBool("show-warnings")
+			showPolicyDocsLink, _ := cmd.Flags().GetBool("show-policy-docs-link")
 
 			// Set numWorkers to the value from our flag. The default is 5.
 			numWorkers := data.workers
@@ -210,14 +211,14 @@ func validateInputCmd(validate InputValidationFunc) *cobra.Command {
 				return inputs[i].FilePath > inputs[j].FilePath
 			})
 
-			report, err := input.NewReport(inputs, data.policy, manyPolicyInput, showSuccesses, showWarnings)
+			report, err := input.NewReport(inputs, data.policy, manyPolicyInput, showSuccesses, showWarnings, showPolicyDocsLink)
 			if err != nil {
 				return err
 			}
 
 			utils.SetColorEnabled(data.noColor, data.forceColor)
 
-			p := format.NewTargetParser(input.Text, format.Options{ShowSuccesses: showSuccesses, ShowWarnings: showWarnings}, cmd.OutOrStdout(), utils.FS(cmd.Context()))
+			p := format.NewTargetParser(input.Text, format.Options{ShowSuccesses: showSuccesses, ShowWarnings: showWarnings, ShowPolicyDocsLink: showPolicyDocsLink}, cmd.OutOrStdout(), utils.FS(cmd.Context()))
 			if err := report.WriteAll(data.output, p); err != nil {
 				return err
 			}

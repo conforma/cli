@@ -5,6 +5,7 @@ Validate conformance with the provided policies
 == Options
 
 -h, --help:: help for validate (Default: false)
+--show-policy-docs-link:: Show the policy documentation link when there are failures or warnings (Default: true)
 --show-successes::  (Default: false)
 --show-warnings::  (Default: true)
 

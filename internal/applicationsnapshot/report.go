@@ -50,19 +50,20 @@ type Component struct {
 }
 
 type Report struct {
-	Success       bool `json:"success"`
-	created       time.Time
-	Snapshot      string                           `json:"snapshot,omitempty"`
-	Components    []Component                      `json:"components"`
-	Key           string                           `json:"key"`
-	Policy        ecc.EnterpriseContractPolicySpec `json:"policy"`
-	EcVersion     string                           `json:"ec-version"`
-	Data          any                              `json:"-"`
-	EffectiveTime time.Time                        `json:"effective-time"`
-	PolicyInput   [][]byte                         `json:"-"`
-	ShowSuccesses bool                             `json:"-"`
-	ShowWarnings  bool                             `json:"-"`
-	Expansion     *ExpansionInfo                   `json:"-"`
+	Success            bool `json:"success"`
+	created            time.Time
+	Snapshot           string                           `json:"snapshot,omitempty"`
+	Components         []Component                      `json:"components"`
+	Key                string                           `json:"key"`
+	Policy             ecc.EnterpriseContractPolicySpec `json:"policy"`
+	EcVersion          string                           `json:"ec-version"`
+	Data               any                              `json:"-"`
+	EffectiveTime      time.Time                        `json:"effective-time"`
+	PolicyInput        [][]byte                         `json:"-"`
+	ShowSuccesses      bool                             `json:"-"`
+	ShowWarnings       bool                             `json:"-"`
+	ShowPolicyDocsLink bool                             `json:"-"`
+	Expansion          *ExpansionInfo                   `json:"-"`
 }
 
 type summary struct {
@@ -128,7 +129,7 @@ var OutputFormats = []string{
 
 // WriteReport returns a new instance of Report representing the state of
 // components from the snapshot.
-func NewReport(snapshot string, components []Component, policy policy.Policy, policyInput [][]byte, showSuccesses bool, showWarnings bool, expansion *ExpansionInfo) (Report, error) {
+func NewReport(snapshot string, components []Component, policy policy.Policy, policyInput [][]byte, showSuccesses bool, showWarnings bool, showPolicyDocsLink bool, expansion *ExpansionInfo) (Report, error) {
 	success := true
 
 	// Set the report success, remains true if all components are successful
@@ -149,18 +150,19 @@ func NewReport(snapshot string, components []Component, policy policy.Policy, po
 	info, _ := version.ComputeInfo()
 
 	return Report{
-		Snapshot:      snapshot,
-		Success:       success,
-		Components:    components,
-		created:       time.Now().UTC(),
-		Key:           string(key),
-		Policy:        policy.Spec(),
-		EcVersion:     info.Version,
-		PolicyInput:   policyInput,
-		EffectiveTime: policy.EffectiveTime().UTC(),
-		ShowSuccesses: showSuccesses,
-		ShowWarnings:  showWarnings,
-		Expansion:     expansion,
+		Snapshot:           snapshot,
+		Success:            success,
+		Components:         components,
+		created:            time.Now().UTC(),
+		Key:                string(key),
+		Policy:             policy.Spec(),
+		EcVersion:          info.Version,
+		PolicyInput:        policyInput,
+		EffectiveTime:      policy.EffectiveTime().UTC(),
+		ShowSuccesses:      showSuccesses,
+		ShowWarnings:       showWarnings,
+		ShowPolicyDocsLink: showPolicyDocsLink,
+		Expansion:          expansion,
 	}, nil
 }
 
@@ -264,6 +266,7 @@ func (r *Report) toSummary() summary {
 func (r *Report) applyOptions(opts format.Options) {
 	r.ShowSuccesses = opts.ShowSuccesses
 	r.ShowWarnings = opts.ShowWarnings
+	r.ShowPolicyDocsLink = opts.ShowPolicyDocsLink
 }
 
 // condensedMsg reduces repetitive error messages.

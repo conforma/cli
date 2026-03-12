@@ -44,16 +44,17 @@ type Input struct {
 }
 
 type Report struct {
-	Success       bool `json:"success"`
-	created       time.Time
-	FilePaths     []Input                          `json:"filepaths"`
-	Policy        ecc.EnterpriseContractPolicySpec `json:"policy"`
-	EcVersion     string                           `json:"ec-version"`
-	Data          any                              `json:"-"`
-	EffectiveTime time.Time                        `json:"effective-time"`
-	PolicyInput   [][]byte                         `json:"-"`
-	ShowSuccesses bool                             `json:"-"`
-	ShowWarnings  bool                             `json:"-"`
+	Success            bool `json:"success"`
+	created            time.Time
+	FilePaths          []Input                          `json:"filepaths"`
+	Policy             ecc.EnterpriseContractPolicySpec `json:"policy"`
+	EcVersion          string                           `json:"ec-version"`
+	Data               any                              `json:"-"`
+	EffectiveTime      time.Time                        `json:"effective-time"`
+	PolicyInput        [][]byte                         `json:"-"`
+	ShowSuccesses      bool                             `json:"-"`
+	ShowWarnings       bool                             `json:"-"`
+	ShowPolicyDocsLink bool                             `json:"-"`
 }
 
 type summary struct {
@@ -97,7 +98,7 @@ const (
 
 // WriteReport returns a new instance of Report representing the state of
 // the filepaths provided.
-func NewReport(inputs []Input, policy policy.Policy, policyInput [][]byte, showSuccesses bool, showWarnings bool) (Report, error) {
+func NewReport(inputs []Input, policy policy.Policy, policyInput [][]byte, showSuccesses bool, showWarnings bool, showPolicyDocsLink bool) (Report, error) {
 	success := true
 
 	// Set the report success, remains true if all the files were successfully validated
@@ -111,15 +112,16 @@ func NewReport(inputs []Input, policy policy.Policy, policyInput [][]byte, showS
 	info, _ := version.ComputeInfo()
 
 	return Report{
-		Success:       success,
-		created:       time.Now().UTC(),
-		FilePaths:     inputs,
-		Policy:        policy.Spec(),
-		EcVersion:     info.Version,
-		EffectiveTime: policy.EffectiveTime().UTC(),
-		PolicyInput:   policyInput,
-		ShowSuccesses: showSuccesses,
-		ShowWarnings:  showWarnings,
+		Success:            success,
+		created:            time.Now().UTC(),
+		FilePaths:          inputs,
+		Policy:             policy.Spec(),
+		EcVersion:          info.Version,
+		EffectiveTime:      policy.EffectiveTime().UTC(),
+		PolicyInput:        policyInput,
+		ShowSuccesses:      showSuccesses,
+		ShowWarnings:       showWarnings,
+		ShowPolicyDocsLink: showPolicyDocsLink,
 	}, nil
 }
 

@@ -126,8 +126,9 @@ type validateVSAData struct {
 	workers int // Number of worker threads for parallel processing
 
 	// Output formatting options
-	noColor    bool // Disable color output
-	forceColor bool // Force color output
+	noColor            bool // Disable color output
+	forceColor         bool // Force color output
+	showPolicyDocsLink bool // Show policy documentation link
 
 	// Internal state
 	policySpec ecapi.EnterpriseContractPolicySpec
@@ -193,6 +194,9 @@ func NewValidateVSACmd() *cobra.Command {
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			// Compute fallback behavior: enabled by default, disabled if --no-fallback is set
 			data.fallbackToImageValidation = !data.noFallback
+
+			// Get persistent flag value from parent command
+			data.showPolicyDocsLink, _ = cmd.Flags().GetBool("show-policy-docs-link")
 
 			return validateVSAInput(data, args)
 		},
@@ -1095,13 +1099,14 @@ func buildFallbackReportData(fallbackResults []validate_utils.Result, vsaData *v
 	}
 
 	return validate_utils.ReportData{
-		Snapshot:      vsaData.images,
-		Components:    components,
-		Policy:        vsaData.fallbackContext.FallbackPolicy,
-		PolicyInputs:  manyPolicyInput,
-		Expansion:     nil,
-		ShowSuccesses: false,
-		ShowWarnings:  true,
+		Snapshot:           vsaData.images,
+		Components:         components,
+		Policy:             vsaData.fallbackContext.FallbackPolicy,
+		PolicyInputs:       manyPolicyInput,
+		Expansion:          nil,
+		ShowSuccesses:      false,
+		ShowWarnings:       true,
+		ShowPolicyDocsLink: vsaData.showPolicyDocsLink,
 	}, nil
 }
 
@@ -1121,6 +1126,7 @@ func createFallbackReport(allData AllSectionsData, vsaData *validateVSAData) (*a
 		reportData.PolicyInputs,
 		reportData.ShowSuccesses,
 		reportData.ShowWarnings,
+		reportData.ShowPolicyDocsLink,
 		reportData.Expansion,
 	)
 	if err != nil {

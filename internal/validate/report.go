@@ -138,13 +138,14 @@ func CollectComponentResults(
 
 // ReportData contains the data needed to create an application snapshot report
 type ReportData struct {
-	Snapshot      string
-	Components    []applicationsnapshot.Component
-	Policy        policy.Policy
-	PolicyInputs  [][]byte
-	Expansion     *applicationsnapshot.ExpansionInfo
-	ShowSuccesses bool
-	ShowWarnings  bool
+	Snapshot           string
+	Components         []applicationsnapshot.Component
+	Policy             policy.Policy
+	PolicyInputs       [][]byte
+	Expansion          *applicationsnapshot.ExpansionInfo
+	ShowSuccesses      bool
+	ShowWarnings       bool
+	ShowPolicyDocsLink bool
 }
 
 // ReportOutputOptions contains options for formatting and writing the report
@@ -164,6 +165,7 @@ func WriteReport(data ReportData, opts ReportOutputOptions, cmd *cobra.Command) 
 		data.PolicyInputs,
 		data.ShowSuccesses,
 		data.ShowWarnings,
+		data.ShowPolicyDocsLink,
 		data.Expansion,
 	)
 	if err != nil {
@@ -171,8 +173,9 @@ func WriteReport(data ReportData, opts ReportOutputOptions, cmd *cobra.Command) 
 	}
 
 	formatOpts := format.Options{
-		ShowSuccesses: data.ShowSuccesses,
-		ShowWarnings:  data.ShowWarnings,
+		ShowSuccesses:      data.ShowSuccesses,
+		ShowWarnings:       data.ShowWarnings,
+		ShowPolicyDocsLink: data.ShowPolicyDocsLink,
 	}
 	p := format.NewTargetParser(
 		applicationsnapshot.JSON,
