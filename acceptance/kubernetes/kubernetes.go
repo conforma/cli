@@ -122,7 +122,6 @@ func buildSnapshotArtifact(ctx context.Context, specification *godog.DocString) 
 	}
 
 	return c.cluster.BuildSnapshotArtifact(ctx, specification.Content)
-
 }
 
 func createNamedPolicy(ctx context.Context, name string, specification *godog.DocString) error {
@@ -498,6 +497,56 @@ func stepEnvVarShouldBe(ctx context.Context, stepName, envName, want string) err
 	return fmt.Errorf("step %q not found when looking for the %q env var", stepName, envName)
 }
 
+// createBasicPolicyWithKnownKey creates a basic policy with ${known_PUBLIC_KEY}
+// Avoid some repetition in feature files that use the same policy repeatedly
+func createBasicPolicyWithKnownKey(ctx context.Context) error {
+	policyContent := `{"publicKey": ${known_PUBLIC_KEY}}`
+	return createPolicy(ctx, &godog.DocString{Content: policyContent})
+}
+
+// createSLSAProvenancePolicy creates a policy for SLSA provenance checking
+// Avoid some repetition in feature files that use the same policy repeatedly
+func createSLSAProvenancePolicy(ctx context.Context) error {
+	policyContent := `{
+  "sources": [
+    {
+      "policy": [
+        "github.com/conforma/policy//policy/release?ref=0de5461c14413484575e63e96ddb514d8ab954b5",
+        "github.com/conforma/policy//policy/lib?ref=0de5461c14413484575e63e96ddb514d8ab954b5"
+      ],
+      "config": {
+        "include": [
+          "slsa_provenance_available"
+        ]
+      }
+    }
+  ]
+}`
+	return createPolicy(ctx, &godog.DocString{Content: policyContent})
+}
+
+// createGoldenContainerPolicy creates the hardcoded policy used in golden container scenarios
+// Avoid some repetition in feature files that use the same policy repeatedly
+func createGoldenContainerPolicy(ctx context.Context) error {
+	policyContent := `{
+  "publicKey": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----",
+  "sources": [
+    {
+      "policy": [
+        "github.com/conforma/policy//policy/release?ref=0de5461c14413484575e63e96ddb514d8ab954b5",
+        "github.com/conforma/policy//policy/lib?ref=0de5461c14413484575e63e96ddb514d8ab954b5"
+      ],
+      "config": {
+        "include": [
+          "slsa_provenance_available"
+        ]
+      }
+    }
+  ]
+}`
+	return createPolicy(ctx, &godog.DocString{Content: policyContent})
+}
+
 // AddStepsTo adds cluster-related steps to the context
 func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step(`^a stub cluster running$`, startAndSetupState(stub.Start))
@@ -506,6 +555,9 @@ func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step(`^a snapshot artifact with content:$`, buildSnapshotArtifact)
 	sc.Step(`^policy configuration named "([^"]*)" with specification$`, createNamedPolicy)
 	sc.Step(`^a cluster policy with content:$`, createPolicy)
+	sc.Step(`^a basic policy with known public key$`, createBasicPolicyWithKnownKey)
+	sc.Step(`^a policy for SLSA provenance checking$`, createSLSAProvenancePolicy)
+	sc.Step(`^a golden container policy$`, createGoldenContainerPolicy)
 	sc.Step(`^version ([\d.]+) of the task named "([^"]*)" is run with parameters:$`, runTask)
 	sc.Step(`^version ([\d.]+) of the task named "([^"]*)" with workspace "([^"]*)" is run with parameters:$`, runTaskWithWorkspace)
 	sc.Step(`^the task should succeed$`, theTaskShouldSucceed)
