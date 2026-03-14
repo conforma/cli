@@ -39,6 +39,8 @@ const missingAttestationMessage = "No image attestations found matching the give
 	"Verify the correct public key was provided, " +
 	"and one or more attestations were created. Error: %s"
 
+const messagePass = "Pass"
+
 // VerificationStatus represents the status of a verification check.
 type VerificationStatus struct {
 	Passed bool              `json:"passed"`
@@ -99,7 +101,7 @@ func (o *Output) SetImageAccessibleCheckFromError(err error) {
 	var message string
 	if err == nil {
 		o.ImageAccessibleCheck.Passed = true
-		message = "Pass"
+		message = messagePass
 		log.Debug("Image URL is accessible")
 	} else {
 		o.ImageAccessibleCheck.Passed = false
@@ -124,7 +126,7 @@ func (o *Output) SetImageSignatureCheckFromError(err error) {
 
 	if err == nil {
 		o.ImageSignatureCheck.Passed = true
-		message = "Pass"
+		message = messagePass
 		log.Debug("Image signature check passed")
 	} else {
 		o.ImageSignatureCheck.Passed = false
@@ -149,7 +151,7 @@ func (o *Output) SetAttestationSignatureCheckFromError(err error) {
 
 	if err == nil {
 		o.AttestationSignatureCheck.Passed = true
-		message = "Pass"
+		message = messagePass
 		log.Debug("Attestation signature check passed")
 	} else {
 		o.AttestationSignatureCheck.Passed = false
@@ -174,7 +176,7 @@ func (o *Output) SetAttestationSyntaxCheckFromError(err error) {
 
 	if err == nil {
 		o.AttestationSyntaxCheck.Passed = true
-		message = "Pass"
+		message = messagePass
 		log.Debug("Attestation syntax check passed")
 	} else {
 		o.AttestationSyntaxCheck.Passed = false

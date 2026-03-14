@@ -37,6 +37,14 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Entry type constants for Rekor entries
+const (
+	entryTypeIntoto     = "intoto"
+	entryTypeIntotoV002 = "intoto-v002"
+	entryTypeDSSE       = "dsse"
+	entryTypeUnknown    = "unknown"
+)
+
 // RekorVSARetriever implements VSARetriever using Rekor API
 type RekorVSARetriever struct {
 	client  RekorClient
@@ -210,12 +218,12 @@ func (r *RekorVSARetriever) classifyEntryKind(entry models.LogEntryAnon) string 
 				if apiVersion, ok := body["apiVersion"].(string); ok {
 					switch apiVersion {
 					case "0.0.2":
-						return "intoto-v002"
+						return entryTypeIntotoV002
 					case "0.0.1":
-						return "intoto"
+						return entryTypeIntoto
 					default:
 						// Default to 0.0.1 for backward compatibility
-						return "intoto"
+						return entryTypeIntoto
 					}
 				}
 				// If no API version specified, check for embedded DSSE envelope structure
@@ -225,16 +233,16 @@ func (r *RekorVSARetriever) classifyEntryKind(entry models.LogEntryAnon) string 
 							// Check if this has both payload and signatures (0.0.2) or just payload (0.0.1)
 							if _, hasPayload := envelope["payload"]; hasPayload {
 								if _, hasSignatures := envelope["signatures"]; hasSignatures {
-									return "intoto-v002"
+									return entryTypeIntotoV002
 								}
-								return "intoto"
+								return entryTypeIntoto
 							}
 						}
 					}
 				}
-				return "intoto"
+				return entryTypeIntoto
 			case "dsse":
-				return "dsse"
+				return entryTypeDSSE
 			}
 		}
 
@@ -245,7 +253,7 @@ func (r *RekorVSARetriever) classifyEntryKind(entry models.LogEntryAnon) string 
 					// Check if this has both payloadType and signatures (0.0.2)
 					if _, hasPayloadType := envelope["payloadType"]; hasPayloadType {
 						if _, hasSignatures := envelope["signatures"]; hasSignatures {
-							return "intoto-v002"
+							return entryTypeIntotoV002
 						}
 					}
 				}
@@ -254,10 +262,10 @@ func (r *RekorVSARetriever) classifyEntryKind(entry models.LogEntryAnon) string 
 
 		// Fallback: check for top-level entry type indicators (legacy format)
 		if _, hasIntoto := body["intoto"]; hasIntoto {
-			return "intoto"
+			return entryTypeIntoto
 		}
 		if _, hasDsse := body["dsse"]; hasDsse {
-			return "dsse"
+			return entryTypeDSSE
 		}
 	}
 
@@ -265,12 +273,12 @@ func (r *RekorVSARetriever) classifyEntryKind(entry models.LogEntryAnon) string 
 	if entry.Attestation != nil && entry.Attestation.Data != nil {
 		if attBytes, err := base64.StdEncoding.DecodeString(string(entry.Attestation.Data)); err == nil {
 			if strings.Contains(string(attBytes), "https://conforma.dev/verification_summary/v1") {
-				return "intoto"
+				return entryTypeIntoto
 			}
 		}
 	}
 
-	return "unknown"
+	return entryTypeUnknown
 }
 
 // RetrieveVSA retrieves the latest VSA data as a DSSE envelope for a given identifier
@@ -310,7 +318,7 @@ func (r *RekorVSARetriever) RetrieveVSA(ctx context.Context, identifier string) 
 	var intotoV002Entries []models.LogEntryAnon
 	for _, entry := range entries {
 		entryKind := r.classifyEntryKind(entry)
-		if entryKind == "intoto-v002" {
+		if entryKind == entryTypeIntotoV002 {
 			intotoV002Entries = append(intotoV002Entries, entry)
 		}
 	}

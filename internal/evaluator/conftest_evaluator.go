@@ -183,8 +183,10 @@ const (
 )
 
 const (
-	severityWarning = "warning"
-	severityFailure = "failure"
+	severityWarning   = "warning"
+	severityFailure   = "failure"
+	categoryException = "exception"
+	categorySkipped   = "skipped"
 )
 
 // ConfigProvider is a subset of the policy.Policy interface. Its purpose is to codify which parts

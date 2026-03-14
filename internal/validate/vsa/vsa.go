@@ -43,6 +43,9 @@ import (
 	validate_utils "github.com/conforma/cli/internal/validate"
 )
 
+// Predicate status values
+const predicateStatusPassed = "passed"
+
 // ComponentSummary represents the summary information for a single component
 type ComponentSummary struct {
 	Name           string      `json:"name"`
@@ -163,7 +166,7 @@ func (g *Generator) GeneratePredicate(ctx context.Context) (*Predicate, error) {
 	// Determine the overall status based on component success
 	status := "failed"
 	if g.Component.Success {
-		status = "passed"
+		status = predicateStatusPassed
 	}
 
 	// Create detailed summary with architecture breakdown

@@ -976,26 +976,26 @@ func (f *LegacyPostEvaluationFilter) CategorizeResults(
 		originalType := "unknown"
 		for _, originalWarning := range originalResult.Warnings {
 			if ExtractStringFromMetadata(originalWarning, metadataCode) == code {
-				originalType = "warning"
+				originalType = severityWarning
 				break
 			}
 		}
 		for _, originalFailure := range originalResult.Failures {
 			if ExtractStringFromMetadata(originalFailure, metadataCode) == code {
-				originalType = "failure"
+				originalType = severityFailure
 				break
 			}
 		}
 
 		// Apply severity logic based on original type
 		switch originalType {
-		case "warning":
+		case severityWarning:
 			if getSeverity(result) == severityFailure {
 				failures = append(failures, result)
 			} else {
 				warnings = append(warnings, result)
 			}
-		case "failure":
+		case severityFailure:
 			if getSeverity(result) == severityWarning || !isResultEffective(result, effectiveTime) {
 				warnings = append(warnings, result)
 			} else {
@@ -1118,15 +1118,15 @@ func (f *UnifiedPostEvaluationFilter) CategorizeResults(
 			} else {
 				warnings = append(warnings, filteredResult)
 			}
-		case "failure":
+		case severityFailure:
 			if getSeverity(filteredResult) == severityWarning || !isResultEffective(filteredResult, effectiveTime) {
 				warnings = append(warnings, filteredResult)
 			} else {
 				failures = append(failures, filteredResult)
 			}
-		case "exception":
+		case categoryException:
 			exceptions = append(exceptions, filteredResult)
-		case "skipped":
+		case categorySkipped:
 			skipped = append(skipped, filteredResult)
 		default:
 			// For unknown types, assume it was a warning
@@ -1153,22 +1153,22 @@ func (f *UnifiedPostEvaluationFilter) determineOriginalType(filteredResult Resul
 		// Check each category in the original result
 		for _, originalWarning := range originalResult.Warnings {
 			if ExtractStringFromMetadata(originalWarning, metadataCode) == filteredCode {
-				return "warning"
+				return severityWarning
 			}
 		}
 		for _, originalFailure := range originalResult.Failures {
 			if ExtractStringFromMetadata(originalFailure, metadataCode) == filteredCode {
-				return "failure"
+				return severityFailure
 			}
 		}
 		for _, originalException := range originalResult.Exceptions {
 			if ExtractStringFromMetadata(originalException, metadataCode) == filteredCode {
-				return "exception"
+				return categoryException
 			}
 		}
 		for _, originalSkipped := range originalResult.Skipped {
 			if ExtractStringFromMetadata(originalSkipped, metadataCode) == filteredCode {
-				return "skipped"
+				return categorySkipped
 			}
 		}
 	}
@@ -1176,22 +1176,22 @@ func (f *UnifiedPostEvaluationFilter) determineOriginalType(filteredResult Resul
 	// For results without codes, check if they match any original results by message first
 	for _, originalWarning := range originalResult.Warnings {
 		if originalWarning.Message == filteredResult.Message {
-			return "warning"
+			return severityWarning
 		}
 	}
 	for _, originalFailure := range originalResult.Failures {
 		if originalFailure.Message == filteredResult.Message {
-			return "failure"
+			return severityFailure
 		}
 	}
 	for _, originalException := range originalResult.Exceptions {
 		if originalException.Message == filteredResult.Message {
-			return "exception"
+			return categoryException
 		}
 	}
 	for _, originalSkipped := range originalResult.Skipped {
 		if originalSkipped.Message == filteredResult.Message {
-			return "skipped"
+			return categorySkipped
 		}
 	}
 

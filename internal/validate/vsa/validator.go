@@ -96,7 +96,7 @@ func ValidateVSAAndComparePolicy(ctx context.Context, identifier string, data *V
 
 	// If predicate status is not "passed", return early to avoid expensive policy comparison
 	// This is the key optimization: check predicate status before doing policy work
-	if predicateStatus != "" && predicateStatus != "passed" {
+	if predicateStatus != "" && predicateStatus != predicateStatusPassed {
 		return &ValidationResult{
 			Passed:            false,
 			Message:           fmt.Sprintf("VSA predicate status is '%s' (not 'passed')", predicateStatus),

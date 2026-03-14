@@ -181,7 +181,7 @@ func buildVSACause(vsaResult *ValidationResult, vsaErr error) Cause {
 		}
 	} else if vsaResult != nil {
 		cause.Details = vsaResult.Message
-		if vsaResult.PredicateOutcome != "" && vsaResult.PredicateOutcome != "passed" {
+		if vsaResult.PredicateOutcome != "" && vsaResult.PredicateOutcome != predicateStatusPassed {
 			cause.SubCauses = append(cause.SubCauses, Cause{
 				Type:    ErrorTypePolicy,
 				Message: fmt.Sprintf("Predicate status: %s", vsaResult.PredicateOutcome),

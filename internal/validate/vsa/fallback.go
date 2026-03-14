@@ -74,7 +74,7 @@ func ShouldTriggerFallback(err error, result *ValidationResult) bool {
 	}
 
 	// Predicate status is not "passed" - trigger fallback
-	if result.PredicateOutcome != "" && result.PredicateOutcome != "passed" {
+	if result.PredicateOutcome != "" && result.PredicateOutcome != predicateStatusPassed {
 		return true
 	}
 
