@@ -1,0 +1,3 @@
+[submodule "make/postconditions"]
+	path = make/postconditions
+	url = ../go-postconditions

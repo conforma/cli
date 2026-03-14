@@ -233,6 +233,38 @@ go-mod-lint:
 		echo "No go.mod or go.sum files need to be added to the git commit."; \
 	fi
 
+##@ Code Quality (Postconditions)
+
+POSTCONDITIONS_MK := make/postconditions/Makefile
+
+.PHONY: sanity
+sanity: ## Run sanity checks (complexity, duplication, unused params)
+	@$(MAKE) -f $(POSTCONDITIONS_MK) check-sanity
+
+.PHONY: sanity-report
+sanity-report: ## Generate sanity report with summary
+	@$(MAKE) -f $(POSTCONDITIONS_MK) report-sanity
+
+.PHONY: sanity-file
+sanity-file: ## Run sanity checks on specific files (FILES=./path/to/file.go)
+	@$(MAKE) -f $(POSTCONDITIONS_MK) check-sanity FILES="$(FILES)"
+
+.PHONY: quick
+quick: ## Fast validation for small changes
+	@$(MAKE) -f $(POSTCONDITIONS_MK) quick
+
+.PHONY: refactor
+refactor: ## Validation for structural changes (includes unused function scan)
+	@$(MAKE) -f $(POSTCONDITIONS_MK) refactor
+
+.PHONY: behavior
+behavior: ## Validation for behavior changes (full quality + tests + coverage)
+	@$(MAKE) -f $(POSTCONDITIONS_MK) behavior
+
+.PHONY: prepr
+prepr: ## Pre-PR stabilization checks
+	@$(MAKE) -f $(POSTCONDITIONS_MK) prepr
+
 ##@ Pushing images
 
 IMAGE_TAG ?= latest
