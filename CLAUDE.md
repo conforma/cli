@@ -41,6 +41,17 @@ make lint-fix       # Fix linting issues
 | Review checklist | [docs/REVIEW.md](docs/REVIEW.md) |
 | Design docs | [docs/design-docs/](docs/design-docs/) |
 
+## When Modifying Code
+
+If you change these areas, update the corresponding docs:
+
+| Code Area | Documentation |
+|-----------|---------------|
+| `internal/evaluator/filters.go` | `docs/design-docs/rule-filtering.md`, `docs/design-docs/package-filtering.md` |
+| `internal/validate/vsa/` | `docs/design-docs/vsa-architecture.md` |
+| Layer dependencies | `docs/ARCHITECTURE.md` |
+| New architectural decisions | `docs/decisions/` (create ADR) |
+
 ## When Sanity Checks Fail
 
 If `make sanity` fails:
