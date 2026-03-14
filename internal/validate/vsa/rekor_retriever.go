@@ -447,30 +447,7 @@ func (r *RekorVSARetriever) buildDSSEEnvelopeFromIntotoV002(entry models.LogEntr
 	}
 
 	// Debug: Try to decode the payload to see if it's valid base64
-	if _, err := base64.StdEncoding.DecodeString(payloadB64); err != nil {
-		log.Debugf("Payload is not valid base64: %v", err)
-		previewLen := 100
-		if len(payloadB64) < previewLen {
-			previewLen = len(payloadB64)
-		}
-		log.Debugf("Payload preview (first %d chars): %s", previewLen, payloadB64[:previewLen])
-
-		// Try URL encoding as well
-		if _, err := base64.URLEncoding.DecodeString(payloadB64); err != nil {
-			log.Debugf("Payload is also not valid URL base64: %v", err)
-		} else {
-			log.Debugf("Payload is valid URL base64")
-		}
-	} else {
-		log.Debugf("Payload is valid base64")
-		// Decode and preview the decoded content
-		decoded, _ := base64.StdEncoding.DecodeString(payloadB64)
-		previewLen := 100
-		if len(decoded) < previewLen {
-			previewLen = len(decoded)
-		}
-		log.Debugf("Decoded payload preview (first %d chars): %s", previewLen, string(decoded[:previewLen]))
-	}
+	debugLogPayloadValidation(payloadB64)
 
 	// Extract and convert signatures
 	signaturesInterface, ok := envelopeData["signatures"].([]interface{})
@@ -570,6 +547,32 @@ func decodeSignatureBytes(index int, firstDecode []byte) (string, error) {
 		return "", fmt.Errorf("failed to double-decode signature %d: %w", index, err)
 	}
 	return base64.StdEncoding.EncodeToString(actualSignature), nil
+}
+
+// debugLogPayloadValidation logs debug info about payload base64 validation
+func debugLogPayloadValidation(payloadB64 string) {
+	decoded, err := base64.StdEncoding.DecodeString(payloadB64)
+	if err != nil {
+		logInvalidBase64Payload(payloadB64, err)
+		return
+	}
+
+	log.Debugf("Payload is valid base64")
+	previewLen := min(100, len(decoded))
+	log.Debugf("Decoded payload preview (first %d chars): %s", previewLen, string(decoded[:previewLen]))
+}
+
+// logInvalidBase64Payload logs debug info for invalid base64 payload
+func logInvalidBase64Payload(payloadB64 string, err error) {
+	log.Debugf("Payload is not valid base64: %v", err)
+	previewLen := min(100, len(payloadB64))
+	log.Debugf("Payload preview (first %d chars): %s", previewLen, payloadB64[:previewLen])
+
+	if _, urlErr := base64.URLEncoding.DecodeString(payloadB64); urlErr != nil {
+		log.Debugf("Payload is also not valid URL base64: %v", urlErr)
+	} else {
+		log.Debugf("Payload is valid URL base64")
+	}
 }
 
 // rekorClient wraps the actual Rekor client to implement our interface
