@@ -182,4 +182,10 @@ hack/**/charts
 benchmark/*/data.tar.gz
 
 # JUnit file output from acceptance tests
-junit-acceptance.xml.sanity.json
+junit-acceptance.xml
+
+# Generated reports
+.sanity.json
+
+# Claude Code local directory
+.claude/
