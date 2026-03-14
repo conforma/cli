@@ -742,41 +742,37 @@ func (data *imageData) generateVSAsDSSE(cmd *cobra.Command, report applicationsn
 	vsaResult, err := vsaService.ProcessAllVSAs(cmd.Context(), report, getGitURL, getDigest)
 	if err != nil {
 		log.Errorf("Failed to process VSAs: %v", err)
-		// Don't return error here, continue with the rest of the command
-	} else {
-		// Upload VSAs to configured storage backends
-		if len(data.vsaUpload) > 0 {
-			log.Infof("[VSA] Starting upload to %d storage backend(s)", len(data.vsaUpload))
+		return nil // Don't return error, continue with the rest of the command
+	}
 
-			// Upload component VSA envelopes
-			for imageRef, envelopePath := range vsaResult.ComponentEnvelopes {
-				uploadErr := vsa.UploadVSAEnvelope(cmd.Context(), envelopePath, data.vsaUpload, signer)
-				if uploadErr != nil {
-					log.Errorf("[VSA] Upload failed for component %s: %v", imageRef, uploadErr)
-				} else {
-					log.Infof("[VSA] Uploaded Component VSA")
-				}
-			}
+	// No upload backends configured
+	if len(data.vsaUpload) == 0 {
+		totalFiles := len(vsaResult.ComponentEnvelopes)
+		if vsaResult.SnapshotEnvelope != "" {
+			totalFiles++
+		}
+		if totalFiles > 0 {
+			log.Errorf("[VSA] VSA files generated but not uploaded (no --vsa-upload backends specified)")
+		}
+		return nil
+	}
 
-			// Upload snapshot VSA envelope if it exists
-			if vsaResult.SnapshotEnvelope != "" {
-				uploadErr := vsa.UploadVSAEnvelope(cmd.Context(), vsaResult.SnapshotEnvelope, data.vsaUpload, signer)
-				if uploadErr != nil {
-					log.Errorf("[VSA] Upload failed for snapshot: %v", uploadErr)
-				} else {
-					log.Infof("[VSA] Uploaded Snapshot VSA")
-				}
-			}
+	// Upload VSAs to configured storage backends
+	log.Infof("[VSA] Starting upload to %d storage backend(s)", len(data.vsaUpload))
+
+	for imageRef, envelopePath := range vsaResult.ComponentEnvelopes {
+		if err := vsa.UploadVSAEnvelope(cmd.Context(), envelopePath, data.vsaUpload, signer); err != nil {
+			log.Errorf("[VSA] Upload failed for component %s: %v", imageRef, err)
 		} else {
-			// No upload backends configured - inform user about next steps
-			totalFiles := len(vsaResult.ComponentEnvelopes)
-			if vsaResult.SnapshotEnvelope != "" {
-				totalFiles++
-			}
+			log.Infof("[VSA] Uploaded Component VSA")
+		}
+	}
 
-			if totalFiles > 0 {
-				log.Errorf("[VSA] VSA files generated but not uploaded (no --vsa-upload backends specified)")
-			}
+	if vsaResult.SnapshotEnvelope != "" {
+		if err := vsa.UploadVSAEnvelope(cmd.Context(), vsaResult.SnapshotEnvelope, data.vsaUpload, signer); err != nil {
+			log.Errorf("[VSA] Upload failed for snapshot: %v", err)
+		} else {
+			log.Infof("[VSA] Uploaded Snapshot VSA")
 		}
 	}
 
