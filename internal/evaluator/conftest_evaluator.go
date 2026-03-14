@@ -964,19 +964,30 @@ func addMetadataToResults(ctx context.Context, r *Result, rule rule.Info) {
 
 	// If the rule has been effective for a long time, we'll consider
 	// the effective_on date not relevant and not bother including it
-	if effectiveTime, ok := ctx.Value(effectiveTimeKey).(time.Time); ok {
-		if effectiveOnString, ok := r.Metadata[metadataEffectiveOn].(string); ok {
-			effectiveOnTime, err := time.Parse(effectiveOnFormat, effectiveOnString)
-			if err == nil {
-				if effectiveOnTime.Before(effectiveTime.Add(effectiveOnTimeout)) {
-					delete(r.Metadata, metadataEffectiveOn)
-				}
-			} else {
-				log.Warnf("Invalid %q value %q", metadataEffectiveOn, rule.EffectiveOn)
-			}
-		}
-	} else {
+	maybeRemoveStaleEffectiveOn(ctx, r, rule)
+}
+
+// maybeRemoveStaleEffectiveOn removes the effective_on metadata if the rule has been effective for a long time
+func maybeRemoveStaleEffectiveOn(ctx context.Context, r *Result, ruleInfo rule.Info) {
+	effectiveTime, ok := ctx.Value(effectiveTimeKey).(time.Time)
+	if !ok {
 		log.Warnf("Could not get effectiveTime from context")
+		return
+	}
+
+	effectiveOnString, ok := r.Metadata[metadataEffectiveOn].(string)
+	if !ok {
+		return
+	}
+
+	effectiveOnTime, err := time.Parse(effectiveOnFormat, effectiveOnString)
+	if err != nil {
+		log.Warnf("Invalid %q value %q", metadataEffectiveOn, ruleInfo.EffectiveOn)
+		return
+	}
+
+	if effectiveOnTime.Before(effectiveTime.Add(effectiveOnTimeout)) {
+		delete(r.Metadata, metadataEffectiveOn)
 	}
 }
 
