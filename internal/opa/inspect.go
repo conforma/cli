@@ -106,14 +106,14 @@ func hasAnnotations(rule *ast.AnnotationsRef) bool {
 
 // Interesting rules are warns, denies, and anything with an annotation,
 // which includes some package scoped annotations not assocated with a rule
-func interestingRulesOnly(results []*ast.AnnotationsRef) ([]*ast.AnnotationsRef, error) {
+func interestingRulesOnly(results []*ast.AnnotationsRef) []*ast.AnnotationsRef {
 	filteredResults := make([]*ast.AnnotationsRef, 0, len(results))
 	for _, rule := range results {
 		if isWarnOrDeny(rule) || hasAnnotations(rule) {
 			filteredResults = append(filteredResults, rule)
 		}
 	}
-	return filteredResults, nil
+	return filteredResults
 }
 
 // destDir is usually something like /tmp/ec-workdir-1234/policy/f33dbeef so let's trim it
@@ -214,10 +214,7 @@ func InspectDir(afs afero.Fs, dir string) ([]*ast.AnnotationsRef, error) {
 	}
 
 	// Return only interesting rules
-	result, err := interestingRulesOnly(allAnnotations)
-	if err != nil {
-		return nil, err
-	}
+	result := interestingRulesOnly(allAnnotations)
 
 	// check for conformance
 	if err := checkRules(result); err != nil {

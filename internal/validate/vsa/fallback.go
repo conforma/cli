@@ -111,10 +111,7 @@ func CreateFallbackValidationContext(ctx context.Context, config *FallbackConfig
 	log.Debugf("🔄 Precomputing fallback validation context...")
 
 	// Get policy configuration (same as VSA command)
-	policyConfiguration, err := getPolicyConfig(config.PolicyConfig)
-	if err != nil {
-		return nil, fmt.Errorf("fallback validation: failed to get policy configuration: %w", err)
-	}
+	policyConfiguration := getPolicyConfig(config.PolicyConfig)
 
 	log.Debugf("🔄 Fallback context: Policy configuration resolved to: %s", policyConfiguration)
 
@@ -187,9 +184,6 @@ func CreateWorkerFallbackContext(ctx context.Context, fallbackPolicy policy.Poli
 }
 
 // getPolicyConfig resolves policy configuration (copied from validate package to avoid circular dependency)
-func getPolicyConfig(policyConfig string) (string, error) {
-	if policyConfig == "" {
-		return "", nil
-	}
-	return policyConfig, nil
+func getPolicyConfig(policyConfig string) string {
+	return policyConfig
 }

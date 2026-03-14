@@ -52,7 +52,7 @@ func NewAttestationResult(att attestation.Attestation) AttestationResult {
 	return attResult
 }
 
-func (r *Report) renderAttestations() ([]byte, error) {
+func (r *Report) renderAttestations() []byte {
 	byts := make([][]byte, 0, len(r.Components)*2)
 
 	for _, c := range r.Components {
@@ -61,7 +61,7 @@ func (r *Report) renderAttestations() ([]byte, error) {
 		}
 	}
 
-	return bytes.Join(byts, []byte{'\n'}), nil
+	return bytes.Join(byts, []byte{'\n'})
 }
 
 //nolint:staticcheck

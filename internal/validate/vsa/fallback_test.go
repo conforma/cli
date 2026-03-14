@@ -188,32 +188,27 @@ func TestGetPolicyConfig(t *testing.T) {
 		name           string
 		policyConfig   string
 		expectedResult string
-		expectedError  error
 	}{
 		{
 			name:           "Empty policy config - should return empty string",
 			policyConfig:   "",
 			expectedResult: "",
-			expectedError:  nil,
 		},
 		{
 			name:           "Valid policy config - should return the config",
 			policyConfig:   "test-policy.yaml",
 			expectedResult: "test-policy.yaml",
-			expectedError:  nil,
 		},
 		{
 			name:           "Policy config with path - should return the path",
 			policyConfig:   "/path/to/policy.yaml",
 			expectedResult: "/path/to/policy.yaml",
-			expectedError:  nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := getPolicyConfig(tt.policyConfig)
-			assert.Equal(t, tt.expectedError, err)
+			result := getPolicyConfig(tt.policyConfig)
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}

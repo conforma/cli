@@ -117,8 +117,7 @@ func TestAttestationReport(t *testing.T) {
 			r := Report{
 				Components: c.components,
 			}
-			b, err := r.renderAttestations()
-			assert.NoError(t, err)
+			b := r.renderAttestations()
 
 			snaps.MatchSnapshot(t, string(b))
 		})

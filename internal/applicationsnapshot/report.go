@@ -212,7 +212,7 @@ func (r *Report) toFormat(format string) (data []byte, err error) {
 	case JUnit:
 		data, err = xml.Marshal(r.toJUnit())
 	case Attestation:
-		data, err = r.renderAttestations()
+		data = r.renderAttestations()
 	case PolicyInput:
 		data = bytes.Join(r.PolicyInput, []byte("\n"))
 	case VSA:
