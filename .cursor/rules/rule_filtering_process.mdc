@@ -71,46 +71,28 @@ The `baseEvaluateRuleInclusion` method:
 
 #### Phase 3: Package-Level Determination
 ```go
-// CORRECTED LOGIC: Package inclusion should be based on whether the package
-// contains any rules that could potentially be included, regardless of exclusions.
-// Excluded rules will be filtered out at the post-evaluation stage.
-//
-// Intended behavior:
+// Package inclusion logic:
 // - If ANY rule in the package is included → Package is included
-// - If NO rules are included but SOME rules are excluded → Package is STILL included
-//   (because excluded rules will be filtered post-evaluation)
-// - If NO rules are included and NO rules are excluded → Package is not explicitly categorized
+// - If NO rules are included → Package is not included (excluded rules don't affect package inclusion)
 //
-// Current implementation (INCORRECT):
+// Current implementation:
 func (r *basePolicyResolver) baseDeterminePackageInclusion(pkg string, pkgRules []rule.Info, result *PolicyResolutionResult) {
     hasIncludedRules := false
-    hasExcludedRules := false
 
     for _, ruleInfo := range pkgRules {
         ruleID := ruleInfo.Code
         if result.IncludedRules[ruleID] {
             hasIncludedRules = true
-        }
-        if result.ExcludedRules[ruleID] {
-            hasExcludedRules = true
+            break
         }
     }
 
-    // CURRENT (INCORRECT) LOGIC:
     if hasIncludedRules {
         result.IncludedPackages[pkg] = true
-    } else if hasExcludedRules {
-        result.ExcludedPackages[pkg] = true  // This is wrong!
+        result.Explanations[pkg] = "package contains included rules"
     }
-    
-    // CORRECT LOGIC should be:
-    // if hasIncludedRules || hasExcludedRules {
-    //     result.IncludedPackages[pkg] = true  // Include package, filter rules later
-    // }
 }
 ```
-
-**Note**: The current implementation incorrectly excludes packages that contain only excluded rules. This should be fixed to include such packages, allowing post-evaluation filtering to handle rule-level exclusions.
 
 #### Why This Logic Matters
 
@@ -119,9 +101,7 @@ The package-level determination affects which packages are loaded for conftest e
 1. **Pre-Evaluation**: Only packages in `IncludedPackages` are passed to conftest for evaluation
 2. **Post-Evaluation**: The `UnifiedPostEvaluationFilter` filters individual results based on rule-level decisions
 
-**Current Problem**: If a package contains only excluded rules, it's marked as `ExcludedPackages` and never evaluated by conftest. This means:
-- The excluded rules never run, so they can't be filtered out post-evaluation
-- The package is completely skipped, which may not be the intended behavior
+Packages are only included if they contain at least one included rule. Packages with only excluded rules are not evaluated, which is correct behavior since there's nothing to run.
 
 **Correct Behavior**: Packages with any rules (included or excluded) should be included for evaluation, allowing post-evaluation filtering to handle the rule-level decisions properly.
 
