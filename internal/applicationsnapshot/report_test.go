@@ -261,8 +261,7 @@ func Test_GenerateMarkdownSummary(t *testing.T) {
 			assert.NoError(t, err)
 			report.created = time.Unix(0, 0).UTC()
 
-			markdownSummary, err := generateMarkdownSummary(&report)
-			assert.NoError(t, err)
+			markdownSummary := generateMarkdownSummary(&report)
 			snaps.MatchSnapshot(t, string(markdownSummary))
 		})
 	}

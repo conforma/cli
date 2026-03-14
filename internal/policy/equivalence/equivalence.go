@@ -112,10 +112,7 @@ func (ec *EquivalenceChecker) AreEquivalentWithDifferences(spec1, spec2 ecc.Ente
 	if err != nil {
 		return false, nil, fmt.Errorf("failed to normalize second policy: %w", err)
 	}
-	eq, diffs, err := ec.compareNormalizedPoliciesWithDifferences(norm1, norm2)
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to compare policies: %w", err)
-	}
+	eq, diffs := ec.compareNormalizedPoliciesWithDifferences(norm1, norm2)
 	return eq, diffs, nil
 }
 
@@ -366,7 +363,7 @@ func (ec *EquivalenceChecker) normalizeMatchers(ms []string) []string {
 
 // ---------- Comparison + pairing + Git-style diff ----------
 
-func (ec *EquivalenceChecker) compareNormalizedPoliciesWithDifferences(norm1, norm2 *NormalizedPolicy) (bool, []PolicyDifference, error) {
+func (ec *EquivalenceChecker) compareNormalizedPoliciesWithDifferences(norm1, norm2 *NormalizedPolicy) (bool, []PolicyDifference) {
 	var diffs []PolicyDifference
 
 	// Index by exact key first
@@ -432,7 +429,7 @@ func (ec *EquivalenceChecker) compareNormalizedPoliciesWithDifferences(norm1, no
 		})
 	}
 
-	return len(diffs) == 0, diffs, nil
+	return len(diffs) == 0, diffs
 }
 
 // Pairing: greedy best-match by similarity to avoid noisy add/remove

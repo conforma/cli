@@ -136,11 +136,7 @@ func inspectPolicyCmd() *cobra.Command {
 				allResults[s.PolicyUrl()] = result
 			}
 
-			var err error
-			allResults, err = filterResults(allResults, ruleFilter, packageFilter, collectionFilter)
-			if err != nil {
-				return err
-			}
+			allResults = filterResults(allResults, ruleFilter, packageFilter, collectionFilter)
 
 			out := cmd.OutOrStdout()
 			if outputFormat == "json" {
@@ -165,9 +161,9 @@ func inspectPolicyCmd() *cobra.Command {
 	return cmd
 }
 
-func filterResults(results map[string][]*ast.AnnotationsRef, rule, pkg, collection string) (map[string][]*ast.AnnotationsRef, error) {
+func filterResults(results map[string][]*ast.AnnotationsRef, rule, pkg, collection string) map[string][]*ast.AnnotationsRef {
 	if rule == "" && pkg == "" && collection == "" {
-		return results, nil
+		return results
 	}
 	filteredResults := make(map[string][]*ast.AnnotationsRef)
 	for source, rules := range results {
@@ -183,7 +179,7 @@ func filterResults(results map[string][]*ast.AnnotationsRef, rule, pkg, collecti
 		}
 		filteredResults[source] = filteredRules
 	}
-	return filteredResults, nil
+	return filteredResults
 }
 
 func ruleNameMatches(rule string, info opaRule.Info) bool {
