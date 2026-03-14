@@ -186,47 +186,9 @@ func NewTestCommand(ctx context.Context) *cobra.Command {
 			}
 
 			if !runner.Quiet || exitCode != 0 {
-				if format == OutputAppstudio {
-					// The appstudio format is unknown to Conftest so we handle it ourselves
-					if resultsErr != nil {
-						return appstudioErrorHandler(runner.NoFail, "running test", resultsErr)
-					}
-
-					report := appstudioReport(results, runner.Namespace)
-					reportOutput, err := json.Marshal(report)
-					if err != nil {
-						return appstudioErrorHandler(runner.NoFail, "output results", err)
-					}
-
-					if outputFilePath != "" {
-						// Output to a file
-						err := os.WriteFile(outputFilePath, reportOutput, 0600)
-						if err != nil {
-							return fmt.Errorf("creating output file: %w", err)
-						}
-					} else {
-						// Output to stdout
-						fmt.Fprintln(cmd.OutOrStdout(), string(reportOutput))
-					}
-				} else {
-					if resultsErr != nil {
-						return fmt.Errorf("running test: %w", resultsErr)
-					}
-
-					// Conftest handles the output
-					outputter := output.Get(runner.Output, output.Options{
-						NoColor:            runner.NoColor,
-						SuppressExceptions: runner.SuppressExceptions,
-						Tracing:            runner.Trace,
-						JUnitHideMessage:   viper.GetBool("junit-hide-message"),
-					})
-					if err := outputter.Output(results); err != nil {
-						return fmt.Errorf("output results: %w", err)
-					}
+				if err := handleOutput(cmd, &runner, format, outputFilePath, results, resultsErr); err != nil {
+					return err
 				}
-
-				// When the no-fail parameter is set, there is no need to figure out the error code
-				// as we always want to return zero.
 				if runner.NoFail {
 					return nil
 				}
@@ -266,4 +228,53 @@ func NewTestCommand(ctx context.Context) *cobra.Command {
 	cmd.Flags().Bool("tls", true, "Use TLS to access the registry")
 
 	return &cmd
+}
+
+// handleOutput handles output formatting for test results
+func handleOutput(cmd *cobra.Command, r *runner.TestRunner, format, outputFilePath string, results output.CheckResults, resultsErr error) error {
+	if format == OutputAppstudio {
+		return handleAppstudioOutput(cmd, r, outputFilePath, results, resultsErr)
+	}
+	return handleConftestOutput(r, results, resultsErr)
+}
+
+// handleAppstudioOutput handles appstudio format output
+func handleAppstudioOutput(cmd *cobra.Command, r *runner.TestRunner, outputFilePath string, results output.CheckResults, resultsErr error) error {
+	if resultsErr != nil {
+		return appstudioErrorHandler(r.NoFail, "running test", resultsErr)
+	}
+
+	report := appstudioReport(results, r.Namespace)
+	reportOutput, err := json.Marshal(report)
+	if err != nil {
+		return appstudioErrorHandler(r.NoFail, "output results", err)
+	}
+
+	if outputFilePath == "" {
+		fmt.Fprintln(cmd.OutOrStdout(), string(reportOutput))
+		return nil
+	}
+
+	if err := os.WriteFile(outputFilePath, reportOutput, 0600); err != nil {
+		return fmt.Errorf("creating output file: %w", err)
+	}
+	return nil
+}
+
+// handleConftestOutput handles conftest format output
+func handleConftestOutput(r *runner.TestRunner, results output.CheckResults, resultsErr error) error {
+	if resultsErr != nil {
+		return fmt.Errorf("running test: %w", resultsErr)
+	}
+
+	outputter := output.Get(r.Output, output.Options{
+		NoColor:            r.NoColor,
+		SuppressExceptions: r.SuppressExceptions,
+		Tracing:            r.Trace,
+		JUnitHideMessage:   viper.GetBool("junit-hide-message"),
+	})
+	if err := outputter.Output(results); err != nil {
+		return fmt.Errorf("output results: %w", err)
+	}
+	return nil
 }

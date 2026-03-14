@@ -207,77 +207,125 @@ func (r *RekorVSARetriever) extractImageDigest(identifier string) (string, error
 
 // classifyEntryKind determines the kind of a Rekor entry (intoto, intoto-v002, dsse, etc.)
 func (r *RekorVSARetriever) classifyEntryKind(entry models.LogEntryAnon) string {
-	// Prefer Body structure from the decoded Rekor body
 	body, err := r.decodeBodyJSON(entry)
-	if err == nil {
-		// Check for the top-level "kind" field which indicates the entry type
-		if kind, ok := body["kind"].(string); ok {
-			switch strings.ToLower(kind) {
-			case "intoto":
-				// Check API version to distinguish between 0.0.1 and 0.0.2
-				if apiVersion, ok := body["apiVersion"].(string); ok {
-					switch apiVersion {
-					case "0.0.2":
-						return entryTypeIntotoV002
-					case "0.0.1":
-						return entryTypeIntoto
-					default:
-						// Default to 0.0.1 for backward compatibility
-						return entryTypeIntoto
-					}
-				}
-				// If no API version specified, check for embedded DSSE envelope structure
-				if spec, ok := body["spec"].(map[string]any); ok {
-					if content, ok := spec["content"].(map[string]any); ok {
-						if envelope, ok := content["envelope"].(map[string]any); ok {
-							// Check if this has both payload and signatures (0.0.2) or just payload (0.0.1)
-							if _, hasPayload := envelope["payload"]; hasPayload {
-								if _, hasSignatures := envelope["signatures"]; hasSignatures {
-									return entryTypeIntotoV002
-								}
-								return entryTypeIntoto
-							}
-						}
-					}
-				}
-				return entryTypeIntoto
-			case "dsse":
-				return entryTypeDSSE
-			}
-		}
+	if err != nil {
+		return r.classifyFromAttestation(entry)
+	}
 
-		// Check for spec structure (in-toto 0.0.2 entries)
-		if spec, ok := body["spec"].(map[string]any); ok {
-			if content, ok := spec["content"].(map[string]any); ok {
-				if envelope, ok := content["envelope"].(map[string]any); ok {
-					// Check if this has both payloadType and signatures (0.0.2)
-					if _, hasPayloadType := envelope["payloadType"]; hasPayloadType {
-						if _, hasSignatures := envelope["signatures"]; hasSignatures {
-							return entryTypeIntotoV002
-						}
-					}
-				}
-			}
-		}
+	if kind := r.classifyFromKindField(body); kind != "" {
+		return kind
+	}
 
-		// Fallback: check for top-level entry type indicators (legacy format)
-		if _, hasIntoto := body["intoto"]; hasIntoto {
+	if kind := r.classifyFromSpecStructure(body); kind != "" {
+		return kind
+	}
+
+	if kind := r.classifyFromLegacyFormat(body); kind != "" {
+		return kind
+	}
+
+	return r.classifyFromAttestation(entry)
+}
+
+// classifyFromKindField checks the top-level "kind" field
+func (r *RekorVSARetriever) classifyFromKindField(body map[string]any) string {
+	kind, ok := body["kind"].(string)
+	if !ok {
+		return ""
+	}
+
+	switch strings.ToLower(kind) {
+	case "intoto":
+		return r.classifyIntotoVersion(body)
+	case "dsse":
+		return entryTypeDSSE
+	default:
+		return ""
+	}
+}
+
+// classifyIntotoVersion determines intoto version from body
+func (r *RekorVSARetriever) classifyIntotoVersion(body map[string]any) string {
+	if apiVersion, ok := body["apiVersion"].(string); ok {
+		switch apiVersion {
+		case "0.0.2":
+			return entryTypeIntotoV002
+		default:
 			return entryTypeIntoto
 		}
-		if _, hasDsse := body["dsse"]; hasDsse {
-			return entryTypeDSSE
-		}
 	}
 
-	// Fallback (only if Body missing/unreadable): look at Attestation for VSA predicate (intoto hint)
-	if entry.Attestation != nil && entry.Attestation.Data != nil {
-		if attBytes, err := base64.StdEncoding.DecodeString(string(entry.Attestation.Data)); err == nil {
-			if strings.Contains(string(attBytes), "https://conforma.dev/verification_summary/v1") {
-				return entryTypeIntoto
-			}
-		}
+	if r.hasEnvelopeWithSignatures(body) {
+		return entryTypeIntotoV002
 	}
+	return entryTypeIntoto
+}
 
+// hasEnvelopeWithSignatures checks if body has spec.content.envelope with signatures
+func (r *RekorVSARetriever) hasEnvelopeWithSignatures(body map[string]any) bool {
+	envelope := r.extractEnvelope(body)
+	if envelope == nil {
+		return false
+	}
+	_, hasPayload := envelope["payload"]
+	_, hasSignatures := envelope["signatures"]
+	return hasPayload && hasSignatures
+}
+
+// extractEnvelope extracts spec.content.envelope from body
+func (r *RekorVSARetriever) extractEnvelope(body map[string]any) map[string]any {
+	spec, ok := body["spec"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	content, ok := spec["content"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	envelope, ok := content["envelope"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	return envelope
+}
+
+// classifyFromSpecStructure checks spec structure for in-toto 0.0.2
+func (r *RekorVSARetriever) classifyFromSpecStructure(body map[string]any) string {
+	envelope := r.extractEnvelope(body)
+	if envelope == nil {
+		return ""
+	}
+	_, hasPayloadType := envelope["payloadType"]
+	_, hasSignatures := envelope["signatures"]
+	if hasPayloadType && hasSignatures {
+		return entryTypeIntotoV002
+	}
+	return ""
+}
+
+// classifyFromLegacyFormat checks for legacy format indicators
+func (r *RekorVSARetriever) classifyFromLegacyFormat(body map[string]any) string {
+	if _, hasIntoto := body["intoto"]; hasIntoto {
+		return entryTypeIntoto
+	}
+	if _, hasDsse := body["dsse"]; hasDsse {
+		return entryTypeDSSE
+	}
+	return ""
+}
+
+// classifyFromAttestation uses attestation data as fallback
+func (r *RekorVSARetriever) classifyFromAttestation(entry models.LogEntryAnon) string {
+	if entry.Attestation == nil || entry.Attestation.Data == nil {
+		return entryTypeUnknown
+	}
+	attBytes, err := base64.StdEncoding.DecodeString(string(entry.Attestation.Data))
+	if err != nil {
+		return entryTypeUnknown
+	}
+	if strings.Contains(string(attBytes), "https://conforma.dev/verification_summary/v1") {
+		return entryTypeIntoto
+	}
 	return entryTypeUnknown
 }
 
