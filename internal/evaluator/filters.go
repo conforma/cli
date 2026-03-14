@@ -826,41 +826,58 @@ func LegacyScore(name string) int {
 	if strings.HasPrefix(name, "@") {
 		return 10
 	}
+
 	value := 0
 	shortName, term, _ := strings.Cut(name, ":")
 	if term != "" {
 		value += 100
 	}
+
 	nameSplit := strings.Split(shortName, ".")
+	value += legacyScoreNameParts(shortName, nameSplit)
+	return value
+}
+
+// legacyScoreNameParts scores the package/rule parts of a name
+func legacyScoreNameParts(shortName string, nameSplit []string) int {
 	nameSplitLen := len(nameSplit)
 
 	if nameSplitLen == 1 {
-		// When there are no dots we assume the name refers to a
-		// package and any rule inside the package is matched
-		if shortName == "*" {
-			value += 1
-		} else {
-			value += 10
-		}
-	} else if nameSplitLen > 1 {
-		// When there is at least one dot we assume the last element
-		// is the rule and everything else is the package path
-		rule := nameSplit[nameSplitLen-1]
-		pkg := strings.Join(nameSplit[:nameSplitLen-1], ".")
-
-		if pkg == "*" {
-			// E.g. "*.rule", a weird edge case
-			value += 1
-		} else {
-			// E.g. "pkg.rule" or "path.pkg.rule"
-			value += 10 * (nameSplitLen - 1)
-		}
-
-		if rule != "*" && rule != "" {
-			// E.g. "pkg.rule" so a specific rule was specified
-			value += 100
-		}
+		return legacyScoreSinglePart(shortName)
 	}
+
+	if nameSplitLen > 1 {
+		return legacyScoreMultipleParts(nameSplit)
+	}
+
+	return 0
+}
+
+// legacyScoreSinglePart scores a name with no dots (single part)
+func legacyScoreSinglePart(shortName string) int {
+	if shortName == "*" {
+		return 1
+	}
+	return 10
+}
+
+// legacyScoreMultipleParts scores a name with dots (multiple parts)
+func legacyScoreMultipleParts(nameSplit []string) int {
+	value := 0
+	nameSplitLen := len(nameSplit)
+	ruleName := nameSplit[nameSplitLen-1]
+	pkg := strings.Join(nameSplit[:nameSplitLen-1], ".")
+
+	if pkg == "*" {
+		value += 1
+	} else {
+		value += 10 * (nameSplitLen - 1)
+	}
+
+	if ruleName != "*" && ruleName != "" {
+		value += 100
+	}
+
 	return value
 }
 

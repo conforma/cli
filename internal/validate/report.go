@@ -25,6 +25,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/conforma/cli/internal/applicationsnapshot"
+	"github.com/conforma/cli/internal/attestation"
 	"github.com/conforma/cli/internal/format"
 	"github.com/conforma/cli/internal/output"
 	"github.com/conforma/cli/internal/policy"
@@ -56,39 +57,53 @@ func PopulateResultFromOutput(
 		},
 	}
 
-	// Only populate from output if there's no error and output exists
+	// Only populate from output if there's no error
 	if err == nil {
-		if out != nil {
-			// Normal validation completed
-			res.Component.Violations = out.Violations()
-			res.Component.Warnings = out.Warnings()
-
-			successes := out.Successes()
-			res.Component.SuccessCount = len(successes)
-			if showSuccesses {
-				res.Component.Successes = successes
-			}
-
-			res.Component.Signatures = out.Signatures
-			// Create a new result object for attestations. The point is to only keep the data that's needed.
-			// For example, the Statement is only needed when the full attestation is printed.
-			for _, att := range out.Attestations {
-				attResult := applicationsnapshot.NewAttestationResult(att)
-				if ContainsOutputFormat(outputFormats, "attestation") {
-					attResult.Statement = att.Statement()
-				}
-				res.Component.Attestations = append(res.Component.Attestations, attResult)
-			}
-			res.Component.ContainerImage = out.ImageURL
-			res.PolicyInput = out.PolicyInput
-		} else {
-			// Validation was skipped due to valid VSA - no violations, no processing needed
-			res.Component.ContainerImage = comp.ContainerImage
-		}
+		populateFromOutput(&res, out, comp, showSuccesses, outputFormats)
 	}
 	res.Component.Success = err == nil && len(res.Component.Violations) == 0
 
 	return res
+}
+
+// populateFromOutput populates the result from validation output
+func populateFromOutput(res *Result, out *output.Output, comp app.SnapshotComponent, showSuccesses bool, outputFormats []string) {
+	if out == nil {
+		// Validation was skipped due to valid VSA - no violations, no processing needed
+		res.Component.ContainerImage = comp.ContainerImage
+		return
+	}
+
+	// Normal validation completed
+	res.Component.Violations = out.Violations()
+	res.Component.Warnings = out.Warnings()
+
+	successes := out.Successes()
+	res.Component.SuccessCount = len(successes)
+	if showSuccesses {
+		res.Component.Successes = successes
+	}
+
+	res.Component.Signatures = out.Signatures
+	res.Component.Attestations = buildAttestationResults(out.Attestations, outputFormats)
+	res.Component.ContainerImage = out.ImageURL
+	res.PolicyInput = out.PolicyInput
+}
+
+// buildAttestationResults creates attestation results from attestations
+func buildAttestationResults(attestations []attestation.Attestation, outputFormats []string) []applicationsnapshot.AttestationResult {
+	includeStatement := ContainsOutputFormat(outputFormats, "attestation")
+	results := make([]applicationsnapshot.AttestationResult, 0, len(attestations))
+
+	for _, att := range attestations {
+		attResult := applicationsnapshot.NewAttestationResult(att)
+		if includeStatement {
+			attResult.Statement = att.Statement()
+		}
+		results = append(results, attResult)
+	}
+
+	return results
 }
 
 // ContainsOutputFormat checks if the specified output format is in the output formats list.

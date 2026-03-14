@@ -299,39 +299,45 @@ func (a ApplicationSnapshotImage) ValidateAttestationSyntax(ctx context.Context)
 
 	var validationErr error
 	for _, sp := range a.attestations {
-		pt := sp.PredicateType()
-		if schema, ok := attestationSchemas[pt]; ok {
-			// Found a validator for this predicate type so let's use it
-			log.Debugf("Attempting to validate an attestation with predicateType %s", pt)
-
-			var statement any
-			if err := json.Unmarshal(sp.Statement(), &statement); err != nil {
-				return fmt.Errorf("unable to decode attestation data from attestation image: %w", err)
-			}
-
-			if err := schema.Validate(statement); err != nil {
-				if _, ok = err.(*jsonschema.ValidationError); !ok {
-					// Error while trying to validate
-					return fmt.Errorf("unable to validate attestation data from attestation image: %w", err)
-				}
-
+		if err := validateAttestation(sp, attestationSchemas); err != nil {
+			if errors.As(err, new(*jsonschema.ValidationError)) {
 				validationErr = errors.Join(validationErr, err)
 			} else {
-				log.Debugf("Statement schema was validated successfully against the %s schema", pt)
+				return err
 			}
-		} else {
-			log.Debugf("No schema validation found for predicateType %s", pt)
 		}
 	}
 
 	if validationErr == nil {
-		// TODO another option might be to filter out invalid statement JSONs
-		// and keep only the valid ones
 		return nil
 	}
 
 	log.Debug("Failed to validate statements from the attestation image against all known schemas")
 	return fmt.Errorf("attestation syntax validation failed: %s", validationErr.Error())
+}
+
+// validateAttestation validates a single attestation against its schema
+func validateAttestation(sp attestation.Attestation, schemas map[string]*jsonschema.Schema) error {
+	pt := sp.PredicateType()
+	schema, ok := schemas[pt]
+	if !ok {
+		log.Debugf("No schema validation found for predicateType %s", pt)
+		return nil
+	}
+
+	log.Debugf("Attempting to validate an attestation with predicateType %s", pt)
+
+	var statement any
+	if err := json.Unmarshal(sp.Statement(), &statement); err != nil {
+		return fmt.Errorf("unable to decode attestation data from attestation image: %w", err)
+	}
+
+	if err := schema.Validate(statement); err != nil {
+		return err
+	}
+
+	log.Debugf("Statement schema was validated successfully against the %s schema", pt)
+	return nil
 }
 
 // Attestations returns the value of the attestations field of the ApplicationSnapshotImage struct

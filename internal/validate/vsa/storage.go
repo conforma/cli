@@ -97,35 +97,57 @@ func ParseStorageFlag(storageFlag string) (*StorageConfig, error) {
 
 	// Parse URL-style parameters if present
 	if configPart != "" {
-		// If it doesn't start with http(s), add a dummy scheme for parsing
-		parseURL := configPart
-		if !strings.HasPrefix(configPart, "http") && !strings.HasPrefix(configPart, "?") {
-			parseURL = "dummy://" + configPart
-		} else if strings.HasPrefix(configPart, "?") {
-			parseURL = "dummy://dummy" + configPart
-		}
-
-		parsed, err := url.Parse(parseURL)
-		if err != nil {
-			return nil, fmt.Errorf("invalid storage configuration format: %w", err)
-		}
-
-		// Extract base URL (without query params)
-		if parsed.Scheme != "dummy" {
-			config.BaseURL = fmt.Sprintf("%s://%s%s", parsed.Scheme, parsed.Host, parsed.Path)
-		} else if parsed.Host != "dummy" {
-			config.BaseURL = parsed.Host + parsed.Path
-		}
-
-		// Extract query parameters
-		for key, values := range parsed.Query() {
-			if len(values) > 0 {
-				config.Parameters[key] = values[0]
-			}
+		if err := parseConfigURL(config, configPart); err != nil {
+			return nil, err
 		}
 	}
 
 	return config, nil
+}
+
+// parseConfigURL parses URL-style configuration and populates the config
+func parseConfigURL(config *StorageConfig, configPart string) error {
+	parseURL := normalizeConfigURL(configPart)
+
+	parsed, err := url.Parse(parseURL)
+	if err != nil {
+		return fmt.Errorf("invalid storage configuration format: %w", err)
+	}
+
+	// Extract base URL (without query params)
+	config.BaseURL = extractBaseURL(parsed)
+
+	// Extract query parameters
+	for key, values := range parsed.Query() {
+		if len(values) > 0 {
+			config.Parameters[key] = values[0]
+		}
+	}
+
+	return nil
+}
+
+// normalizeConfigURL adds a dummy scheme if needed for URL parsing
+func normalizeConfigURL(configPart string) string {
+	switch {
+	case strings.HasPrefix(configPart, "http"):
+		return configPart
+	case strings.HasPrefix(configPart, "?"):
+		return "dummy://dummy" + configPart
+	default:
+		return "dummy://" + configPart
+	}
+}
+
+// extractBaseURL extracts the base URL from a parsed URL
+func extractBaseURL(parsed *url.URL) string {
+	if parsed.Scheme != "dummy" {
+		return fmt.Sprintf("%s://%s%s", parsed.Scheme, parsed.Host, parsed.Path)
+	}
+	if parsed.Host != "dummy" {
+		return parsed.Host + parsed.Path
+	}
+	return ""
 }
 
 // CreateStorageBackend creates the appropriate storage backend based on config
