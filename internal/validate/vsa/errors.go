@@ -158,39 +158,61 @@ func buildVSACause(vsaResult *ValidationResult, vsaErr error) Cause {
 	}
 
 	if vsaErr != nil {
-		cause.Details = vsaErr.Error()
-		// Try to categorize the error
-		if strings.Contains(vsaErr.Error(), "signature") {
-			cause.SubCauses = append(cause.SubCauses, Cause{
-				Type:    ErrorTypeSignature,
-				Message: "Signature verification failed",
-				Details: vsaErr.Error(),
-			})
-		} else if strings.Contains(vsaErr.Error(), "timeout") {
-			cause.SubCauses = append(cause.SubCauses, Cause{
-				Type:    ErrorTypeTimeout,
-				Message: "VSA retrieval timeout",
-				Details: vsaErr.Error(),
-			})
-		} else if strings.Contains(vsaErr.Error(), "network") || strings.Contains(vsaErr.Error(), "connection") {
-			cause.SubCauses = append(cause.SubCauses, Cause{
-				Type:    ErrorTypeNetwork,
-				Message: "Network error during VSA retrieval",
-				Details: vsaErr.Error(),
-			})
-		}
+		populateVSAErrorCause(&cause, vsaErr)
 	} else if vsaResult != nil {
-		cause.Details = vsaResult.Message
-		if vsaResult.PredicateOutcome != "" && vsaResult.PredicateOutcome != predicateStatusPassed {
-			cause.SubCauses = append(cause.SubCauses, Cause{
-				Type:    ErrorTypePolicy,
-				Message: fmt.Sprintf("Predicate status: %s", vsaResult.PredicateOutcome),
-				Details: vsaResult.Message,
-			})
-		}
+		populateVSAResultCause(&cause, vsaResult)
 	}
 
 	return cause
+}
+
+// populateVSAErrorCause populates cause from an error
+func populateVSAErrorCause(cause *Cause, vsaErr error) {
+	cause.Details = vsaErr.Error()
+	errMsg := vsaErr.Error()
+
+	subCause := categorizeVSAError(errMsg)
+	if subCause != nil {
+		cause.SubCauses = append(cause.SubCauses, *subCause)
+	}
+}
+
+// categorizeVSAError categorizes a VSA error into a specific type
+func categorizeVSAError(errMsg string) *Cause {
+	switch {
+	case strings.Contains(errMsg, "signature"):
+		return &Cause{
+			Type:    ErrorTypeSignature,
+			Message: "Signature verification failed",
+			Details: errMsg,
+		}
+	case strings.Contains(errMsg, "timeout"):
+		return &Cause{
+			Type:    ErrorTypeTimeout,
+			Message: "VSA retrieval timeout",
+			Details: errMsg,
+		}
+	case strings.Contains(errMsg, "network") || strings.Contains(errMsg, "connection"):
+		return &Cause{
+			Type:    ErrorTypeNetwork,
+			Message: "Network error during VSA retrieval",
+			Details: errMsg,
+		}
+	default:
+		return nil
+	}
+}
+
+// populateVSAResultCause populates cause from a VSA result
+func populateVSAResultCause(cause *Cause, vsaResult *ValidationResult) {
+	cause.Details = vsaResult.Message
+	if vsaResult.PredicateOutcome != "" && vsaResult.PredicateOutcome != predicateStatusPassed {
+		cause.SubCauses = append(cause.SubCauses, Cause{
+			Type:    ErrorTypePolicy,
+			Message: fmt.Sprintf("Predicate status: %s", vsaResult.PredicateOutcome),
+			Details: vsaResult.Message,
+		})
+	}
 }
 
 // buildFallbackCause creates a cause for fallback validation failure

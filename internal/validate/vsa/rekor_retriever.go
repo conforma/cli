@@ -482,62 +482,9 @@ func (r *RekorVSARetriever) buildDSSEEnvelopeFromIntotoV002(entry models.LogEntr
 		return nil, fmt.Errorf("envelope contains empty signatures array")
 	}
 
-	var signatures []ssldsse.Signature
-	for i, sigInterface := range signaturesInterface {
-		sigMap, ok := sigInterface.(map[string]interface{})
-		if !ok {
-			return nil, fmt.Errorf("signature %d is not a valid object", i)
-		}
-
-		sig := ssldsse.Signature{}
-
-		// Extract sig field (required) - only support standard field
-		if sigHex, ok := sigMap["sig"].(string); ok {
-			// Handle both single and double encoding to be robust
-			// Try single decode first
-			firstDecode, err := base64.StdEncoding.DecodeString(sigHex)
-			if err != nil {
-				return nil, fmt.Errorf("failed to decode signature %d: %w", i, err)
-			}
-
-			// TODO: This is a hack to get the signature from the in-toto entry
-			// Check if the result is still base64-encoded (indicating double encoding)
-			// This is usually the case when the signature is stored in the in-toto entry
-			// For some reason it's double encoded and it doesn't work to not encode when storing.
-			// So, we need to decode it twice to get the actual ASN.1 DER signature
-			// Then re-encode it once for the DSSE library
-			decodedString := string(firstDecode)
-			if isBase64String(decodedString) {
-				// Double-encoded: decode again
-				paddingNeeded := (4 - len(decodedString)%4) % 4
-				paddedString := decodedString
-				for j := 0; j < paddingNeeded; j++ {
-					paddedString += "="
-				}
-
-				actualSignature, err := base64.StdEncoding.DecodeString(paddedString)
-				if err != nil {
-					return nil, fmt.Errorf("failed to double-decode signature %d: %w", i, err)
-				}
-				sig.Sig = base64.StdEncoding.EncodeToString(actualSignature)
-			} else {
-				// Single-encoded: use as-is
-				sig.Sig = base64.StdEncoding.EncodeToString(firstDecode)
-			}
-		} else {
-			return nil, fmt.Errorf("signature %d missing required 'sig' field", i)
-		}
-
-		// Extract keyid field (optional)
-		if keyid, ok := sigMap["keyid"].(string); ok {
-			sig.KeyID = keyid
-		} else {
-			// If no KeyID is provided, set a default one to help with verification
-			// This might help the DSSE library match the signature to the public key
-			sig.KeyID = "default"
-		}
-
-		signatures = append(signatures, sig)
+	signatures, err := convertSignatures(signaturesInterface)
+	if err != nil {
+		return nil, err
 	}
 
 	// Validate that we have at least one valid signature
@@ -553,6 +500,76 @@ func (r *RekorVSARetriever) buildDSSEEnvelopeFromIntotoV002(entry models.LogEntr
 	}
 
 	return envelope, nil
+}
+
+// convertSignatures converts raw signature interfaces to DSSE signatures
+func convertSignatures(signaturesInterface []interface{}) ([]ssldsse.Signature, error) {
+	var signatures []ssldsse.Signature
+	for i, sigInterface := range signaturesInterface {
+		sig, err := convertSignature(i, sigInterface)
+		if err != nil {
+			return nil, err
+		}
+		signatures = append(signatures, sig)
+	}
+	return signatures, nil
+}
+
+// convertSignature converts a single raw signature to a DSSE signature
+func convertSignature(index int, sigInterface interface{}) (ssldsse.Signature, error) {
+	sigMap, ok := sigInterface.(map[string]interface{})
+	if !ok {
+		return ssldsse.Signature{}, fmt.Errorf("signature %d is not a valid object", index)
+	}
+
+	sigValue, err := extractSignatureValue(index, sigMap)
+	if err != nil {
+		return ssldsse.Signature{}, err
+	}
+
+	keyID := "default"
+	if kid, ok := sigMap["keyid"].(string); ok {
+		keyID = kid
+	}
+
+	return ssldsse.Signature{
+		Sig:   sigValue,
+		KeyID: keyID,
+	}, nil
+}
+
+// extractSignatureValue extracts and decodes the signature value from the map
+func extractSignatureValue(index int, sigMap map[string]interface{}) (string, error) {
+	sigHex, ok := sigMap["sig"].(string)
+	if !ok {
+		return "", fmt.Errorf("signature %d missing required 'sig' field", index)
+	}
+
+	firstDecode, err := base64.StdEncoding.DecodeString(sigHex)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode signature %d: %w", index, err)
+	}
+
+	return decodeSignatureBytes(index, firstDecode)
+}
+
+// decodeSignatureBytes handles potentially double-encoded signatures
+func decodeSignatureBytes(index int, firstDecode []byte) (string, error) {
+	decodedString := string(firstDecode)
+	if !isBase64String(decodedString) {
+		// Single-encoded: use as-is
+		return base64.StdEncoding.EncodeToString(firstDecode), nil
+	}
+
+	// Double-encoded: decode again with padding
+	paddingNeeded := (4 - len(decodedString)%4) % 4
+	paddedString := decodedString + strings.Repeat("=", paddingNeeded)
+
+	actualSignature, err := base64.StdEncoding.DecodeString(paddedString)
+	if err != nil {
+		return "", fmt.Errorf("failed to double-decode signature %d: %w", index, err)
+	}
+	return base64.StdEncoding.EncodeToString(actualSignature), nil
 }
 
 // rekorClient wraps the actual Rekor client to implement our interface
