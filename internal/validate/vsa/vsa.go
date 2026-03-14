@@ -219,51 +219,11 @@ func (g *Generator) createDetailedSummary() VSASummary {
 
 	// If we have expansion info, add architecture-specific details
 	if g.Report.Expansion != nil {
-		// Get all child manifests for the main component
-		mainImageRef := g.Component.ContainerImage
-		if children, ok := g.Report.Expansion.GetChildrenByIndex(mainImageRef); ok {
-			for _, childRef := range children {
-				// Skip if this is the main component itself (shouldn't happen, but be safe)
-				if childRef == g.Component.ContainerImage {
-					continue
-				}
-
-				// Find the actual child component in the report to get its real data
-				var childComponent *applicationsnapshot.Component
-				for _, comp := range g.Report.Components {
-					if comp.ContainerImage == childRef {
-						childComponent = &comp
-						break
-					}
-				}
-
-				// Use actual child component data if found, otherwise use zeros
-				var archViolations, archWarnings, archSuccesses int
-				var childName string
-				if childComponent != nil {
-					archViolations = len(childComponent.Violations)
-					archWarnings = len(childComponent.Warnings)
-					archSuccesses = len(childComponent.Successes)
-					childName = childComponent.Name
-				} else {
-					// If child component not found in report, use a default name
-					childName = fmt.Sprintf("%s-%s", g.Component.Name, childRef)
-				}
-
-				components = append(components, ComponentDetail{
-					Name:       childName,
-					ImageRef:   childRef,
-					Violations: archViolations,
-					Warnings:   archWarnings,
-					Successes:  archSuccesses,
-				})
-
-				// Add to totals
-				totalViolations += archViolations
-				totalWarnings += archWarnings
-				totalSuccesses += archSuccesses
-			}
-		}
+		childDetails, childV, childW, childS := g.collectChildComponents()
+		components = append(components, childDetails...)
+		totalViolations += childV
+		totalWarnings += childW
+		totalSuccesses += childS
 	}
 
 	return VSASummary{
@@ -276,6 +236,51 @@ func (g *Generator) createDetailedSummary() VSASummary {
 			ContainerImage: g.Component.ContainerImage,
 			Source:         g.Component.Source,
 		},
+	}
+}
+
+// collectChildComponents collects child component details from expansion info
+func (g *Generator) collectChildComponents() ([]ComponentDetail, int, int, int) {
+	var components []ComponentDetail
+	var totalViolations, totalWarnings, totalSuccesses int
+
+	children, ok := g.Report.Expansion.GetChildrenByIndex(g.Component.ContainerImage)
+	if !ok {
+		return components, 0, 0, 0
+	}
+
+	for _, childRef := range children {
+		if childRef == g.Component.ContainerImage {
+			continue
+		}
+
+		detail := g.createChildDetail(childRef)
+		components = append(components, detail)
+		totalViolations += detail.Violations
+		totalWarnings += detail.Warnings
+		totalSuccesses += detail.Successes
+	}
+
+	return components, totalViolations, totalWarnings, totalSuccesses
+}
+
+// createChildDetail creates a ComponentDetail for a child reference
+func (g *Generator) createChildDetail(childRef string) ComponentDetail {
+	for _, comp := range g.Report.Components {
+		if comp.ContainerImage == childRef {
+			return ComponentDetail{
+				Name:       comp.Name,
+				ImageRef:   childRef,
+				Violations: len(comp.Violations),
+				Warnings:   len(comp.Warnings),
+				Successes:  len(comp.Successes),
+			}
+		}
+	}
+
+	return ComponentDetail{
+		Name:     fmt.Sprintf("%s-%s", g.Component.Name, childRef),
+		ImageRef: childRef,
 	}
 }
 

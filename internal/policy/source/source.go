@@ -116,53 +116,52 @@ func getPolicyThroughCache(ctx context.Context, s PolicySource, workDir string, 
 
 	fs := utils.FS(ctx)
 
-	// If the destination directory is different from the source directory, we
-	// need to symlink the source directory to the destination directory.
-	// Use synchronization to prevent race conditions when multiple goroutines
-	// try to create the same symlink simultaneously.
-	if filepath.Dir(dest) != filepath.Dir(d) {
-		// Get or create a mutex for this specific destination
-		mutexValue, _ := symlinkMutexes.LoadOrStore(dest, &sync.Mutex{})
-		mutex := mutexValue.(*sync.Mutex)
-
-		mutex.Lock()
-		defer mutex.Unlock()
-
-		// Check again if the destination exists after acquiring the lock
+	// If dest and d are in the same directory, no symlink needed
+	if filepath.Dir(dest) == filepath.Dir(d) {
 		if _, err := fs.Stat(dest); err == nil {
 			return dest, c.metadata, nil
 		}
-
-		base := filepath.Dir(dest)
-		if err := fs.MkdirAll(base, 0755); err != nil {
-			return "", nil, err
-		}
-
-		if symlinkableFS, ok := fs.(afero.Symlinker); ok {
-			log.Debugf("Symlinking %s to %s", d, dest)
-			if err := symlinkableFS.SymlinkIfPossible(d, dest); err != nil {
-				return "", nil, err
-			}
+		if c.metadata != nil {
 			logMetadata(c.metadata)
-			return dest, c.metadata, nil
-		} else {
-			log.Debugf("Filesystem does not support symlinking: %q, re-downloading instead", fs.Name())
-			m, err := dl(sourceUrl, dest)
-			logMetadata(m)
-			return dest, m, err
 		}
-	} else {
-		// If dest and d are in the same directory, no symlink needed,
-		// but still check if dest exists
-		if _, err := fs.Stat(dest); err == nil {
-			return dest, c.metadata, nil
-		}
+		return d, c.metadata, c.err
 	}
 
-	if c.metadata != nil {
-		logMetadata(c.metadata)
+	// Different directories - need to symlink or re-download
+	return symlinkOrDownload(fs, d, dest, c, dl, sourceUrl)
+}
+
+// symlinkOrDownload creates a symlink from source to dest, or re-downloads if symlinking is not supported
+func symlinkOrDownload(fs afero.Fs, source, dest string, c cacheContent, dl func(string, string) (metadata.Metadata, error), sourceUrl string) (string, metadata.Metadata, error) {
+	mutexValue, _ := symlinkMutexes.LoadOrStore(dest, &sync.Mutex{})
+	mutex := mutexValue.(*sync.Mutex)
+
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	// Check if destination exists after acquiring lock
+	if _, err := fs.Stat(dest); err == nil {
+		return dest, c.metadata, nil
 	}
-	return d, c.metadata, c.err
+
+	if err := fs.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		return "", nil, err
+	}
+
+	symlinkableFS, ok := fs.(afero.Symlinker)
+	if !ok {
+		log.Debugf("Filesystem does not support symlinking: %q, re-downloading instead", fs.Name())
+		m, err := dl(sourceUrl, dest)
+		logMetadata(m)
+		return dest, m, err
+	}
+
+	log.Debugf("Symlinking %s to %s", source, dest)
+	if err := symlinkableFS.SymlinkIfPossible(source, dest); err != nil {
+		return "", nil, err
+	}
+	logMetadata(c.metadata)
+	return dest, c.metadata, nil
 }
 
 // GetPolicy clones the repository for a given PolicyUrl

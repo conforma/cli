@@ -87,80 +87,93 @@ func (r *VSAValidationResult) PrintJSON(out io.Writer) error {
 	return encoder.Encode(r)
 }
 
+// printVSAPhaseResult outputs the VSA phase result
+func (r *VSAValidationResult) printVSAPhaseResult(out io.Writer) {
+	if r.VSAPhaseResult == nil {
+		return
+	}
+
+	if r.VSAPhaseResult.PredicateOutcome != "" {
+		fmt.Fprintf(out, "   Predicate Outcome: %s\n", r.VSAPhaseResult.PredicateOutcome)
+	}
+
+	status := "✅ VSA validation passed"
+	if !r.VSAPhaseResult.Passed {
+		status = "❌ VSA validation failed"
+	}
+	fmt.Fprintln(out, status)
+
+	if r.VSAPhaseResult.Message != "" {
+		fmt.Fprintf(out, "   %s\n", r.VSAPhaseResult.Message)
+	}
+}
+
+// printImageValidationResult outputs the image validation result
+func (r *VSAValidationResult) printImageValidationResult(out io.Writer) {
+	if !r.UsedFallback || r.ImageValidationResult == nil {
+		return
+	}
+
+	fmt.Fprintln(out, "🔄 Using image validation...")
+
+	status := "✅ Image validation passed"
+	if !r.ImageValidationResult.Passed {
+		status = "❌ Image validation failed"
+	}
+	fmt.Fprintln(out, status)
+
+	if len(r.ImageValidationResult.Violations) > 0 {
+		fmt.Fprintf(out, "   Violations: %d\n", len(r.ImageValidationResult.Violations))
+	}
+	if len(r.ImageValidationResult.Warnings) > 0 {
+		fmt.Fprintf(out, "   Warnings: %d\n", len(r.ImageValidationResult.Warnings))
+	}
+}
+
+// printSummary outputs the summary section
+func (r *VSAValidationResult) printSummary(out io.Writer) {
+	fmt.Fprintln(out, "\nSummary:")
+
+	if r.VSAPhaseResult != nil {
+		status := "Passed"
+		if !r.VSAPhaseResult.Passed {
+			status = "Failed"
+		}
+		fmt.Fprintf(out, "  VSA Status: %s\n", status)
+	}
+
+	if r.UsedFallback && r.ImageValidationResult != nil {
+		status := "Passed"
+		if !r.ImageValidationResult.Passed {
+			status = "Failed"
+		}
+		fmt.Fprintf(out, "  Image Validation Status: %s\n", status)
+	}
+
+	r.printOverallStatus(out)
+}
+
+// printOverallStatus outputs the overall status line
+func (r *VSAValidationResult) printOverallStatus(out io.Writer) {
+	var status string
+	switch {
+	case r.OverallSuccess && r.UsedFallback:
+		status = "  Overall Status: ✅ PASSED (used fallback)"
+	case r.OverallSuccess:
+		status = "  Overall Status: ✅ PASSED"
+	case r.UsedFallback:
+		status = "  Overall Status: ❌ FAILED (fallback also failed)"
+	default:
+		status = "  Overall Status: ❌ FAILED"
+	}
+	fmt.Fprintln(out, status)
+}
+
 // PrintConsole outputs the unified result as console text
 func (r *VSAValidationResult) PrintConsole(out io.Writer) error {
-	// Show VSA result first
-	if r.VSAPhaseResult != nil {
-		// Show predicate outcome FIRST for better flow understanding
-		if r.VSAPhaseResult.PredicateOutcome != "" {
-			fmt.Fprintf(out, "   Predicate Outcome: %s\n", r.VSAPhaseResult.PredicateOutcome)
-		}
-
-		if r.VSAPhaseResult.Passed {
-			fmt.Fprintln(out, "✅ VSA validation passed")
-			if r.VSAPhaseResult.Message != "" {
-				fmt.Fprintf(out, "   %s\n", r.VSAPhaseResult.Message)
-			}
-		} else {
-			fmt.Fprintln(out, "❌ VSA validation failed")
-			if r.VSAPhaseResult.Message != "" {
-				fmt.Fprintf(out, "   %s\n", r.VSAPhaseResult.Message)
-			}
-		}
-	}
-
-	// Show image validation result if used
-	if r.UsedFallback && r.ImageValidationResult != nil {
-		fmt.Fprintln(out, "🔄 Using image validation...")
-
-		if r.ImageValidationResult.Passed {
-			fmt.Fprintln(out, "✅ Image validation passed")
-		} else {
-			fmt.Fprintln(out, "❌ Image validation failed")
-		}
-
-		// Show violation/warning counts only (detailed info is in structured error section)
-		if len(r.ImageValidationResult.Violations) > 0 {
-			fmt.Fprintf(out, "   Violations: %d\n", len(r.ImageValidationResult.Violations))
-		}
-
-		if len(r.ImageValidationResult.Warnings) > 0 {
-			fmt.Fprintf(out, "   Warnings: %d\n", len(r.ImageValidationResult.Warnings))
-		}
-	}
-
-	// Show summary
-	fmt.Fprintln(out, "\nSummary:")
-	if r.VSAPhaseResult != nil {
-		if r.VSAPhaseResult.Passed {
-			fmt.Fprintln(out, "  VSA Status: Passed")
-		} else {
-			fmt.Fprintln(out, "  VSA Status: Failed")
-		}
-	}
-
-	if r.UsedFallback && r.ImageValidationResult != nil {
-		if r.ImageValidationResult.Passed {
-			fmt.Fprintln(out, "  Image Validation Status: Passed")
-		} else {
-			fmt.Fprintln(out, "  Image Validation Status: Failed")
-		}
-	}
-
-	// Show overall status
-	if r.OverallSuccess {
-		if r.UsedFallback {
-			fmt.Fprintln(out, "  Overall Status: ✅ PASSED (used fallback)")
-		} else {
-			fmt.Fprintln(out, "  Overall Status: ✅ PASSED")
-		}
-	} else {
-		if r.UsedFallback {
-			fmt.Fprintln(out, "  Overall Status: ❌ FAILED (fallback also failed)")
-		} else {
-			fmt.Fprintln(out, "  Overall Status: ❌ FAILED")
-		}
-	}
+	r.printVSAPhaseResult(out)
+	r.printImageValidationResult(out)
+	r.printSummary(out)
 
 	// Show structured error information if available
 	if r.Error != nil {
