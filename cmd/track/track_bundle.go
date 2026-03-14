@@ -144,6 +144,7 @@ func trackBundleCmd(track trackBundleFn, pullImage pullImageFn, pushImage pushIm
 				return
 			}
 
+			//nolint:nestif // acceptable complexity for replace with file/oci handling
 			if params.replace && params.input != "" {
 				if strings.HasPrefix(params.input, "oci:") {
 					err = pushImage(cmd.Context(), strings.TrimPrefix(params.input, "oci:"), out, invocation)

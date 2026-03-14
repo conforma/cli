@@ -33,4 +33,11 @@ linters-settings:
       - prefix(github.com/conforma/cli)
 
 issues:
-  exclude-rules: []
+  exclude-rules:
+    # Test files can have duplicate code, magic strings, unused parameters, and complex nesting
+    - path: _test\.go
+      linters:
+        - dupl
+        - goconst
+        - nestif
+        - unparam

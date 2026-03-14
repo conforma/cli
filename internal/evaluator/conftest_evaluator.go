@@ -392,9 +392,9 @@ type nonAnnotatedRules map[string]bool
 
 // inspectionResult holds the results of inspecting policy sources
 type inspectionResult struct {
-	rules            policyRules
-	nonAnnotated     nonAnnotatedRules
-	dataSourceDirs   []string
+	rules          policyRules
+	nonAnnotated   nonAnnotatedRules
+	dataSourceDirs []string
 }
 
 // inspectPolicySources downloads and inspects all policy sources, collecting rule information

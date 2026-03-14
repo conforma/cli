@@ -25,6 +25,7 @@ import (
 func referrers(ref name.Reference) ([]name.Reference, error) {
 	var err error
 	var idx v1.ImageIndex
+	//nolint:nestif // acceptable complexity for type assertion with fallback
 	if d, ok := ref.(name.Digest); ok {
 		idx, err = remote.Referrers(d)
 

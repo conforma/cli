@@ -109,6 +109,7 @@ func registerSigstoreVerifyImage() {
 	rego.RegisterBuiltin2(&decl, sigstoreVerifyImage)
 }
 
+//nolint:dupl // similar structure to sigstoreVerifyAttestation but verifies signatures
 func sigstoreVerifyImage(bctx rego.BuiltinContext, refTerm *ast.Term, optsTerm *ast.Term) (*ast.Term, error) {
 	logger := log.WithField("function", sigstoreVerifyImageName)
 	ctx := bctx.Context
@@ -178,6 +179,7 @@ func registerSigstoreVerifyAttestation() {
 	rego.RegisterBuiltin2(&decl, sigstoreVerifyAttestation)
 }
 
+//nolint:dupl // similar structure to sigstoreVerifyImage but verifies attestations
 func sigstoreVerifyAttestation(bctx rego.BuiltinContext, refTerm *ast.Term, optsTerm *ast.Term) (*ast.Term, error) {
 	logger := log.WithField("function", sigstoreVerifyAttestationName)
 	ctx := bctx.Context

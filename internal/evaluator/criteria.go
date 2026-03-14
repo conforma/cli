@@ -171,6 +171,7 @@ func collectVolatileConfigItems(items *Criteria, volatileCriteria []ecc.Volatile
 			}
 			until = at
 		}
+		//nolint:nestif // acceptable complexity for criteria matching with multiple image reference types
 		if until.Compare(at) >= 0 && from.Compare(at) <= 0 {
 			// DEPRECATED: use c.ImageDigest instead
 			if c.ImageRef != "" {

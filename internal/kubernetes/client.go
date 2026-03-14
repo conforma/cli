@@ -97,6 +97,8 @@ func createK8SClient() (client dynamic.Interface, err error) {
 //
 // The reference is expected to be in the format [<namespace>/]<name>. If it does not contain
 // a namespace, the current namespace is used.
+//
+//nolint:dupl // similar structure to FetchSnapshot but different types
 func (k *kubernetesClient) FetchEnterpriseContractPolicy(ctx context.Context, ref string) (*ecc.EnterpriseContractPolicy, error) {
 	if len(ref) == 0 {
 		return nil, errors.New("policy reference cannot be empty")
@@ -134,6 +136,8 @@ func (k *kubernetesClient) FetchEnterpriseContractPolicy(ctx context.Context, re
 //
 // The reference is expected to be in the format [<namespace>/]<name>. If it does not contain
 // a namespace, the current namespace is used.
+//
+//nolint:dupl // similar structure to FetchEnterpriseContractPolicy but different types
 func (k *kubernetesClient) FetchSnapshot(ctx context.Context, ref string) (*app.Snapshot, error) {
 	if len(ref) == 0 {
 		return nil, errors.New("snapshot reference cannot be empty")
