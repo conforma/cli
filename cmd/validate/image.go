@@ -201,97 +201,25 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 			}
 			data.policyConfiguration = policyConfiguration
 
-			policyOptions := policy.Options{
-				EffectiveTime: data.effectiveTime,
-				Identity: cosign.Identity{
-					Issuer:        data.certificateOIDCIssuer,
-					IssuerRegExp:  data.certificateOIDCIssuerRegExp,
-					Subject:       data.certificateIdentity,
-					SubjectRegExp: data.certificateIdentityRegExp,
-				},
-				IgnoreRekor:       data.ignoreRekor,
-				SkipImageSigCheck: data.skipImageSigCheck,
-				PolicyRef:         data.policyConfiguration,
-				PublicKey:         data.publicKey,
-				RekorURL:          data.rekorURL,
-			}
+			policyOptions := data.buildPolicyOptions()
 
 			// We're not currently using the policyCache returned from PreProcessPolicy, but we could
 			// use it to cache the policy for future use.
-			if p, _, err := policy.PreProcessPolicy(ctx, policyOptions); err != nil {
+			p, _, err := policy.PreProcessPolicy(ctx, policyOptions)
+			if err != nil {
 				allErrors = errors.Join(allErrors, err)
-			} else {
-				// inject extra variables into rule data per source
-				if len(data.extraRuleData) > 0 {
-					policySpec := p.Spec()
-					sources := policySpec.Sources
-					for i := range sources {
-						src := sources[i]
-						var rule_data_raw []byte
-						unmarshaled := make(map[string]interface{})
-
-						if src.RuleData != nil {
-							rule_data_raw, err = src.RuleData.MarshalJSON()
-							if err != nil {
-								allErrors = errors.Join(allErrors, fmt.Errorf("unable to parse ruledata to raw data"))
-								continue
-							}
-							err = json.Unmarshal(rule_data_raw, &unmarshaled)
-							if err != nil {
-								allErrors = errors.Join(allErrors, fmt.Errorf("unable to parse ruledata into standard JSON object"))
-								continue
-							}
-						} else {
-							sources[i].RuleData = new(extv1.JSON)
-						}
-
-						for j := range data.extraRuleData {
-							parts := strings.SplitN(data.extraRuleData[j], "=", 2)
-							if len(parts) < 2 {
-								allErrors = errors.Join(allErrors, fmt.Errorf("incorrect syntax for --extra-rule-data %d", j))
-								continue
-							}
-							extraRuleDataPolicyConfig, err := validate_utils.GetPolicyConfig(ctx, parts[1])
-							if err != nil {
-								allErrors = errors.Join(allErrors, fmt.Errorf("unable to load data from extraRuleData: %s", err.Error()))
-								continue
-							}
-							unmarshaled[parts[0]] = extraRuleDataPolicyConfig
-						}
-						rule_data_raw, err = json.Marshal(unmarshaled)
-						if err != nil {
-							allErrors = errors.Join(allErrors, fmt.Errorf("unable to parse updated ruledata: %s", err.Error()))
-							continue
-						}
-
-						if rule_data_raw == nil {
-							allErrors = errors.Join(allErrors, fmt.Errorf("invalid rule data JSON"))
-							continue
-						}
-
-						err = sources[i].RuleData.UnmarshalJSON(rule_data_raw)
-						if err != nil {
-							allErrors = errors.Join(allErrors, fmt.Errorf("unable to marshal updated JSON: %s", err.Error()))
-							continue
-						}
-					}
-					policySpec.Sources = sources
-					p = p.WithSpec(policySpec)
-				}
-				data.policy = p
+				return
 			}
 
-			// Validate VSA configuration
-			if data.vsaEnabled {
-				if !slices.Contains([]string{"dsse", "predicate"}, data.attestationFormat) {
-					allErrors = errors.Join(allErrors, fmt.Errorf("invalid --attestation-format: %s (valid: dsse, predicate)", data.attestationFormat))
-				}
-				if data.attestationFormat == "dsse" && data.vsaSigningKey == "" {
-					allErrors = errors.Join(allErrors, fmt.Errorf("--vsa-signing-key required for --attestation-format=dsse"))
-				}
-				if data.attestationFormat == "predicate" && data.vsaSigningKey != "" {
-					log.Warn("--vsa-signing-key is ignored for --attestation-format=predicate")
-				}
+			p, err = injectExtraRuleData(ctx, p, data.extraRuleData)
+			if err != nil {
+				allErrors = errors.Join(allErrors, err)
+				return
+			}
+			data.policy = p
+
+			if err := data.validateVSAConfig(); err != nil {
+				allErrors = errors.Join(allErrors, err)
 			}
 
 			return
@@ -305,35 +233,12 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 			}
 
 			appComponents := data.spec.Components
-			evaluators := []evaluator.Evaluator{}
-
-			// Return an evaluator for each of these
-			for _, sourceGroup := range data.policy.Spec().Sources {
-				// Todo: Make each fetch run concurrently
-				log.Debugf("Fetching policy source group '%s'", sourceGroup.Name)
-				policySources := source.PolicySourcesFrom(sourceGroup)
-
-				for _, policySource := range policySources {
-					log.Debugf("policySource: %#v", policySource)
-				}
-
-				var c evaluator.Evaluator
-				var err error
-				if utils.IsOpaEnabled() {
-					c, err = newOPAEvaluator()
-				} else {
-					// Use the unified filtering approach with the specified filter type
-					c, err = evaluator.NewConftestEvaluatorWithFilterType(
-						cmd.Context(), policySources, data.policy, sourceGroup, data.filterType)
-				}
-
-				if err != nil {
-					log.Debug("Failed to initialize the conftest evaluator!")
-					return err
-				}
-
-				evaluators = append(evaluators, c)
-				defer c.Destroy()
+			evaluators, err := data.createEvaluators(cmd.Context())
+			if err != nil {
+				return err
+			}
+			for _, e := range evaluators {
+				defer e.Destroy()
 			}
 
 			showSuccesses, _ := cmd.Flags().GetBool("show-successes")
@@ -359,21 +264,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 
 					log.Debugf("Worker %d got a component %q", id, comp.ContainerImage)
 
-					// Use VSA-aware validation if VSA checking is enabled and a retriever is available
-					var out *output.Output
-					var err error
-					if data.vsaExpiration > 0 {
-						vsaChecker := vsa.CreateVSACheckerFromUploadFlags(data.vsaUpload)
-						if vsaChecker != nil {
-							out, err = image.ValidateImageWithVSACheck(ctx, comp, data.spec, data.policy, evaluators, data.info, vsaChecker, data.vsaExpiration)
-						} else {
-							// Fall back to normal validation if no VSA retriever is available
-							out, err = validate(ctx, comp, data.spec, data.policy, evaluators, data.info)
-						}
-					} else {
-						// Use original validation when VSA checking is disabled
-						out, err = validate(ctx, comp, data.spec, data.policy, evaluators, data.info)
-					}
+					out, err := data.validateComponent(ctx, comp, evaluators, validate)
 					res := validate_utils.PopulateResultFromOutput(out, err, comp, showSuccesses, data.output)
 					if err == nil && out == nil {
 						// Validation was skipped due to valid VSA - no violations, no processing needed
@@ -447,24 +338,8 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				return err
 			}
 
-			if data.vsaEnabled {
-				// Validate and get output directory
-				outputDir, err := validateAttestationOutputPath(data.attestationOutputDir)
-				if err != nil {
-					return fmt.Errorf("invalid attestation output directory: %w", err)
-				}
-
-				// Dispatch to appropriate method based on format
-				switch data.attestationFormat {
-				case "dsse":
-					if err := data.generateVSAsDSSE(cmd, report, outputDir); err != nil {
-						return err
-					}
-				case "predicate":
-					if err := data.generateVSAsPredicates(cmd, report, outputDir); err != nil {
-						return err
-					}
-				}
+			if err := data.generateVSAsIfEnabled(cmd, report); err != nil {
+				return err
 			}
 
 			if data.strict && !report.Success {
@@ -617,6 +492,178 @@ func validateAttestationOutputPath(path string) (string, error) {
 	}
 
 	return "", fmt.Errorf("attestation output directory must be under /tmp or current working directory, got: %s", absPath)
+}
+
+// generateVSAsIfEnabled generates VSAs for validated components when VSA output is enabled.
+func (data *imageData) generateVSAsIfEnabled(cmd *cobra.Command, report applicationsnapshot.Report) error {
+	if !data.vsaEnabled {
+		return nil
+	}
+
+	outputDir, err := validateAttestationOutputPath(data.attestationOutputDir)
+	if err != nil {
+		return fmt.Errorf("invalid attestation output directory: %w", err)
+	}
+
+	switch data.attestationFormat {
+	case "dsse":
+		return data.generateVSAsDSSE(cmd, report, outputDir)
+	case "predicate":
+		return data.generateVSAsPredicates(cmd, report, outputDir)
+	}
+	return nil
+}
+
+// buildPolicyOptions creates policy options from the imageData flags.
+func (data *imageData) buildPolicyOptions() policy.Options {
+	return policy.Options{
+		EffectiveTime: data.effectiveTime,
+		Identity: cosign.Identity{
+			Issuer:        data.certificateOIDCIssuer,
+			IssuerRegExp:  data.certificateOIDCIssuerRegExp,
+			Subject:       data.certificateIdentity,
+			SubjectRegExp: data.certificateIdentityRegExp,
+		},
+		IgnoreRekor:       data.ignoreRekor,
+		SkipImageSigCheck: data.skipImageSigCheck,
+		PolicyRef:         data.policyConfiguration,
+		PublicKey:         data.publicKey,
+		RekorURL:          data.rekorURL,
+	}
+}
+
+// validateVSAConfig checks that VSA configuration flags are consistent.
+func (data *imageData) validateVSAConfig() error {
+	if !data.vsaEnabled {
+		return nil
+	}
+
+	if !slices.Contains([]string{"dsse", "predicate"}, data.attestationFormat) {
+		return fmt.Errorf("invalid --attestation-format: %s (valid: dsse, predicate)", data.attestationFormat)
+	}
+	if data.attestationFormat == "dsse" && data.vsaSigningKey == "" {
+		return fmt.Errorf("--vsa-signing-key required for --attestation-format=dsse")
+	}
+	if data.attestationFormat == "predicate" && data.vsaSigningKey != "" {
+		log.Warn("--vsa-signing-key is ignored for --attestation-format=predicate")
+	}
+	return nil
+}
+
+// validateComponent runs validation for a single component, using VSA check if available.
+func (data *imageData) validateComponent(
+	ctx context.Context,
+	comp app.SnapshotComponent,
+	evaluators []evaluator.Evaluator,
+	validate imageValidationFunc,
+) (*output.Output, error) {
+	if data.vsaExpiration <= 0 {
+		return validate(ctx, comp, data.spec, data.policy, evaluators, data.info)
+	}
+
+	vsaChecker := vsa.CreateVSACheckerFromUploadFlags(data.vsaUpload)
+	if vsaChecker == nil {
+		return validate(ctx, comp, data.spec, data.policy, evaluators, data.info)
+	}
+
+	return image.ValidateImageWithVSACheck(ctx, comp, data.spec, data.policy, evaluators, data.info, vsaChecker, data.vsaExpiration)
+}
+
+// createEvaluators builds evaluators for each policy source group.
+func (data *imageData) createEvaluators(ctx context.Context) ([]evaluator.Evaluator, error) {
+	var evaluators []evaluator.Evaluator
+
+	for _, sourceGroup := range data.policy.Spec().Sources {
+		log.Debugf("Fetching policy source group '%s'", sourceGroup.Name)
+		policySources := source.PolicySourcesFrom(sourceGroup)
+
+		for _, policySource := range policySources {
+			log.Debugf("policySource: %#v", policySource)
+		}
+
+		var c evaluator.Evaluator
+		var err error
+		if utils.IsOpaEnabled() {
+			c, err = newOPAEvaluator()
+		} else {
+			c, err = evaluator.NewConftestEvaluatorWithFilterType(
+				ctx, policySources, data.policy, sourceGroup, data.filterType)
+		}
+		if err != nil {
+			log.Debug("Failed to initialize the conftest evaluator!")
+			return nil, err
+		}
+		evaluators = append(evaluators, c)
+	}
+
+	return evaluators, nil
+}
+
+// injectExtraRuleData merges extra rule data into each policy source.
+// Returns the modified policy and any accumulated errors.
+func injectExtraRuleData(ctx context.Context, p policy.Policy, extraRuleData []string) (policy.Policy, error) {
+	if len(extraRuleData) == 0 {
+		return p, nil
+	}
+
+	policySpec := p.Spec()
+	sources := policySpec.Sources
+	var allErrors error
+
+	for i := range sources {
+		unmarshaled := make(map[string]interface{})
+
+		if sources[i].RuleData != nil {
+			ruleDataRaw, err := sources[i].RuleData.MarshalJSON()
+			if err != nil {
+				allErrors = errors.Join(allErrors, fmt.Errorf("unable to parse ruledata to raw data"))
+				continue
+			}
+			if err := json.Unmarshal(ruleDataRaw, &unmarshaled); err != nil {
+				allErrors = errors.Join(allErrors, fmt.Errorf("unable to parse ruledata into standard JSON object"))
+				continue
+			}
+		} else {
+			sources[i].RuleData = new(extv1.JSON)
+		}
+
+		for j, extra := range extraRuleData {
+			parts := strings.SplitN(extra, "=", 2)
+			if len(parts) < 2 {
+				allErrors = errors.Join(allErrors, fmt.Errorf("incorrect syntax for --extra-rule-data %d", j))
+				continue
+			}
+			extraConfig, err := validate_utils.GetPolicyConfig(ctx, parts[1])
+			if err != nil {
+				allErrors = errors.Join(allErrors, fmt.Errorf("unable to load data from extraRuleData: %s", err.Error()))
+				continue
+			}
+			unmarshaled[parts[0]] = extraConfig
+		}
+
+		ruleDataRaw, err := json.Marshal(unmarshaled)
+		if err != nil {
+			allErrors = errors.Join(allErrors, fmt.Errorf("unable to parse updated ruledata: %s", err.Error()))
+			continue
+		}
+
+		if ruleDataRaw == nil {
+			allErrors = errors.Join(allErrors, fmt.Errorf("invalid rule data JSON"))
+			continue
+		}
+
+		if err := sources[i].RuleData.UnmarshalJSON(ruleDataRaw); err != nil {
+			allErrors = errors.Join(allErrors, fmt.Errorf("unable to marshal updated JSON: %s", err.Error()))
+			continue
+		}
+	}
+
+	if allErrors != nil {
+		return nil, allErrors
+	}
+
+	policySpec.Sources = sources
+	return p.WithSpec(policySpec), nil
 }
 
 // imageData is the struct that holds all image validation command data
