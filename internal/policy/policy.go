@@ -308,54 +308,64 @@ func (p *policy) loadPolicy(ctx context.Context, policyRef string) error {
 		// publicKey param.
 		return nil
 	}
-	/*
-		Note: by the time we arrive here, if our policyRef was originally a URI for a
-		JSON / YAML the document will have already opened / downloaded and it would be
-		a JSON / YAML string which is why we can use `yaml.Unmarshal` below.
-
-		Before we unmarshal we need to check if the policyRef text conforms to the
-		EnprerpriseContractPolicySpec schema. If it does, we can proceed to unmarshal
-		it. If it does not conform to the spec, we should return an error.
-	*/
-	if strings.Contains(policyRef, ":") { // Should detect JSON or YAML objects 🤞
-		log.Debug("Read EnterpriseContractPolicy as YAML")
-		ecp := ecc.EnterpriseContractPolicy{}
-		if err := yaml.Unmarshal([]byte(policyRef), &ecp); err == nil && ecp.APIVersion != "" {
-			p.EnterpriseContractPolicySpec = ecp.Spec
-		} else {
-			log.Debugf("Unable to parse EnterpriseContractPolicy from %q", policyRef)
-			log.Debug("Attempting to parse as EnterpriseContractPolicySpec")
-			if err := yaml.Unmarshal([]byte(policyRef), &p.EnterpriseContractPolicySpec); err != nil {
-				log.Debugf("Unable to parse EnterpriseContractPolicySpec from %q", policyRef)
-				return fmt.Errorf("unable to parse EnterpriseContractPolicySpec: %w", err)
-			}
-		}
-		// Check if the policyRef is conformant to the schema
-		if policyRef != "" {
-			ok, err := p.isConformant(policyRef)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return fmt.Errorf("policy does not conform to the schema")
-			}
-		}
-	} else {
-		log.Debug("Read EnterpriseContractPolicy as k8s resource")
-		k8s, err := kubernetes.NewClient(ctx)
-		if err != nil {
-			log.Debug("Failed to initialize Kubernetes client")
-			return fmt.Errorf("cannot initialize Kubernetes client: %w", err)
-		}
-		log.Debug("Initialized Kubernetes client")
-
-		ecp, err := k8s.FetchEnterpriseContractPolicy(ctx, policyRef)
-		if err != nil {
-			log.Debug("Failed to fetch the enterprise contract policy from the cluster!")
-			return fmt.Errorf("unable to fetch EnterpriseContractPolicy: %w", err)
-		}
-		p.EnterpriseContractPolicySpec = ecp.Spec
+	// If policyRef contains ":", it's likely JSON or YAML; otherwise try K8s
+	if strings.Contains(policyRef, ":") {
+		return p.loadPolicyFromYAML(policyRef)
 	}
+	return p.loadPolicyFromK8s(ctx, policyRef)
+}
+
+// loadPolicyFromYAML parses policy from YAML/JSON string
+func (p *policy) loadPolicyFromYAML(policyRef string) error {
+	log.Debug("Read EnterpriseContractPolicy as YAML")
+
+	ecp := ecc.EnterpriseContractPolicy{}
+	if err := yaml.Unmarshal([]byte(policyRef), &ecp); err == nil && ecp.APIVersion != "" {
+		p.EnterpriseContractPolicySpec = ecp.Spec
+	} else {
+		log.Debugf("Unable to parse EnterpriseContractPolicy from %q", policyRef)
+		log.Debug("Attempting to parse as EnterpriseContractPolicySpec")
+		if err := yaml.Unmarshal([]byte(policyRef), &p.EnterpriseContractPolicySpec); err != nil {
+			log.Debugf("Unable to parse EnterpriseContractPolicySpec from %q", policyRef)
+			return fmt.Errorf("unable to parse EnterpriseContractPolicySpec: %w", err)
+		}
+	}
+
+	return p.validateConformance(policyRef)
+}
+
+// validateConformance checks if the policy conforms to the schema
+func (p *policy) validateConformance(policyRef string) error {
+	if policyRef == "" {
+		return nil
+	}
+	ok, err := p.isConformant(policyRef)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("policy does not conform to the schema")
+	}
+	return nil
+}
+
+// loadPolicyFromK8s fetches policy from Kubernetes
+func (p *policy) loadPolicyFromK8s(ctx context.Context, policyRef string) error {
+	log.Debug("Read EnterpriseContractPolicy as k8s resource")
+
+	k8s, err := kubernetes.NewClient(ctx)
+	if err != nil {
+		log.Debug("Failed to initialize Kubernetes client")
+		return fmt.Errorf("cannot initialize Kubernetes client: %w", err)
+	}
+	log.Debug("Initialized Kubernetes client")
+
+	ecp, err := k8s.FetchEnterpriseContractPolicy(ctx, policyRef)
+	if err != nil {
+		log.Debug("Failed to fetch the enterprise contract policy from the cluster!")
+		return fmt.Errorf("unable to fetch EnterpriseContractPolicy: %w", err)
+	}
+	p.EnterpriseContractPolicySpec = ecp.Spec
 	return nil
 }
 
@@ -437,77 +447,138 @@ func parseEffectiveTime(choosenTime string) (*time.Time, error) {
 
 // checkOpts returns an instance based on attributes of the Policy.
 func checkOpts(ctx context.Context, p *policy) (*cosign.CheckOpts, error) {
-	var err error
 	opts := cosign.CheckOpts{}
 
-	if p.PublicKey != "" {
-		log.Debug("Using long-lived key workflow")
-		if opts.SigVerifier, err = signatureVerifier(ctx, p); err != nil {
-			return nil, err
-		}
-	} else {
-		log.Debug("Using keyless workflow")
-		log.Debugf("TUF_ROOT=%s", os.Getenv("TUF_ROOT"))
-		opts.Identities = []cosign.Identity{p.identity}
-
-		if !hasSigstoreEnvOverrides() {
-			if trustedRoot, trErr := cosign.TrustedRoot(); trErr == nil {
-				log.Debug("Using trusted root from TUF for verification")
-				opts.TrustedMaterial = trustedRoot
-			} else {
-				log.Debugf("Could not fetch trusted_root.json from TUF, falling back to individual targets: %v", trErr)
-			}
-		} else {
-			log.Debug("Sigstore env overrides detected, skipping trusted root from TUF")
-		}
-
-		if opts.TrustedMaterial == nil {
-			if opts.RootCerts, err = fulcio.GetRoots(); err != nil {
-				return nil, err
-			}
-			log.Debug("Fetched Fulcio root certificates")
-			if opts.IntermediateCerts, err = fulcio.GetIntermediates(); err != nil {
-				return nil, err
-			}
-			log.Debug("Fetched Fulcio intermediate certificates")
-			if opts.CTLogPubKeys, err = cosign.GetCTLogPubs(ctx); err != nil {
-				return nil, err
-			}
-			log.Debug("Fetched CT log public keys")
-		}
+	if err := setupVerification(ctx, p, &opts); err != nil {
+		return nil, err
 	}
 
 	opts.IgnoreTlog = p.ignoreRekor
 
-	if !opts.IgnoreTlog {
-		// NOTE: The value of the RekorURL may not be used by cosign during verification.
-		// If the image signature/attestation contains a SignedEntryTimestamp, then cosign
-		// takes on an offline verification approach. In this case, it does not query Rekor
-		// for the existence of records. Instead, it ensures the SignedEntryTimestamp maps
-		// to the Rekor public keys. The Rekor public keys may be already loaded on the
-		// local copy of the TUF root. Otherwise, they are fetched from the TUF mirror.
-		// In either case, the RekorURL is completely ignored. cosign always adds a
-		// SignedEntryTimestamp to the signatures and attestations it creates.
-		rekorURL := p.RekorUrl
-		// NOTE: A Rekor client is only needed when a SignedEntryTimestamp is not available
-		// on the signature/attestation.
-		if rekorURL != "" {
-			if opts.RekorClient, err = rekor.NewClient(rekorURL); err != nil {
-				log.Debugf("Problem creating a rekor client using url %q", rekorURL)
-				return nil, err
-			}
-			log.Debugf("Rekor client created, url %q", rekorURL)
-		}
-
-		if opts.TrustedMaterial == nil {
-			if opts.RekorPubKeys, err = cosign.GetRekorPubs(ctx); err != nil {
-				return nil, err
-			}
-			log.Debug("Fetched Rekor public keys")
-		}
+	if err := setupTlog(ctx, p, &opts); err != nil {
+		return nil, err
 	}
 
 	return &opts, nil
+}
+
+// setupVerification configures either key-based or keyless verification
+func setupVerification(ctx context.Context, p *policy, opts *cosign.CheckOpts) error {
+	if p.PublicKey != "" {
+		return setupKeyVerification(ctx, p, opts)
+	}
+	return setupKeylessVerification(ctx, p, opts)
+}
+
+// setupKeyVerification configures verification using a long-lived key
+func setupKeyVerification(ctx context.Context, p *policy, opts *cosign.CheckOpts) error {
+	log.Debug("Using long-lived key workflow")
+	verifier, err := signatureVerifier(ctx, p)
+	if err != nil {
+		return err
+	}
+	opts.SigVerifier = verifier
+	return nil
+}
+
+// setupKeylessVerification configures keyless verification
+func setupKeylessVerification(ctx context.Context, p *policy, opts *cosign.CheckOpts) error {
+	log.Debug("Using keyless workflow")
+	log.Debugf("TUF_ROOT=%s", os.Getenv("TUF_ROOT"))
+	opts.Identities = []cosign.Identity{p.identity}
+
+	if err := setupTrustedMaterial(ctx, opts); err != nil {
+		return err
+	}
+
+	return setupFallbackCerts(ctx, opts)
+}
+
+// setupTrustedMaterial attempts to load trusted root from TUF
+func setupTrustedMaterial(_ context.Context, opts *cosign.CheckOpts) error {
+	if hasSigstoreEnvOverrides() {
+		log.Debug("Sigstore env overrides detected, skipping trusted root from TUF")
+		return nil
+	}
+
+	trustedRoot, err := cosign.TrustedRoot()
+	if err != nil {
+		log.Debugf("Could not fetch trusted_root.json from TUF, falling back to individual targets: %v", err)
+		return nil
+	}
+
+	log.Debug("Using trusted root from TUF for verification")
+	opts.TrustedMaterial = trustedRoot
+	return nil
+}
+
+// setupFallbackCerts loads individual certificates when TrustedMaterial is not available
+func setupFallbackCerts(ctx context.Context, opts *cosign.CheckOpts) error {
+	if opts.TrustedMaterial != nil {
+		return nil
+	}
+
+	var err error
+	if opts.RootCerts, err = fulcio.GetRoots(); err != nil {
+		return err
+	}
+	log.Debug("Fetched Fulcio root certificates")
+
+	if opts.IntermediateCerts, err = fulcio.GetIntermediates(); err != nil {
+		return err
+	}
+	log.Debug("Fetched Fulcio intermediate certificates")
+
+	if opts.CTLogPubKeys, err = cosign.GetCTLogPubs(ctx); err != nil {
+		return err
+	}
+	log.Debug("Fetched CT log public keys")
+
+	return nil
+}
+
+// setupTlog configures Rekor/transparency log verification
+func setupTlog(ctx context.Context, p *policy, opts *cosign.CheckOpts) error {
+	if opts.IgnoreTlog {
+		return nil
+	}
+
+	if err := setupRekorClient(p, opts); err != nil {
+		return err
+	}
+
+	return setupRekorPubKeys(ctx, opts)
+}
+
+// setupRekorClient creates a Rekor client if URL is provided
+func setupRekorClient(p *policy, opts *cosign.CheckOpts) error {
+	if p.RekorUrl == "" {
+		return nil
+	}
+
+	client, err := rekor.NewClient(p.RekorUrl)
+	if err != nil {
+		log.Debugf("Problem creating a rekor client using url %q", p.RekorUrl)
+		return err
+	}
+	opts.RekorClient = client
+	log.Debugf("Rekor client created, url %q", p.RekorUrl)
+	return nil
+}
+
+// setupRekorPubKeys fetches Rekor public keys if TrustedMaterial is not available
+func setupRekorPubKeys(ctx context.Context, opts *cosign.CheckOpts) error {
+	if opts.TrustedMaterial != nil {
+		return nil
+	}
+
+	pubKeys, err := cosign.GetRekorPubs(ctx)
+	if err != nil {
+		return err
+	}
+	opts.RekorPubKeys = pubKeys
+	log.Debug("Fetched Rekor public keys")
+	return nil
 }
 
 // hasSigstoreEnvOverrides returns true if any SIGSTORE_* environment variables
