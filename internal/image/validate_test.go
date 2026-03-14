@@ -224,7 +224,7 @@ func TestDetermineAttestationTime(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := determineAttestationTime(context.TODO(), c.attestations)
+			got := determineAttestationTime(c.attestations)
 
 			if c.expected == nil {
 				assert.Nil(t, got)

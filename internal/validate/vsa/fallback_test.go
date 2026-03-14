@@ -17,7 +17,6 @@
 package vsa
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -185,8 +184,6 @@ func TestPerformFallbackValidation(t *testing.T) {
 }
 
 func TestGetPolicyConfig(t *testing.T) {
-	ctx := context.Background()
-
 	tests := []struct {
 		name           string
 		policyConfig   string
@@ -215,7 +212,7 @@ func TestGetPolicyConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := getPolicyConfig(ctx, tt.policyConfig)
+			result, err := getPolicyConfig(tt.policyConfig)
 			assert.Equal(t, tt.expectedError, err)
 			assert.Equal(t, tt.expectedResult, result)
 		})

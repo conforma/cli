@@ -25,15 +25,12 @@
 package evaluator
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/conforma/cli/internal/utils"
 )
 
 func TestPrepareDataDirs(t *testing.T) {
@@ -77,7 +74,6 @@ func TestPrepareDataDirs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a temporary filesystem
 			fs := afero.NewMemMapFs()
-			ctx := utils.WithFS(context.Background(), fs)
 
 			// Create the base data directory
 			dataDir := "/test/data"
@@ -98,7 +94,7 @@ func TestPrepareDataDirs(t *testing.T) {
 
 			// Call prepareDataDirs with the base data directory as data source
 			// In real usage, dataSourceDirs would be the directories returned by GetPolicy
-			actualDirs, err := evaluator.prepareDataDirs(ctx, []string{dataDir})
+			actualDirs, err := evaluator.prepareDataDirs([]string{dataDir})
 			require.NoError(t, err)
 
 			// Convert expected relative paths to absolute paths

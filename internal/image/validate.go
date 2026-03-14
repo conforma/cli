@@ -92,7 +92,7 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 
 	out.SetAttestationSyntaxCheckFromError(a.ValidateAttestationSyntax(ctx))
 
-	if attestationTime := determineAttestationTime(ctx, a.Attestations()); attestationTime != nil {
+	if attestationTime := determineAttestationTime(a.Attestations()); attestationTime != nil {
 		p.AttestationTime(*attestationTime)
 	}
 
@@ -207,7 +207,7 @@ func resolveAndSetImageUrl(ctx context.Context, url string, asi *application_sna
 	return resolved, nil
 }
 
-func determineAttestationTime(ctx context.Context, attestations []attestation.Attestation) *time.Time {
+func determineAttestationTime(attestations []attestation.Attestation) *time.Time {
 	if len(attestations) == 0 {
 		log.Debug("No attestations provided to determine attestation time")
 		return nil

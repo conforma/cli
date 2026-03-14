@@ -593,7 +593,7 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		log.Debugf("Namespaces to use: %v, allNamespaces: %v", namespacesToUse, allNamespaces)
 
 		// Prepare the list of data dirs
-		dataDirs, err := c.prepareDataDirs(ctx, dataSourceDirs)
+		dataDirs, err := c.prepareDataDirs(dataSourceDirs)
 		if err != nil {
 			return nil, err
 		}
@@ -712,7 +712,7 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 // dataSourceDirs contains the directories returned by GetPolicy for data sources.
 // These directories may be symlinks (from cached downloads), but we walk them directly
 // which ensures we find the files regardless of whether they're symlinks or not.
-func (c conftestEvaluator) prepareDataDirs(ctx context.Context, dataSourceDirs []string) ([]string, error) {
+func (c conftestEvaluator) prepareDataDirs(dataSourceDirs []string) ([]string, error) {
 	// The reason we do this is to avoid having the names of the subdirs under c.dataDir
 	// converted to keys in the data structure. We want the top level keys in the data files
 	// to be at the top level of the data structure visible to the rego rules.
