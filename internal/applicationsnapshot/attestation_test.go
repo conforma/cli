@@ -155,8 +155,7 @@ func TestAttestations(t *testing.T) {
 	}
 
 	report := Report{Components: components}
-	att, err := report.attestations()
-	assert.NoError(t, err)
+	att := report.attestations()
 	//nolint:staticcheck
 	assert.Equal(t, []in_toto.Statement{statement}, att)
 }

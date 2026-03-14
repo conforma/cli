@@ -65,20 +65,19 @@ func (r *Report) renderAttestations() []byte {
 }
 
 //nolint:staticcheck
-func (r *Report) attestations() ([]in_toto.Statement, error) {
+func (r *Report) attestations() []in_toto.Statement {
 	//nolint:staticcheck
 	var statements []in_toto.Statement
 	for _, c := range r.Components {
 		for _, a := range c.Attestations {
 			//nolint:staticcheck
 			var statement in_toto.Statement
-			err := json.Unmarshal(a.Statement, &statement)
-			if err != nil {
+			if err := json.Unmarshal(a.Statement, &statement); err != nil {
 				//nolint:staticcheck
-				return []in_toto.Statement{}, nil
+				return []in_toto.Statement{}
 			}
 			statements = append(statements, statement)
 		}
 	}
-	return statements, nil
+	return statements
 }
