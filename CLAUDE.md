@@ -12,6 +12,7 @@ This file provides guidance to Claude Code when working with this repository.
 **Before submitting any code**:
 1. Run `make sanity` - MUST PASS (complexity, duplication checks)
 2. Run `make test` - MUST PASS
+3. Run `make lint-fix` - MUST PASS
 3. If sanity fails: simplify the code, do NOT add workarounds
 
 **Key constraints**:
