@@ -36,7 +36,7 @@ func Test_ReportJson(t *testing.T) {
 	inputs := testInputsFor(filePaths)
 	ctx := context.Background()
 	testPolicy := createTestPolicy(t, ctx)
-	report, err := NewReport(inputs, testPolicy, nil, false, true)
+	report, err := NewReport(inputs, testPolicy, nil, false, true, true)
 	assert.NoError(t, err)
 
 	testEffectiveTime := testPolicy.EffectiveTime().UTC().Format(time.RFC3339Nano)
@@ -126,7 +126,7 @@ func Test_ReportYaml(t *testing.T) {
 	inputs := testInputsFor(filePaths)
 	ctx := context.Background()
 	testPolicy := createTestPolicy(t, ctx)
-	report, err := NewReport(inputs, testPolicy, nil, false, true)
+	report, err := NewReport(inputs, testPolicy, nil, false, true, true)
 	assert.NoError(t, err)
 
 	testEffectiveTime := testPolicy.EffectiveTime().UTC().Format(time.RFC3339Nano)
@@ -232,7 +232,7 @@ func Test_ReportSummary(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf("NewReport=%s", tc.name), func(t *testing.T) {
 			ctx := context.Background()
-			report, err := NewReport(tc.input, createTestPolicy(t, ctx), nil, false, true)
+			report, err := NewReport(tc.input, createTestPolicy(t, ctx), nil, false, true, true)
 			// report, err := NewReport(tc.snapshot, []Component{tc.input}, createTestPolicy(t, ctx), nil, nil)
 			assert.NoError(t, err)
 			fmt.Println("\n\nExpected:\n", tc.want, "\n\nActual:\n", report.toSummary())
@@ -318,7 +318,7 @@ func Test_ReportText(t *testing.T) {
 	}
 	ctx := context.Background()
 	testPolicy := createTestPolicy(t, ctx)
-	report, err := NewReport(inputs, testPolicy, nil, false, true)
+	report, err := NewReport(inputs, testPolicy, nil, false, true, true)
 	assert.NoError(t, err)
 
 	reportText, err := report.toFormat(Text)
@@ -357,7 +357,7 @@ func Test_ReportText_ShowSuccesses(t *testing.T) {
 	}
 	ctx := context.Background()
 	testPolicy := createTestPolicy(t, ctx)
-	report, err := NewReport(inputs, testPolicy, nil, true, true)
+	report, err := NewReport(inputs, testPolicy, nil, true, true, true)
 	assert.NoError(t, err)
 
 	reportText, err := report.toFormat(Text)
@@ -382,7 +382,7 @@ func Test_ReportText_NoResultsSection(t *testing.T) {
 	}
 	ctx := context.Background()
 	testPolicy := createTestPolicy(t, ctx)
-	report, err := NewReport(inputs, testPolicy, nil, false, true)
+	report, err := NewReport(inputs, testPolicy, nil, false, true, true)
 	assert.NoError(t, err)
 
 	reportText, err := report.toFormat(Text)

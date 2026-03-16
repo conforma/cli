@@ -121,6 +121,8 @@ func validateInputCmd(validate InputValidationFunc) *cobra.Command {
 
 			showSuccesses, _ := cmd.Flags().GetBool("show-successes")
 			showWarnings, _ := cmd.Flags().GetBool("show-warnings")
+			// Don't show policy docs link for input validation (not snapshot-based)
+			showPolicyDocsLink := false
 
 			// Set numWorkers to the value from our flag. The default is 5.
 			numWorkers := data.workers
@@ -210,7 +212,7 @@ func validateInputCmd(validate InputValidationFunc) *cobra.Command {
 				return inputs[i].FilePath > inputs[j].FilePath
 			})
 
-			report, err := input.NewReport(inputs, data.policy, manyPolicyInput, showSuccesses, showWarnings)
+			report, err := input.NewReport(inputs, data.policy, manyPolicyInput, showSuccesses, showWarnings, showPolicyDocsLink)
 			if err != nil {
 				return err
 			}

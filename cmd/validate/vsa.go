@@ -1095,13 +1095,14 @@ func buildFallbackReportData(fallbackResults []validate_utils.Result, vsaData *v
 	}
 
 	return validate_utils.ReportData{
-		Snapshot:      vsaData.images,
-		Components:    components,
-		Policy:        vsaData.fallbackContext.FallbackPolicy,
-		PolicyInputs:  manyPolicyInput,
-		Expansion:     nil,
-		ShowSuccesses: false,
-		ShowWarnings:  true,
+		Snapshot:           vsaData.images,
+		Components:         components,
+		Policy:             vsaData.fallbackContext.FallbackPolicy,
+		PolicyInputs:       manyPolicyInput,
+		Expansion:          nil,
+		ShowSuccesses:      false,
+		ShowWarnings:       true,
+		ShowPolicyDocsLink: vsaData.images != "", // Show docs link when using snapshot file
 	}, nil
 }
 
@@ -1121,6 +1122,7 @@ func createFallbackReport(allData AllSectionsData, vsaData *validateVSAData) (*a
 		reportData.PolicyInputs,
 		reportData.ShowSuccesses,
 		reportData.ShowWarnings,
+		reportData.ShowPolicyDocsLink,
 		reportData.Expansion,
 	)
 	if err != nil {
