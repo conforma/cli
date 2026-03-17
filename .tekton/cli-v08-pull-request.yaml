@@ -4,16 +4,17 @@ metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/conforma/cli?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
+    build.appstudio.redhat.com/pull_request_number: '{{pull_request_number}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
-    pipelinesascode.tekton.dev/cancel-in-progress: "false"
+    pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch == "main"
+    pipelinesascode.tekton.dev/on-cel-expression: event == "pull_request" && target_branch == "release-v0.8"
   creationTimestamp:
   labels:
-    appstudio.openshift.io/application: ec-main
-    appstudio.openshift.io/component: cli-main
+    appstudio.openshift.io/application: ec-v08
+    appstudio.openshift.io/component: cli-v08
     pipelines.appstudio.openshift.io/type: build
-  name: cli-main-on-push
+  name: cli-v08-on-pull-request
   namespace: rhtap-contract-tenant
 spec:
   params:
@@ -22,13 +23,11 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/rhtap-contract-tenant/ec-main/cli-main:{{revision}}
-  - name: bundle-cli-ref-repo
-    value: quay.io/conforma/cli
+    value: quay.io/redhat-user-workloads/rhtap-contract-tenant/ec-v08/cli-v08:on-pr-{{revision}}
+  - name: image-expires-after
+    value: 5d
   - name: dockerfile
     value: Dockerfile.dist
-  - name: image-expires-after
-    value: ""
   - name: path-context
     value: .
   - name: prefetch-input
@@ -36,7 +35,7 @@ spec:
   - name: build-source-image
     value: "true"
   - name: build-args-file
-    value: main-build-args.conf
+    value: quick-build-args.conf
   - name: hermetic
     value: "true"
   - name: enable-cache-proxy
@@ -58,10 +57,6 @@ spec:
       type: string
     - description: Fully Qualified Output Image
       name: output-image
-      type: string
-    - description: >-
-        OCI repository of the CLI image to use as a reference in the Tekton bundle. When setting this value, take into account where the CLI image will be available for usage. For certain workflows, e.g. pull request, this should be the repo in which the CLI image is built into because those CLI images are not promoted to another location. For merge workflows that go through a release, for example, this should be the repository for which the CLI image will be released to.
-      name: bundle-cli-ref-repo
       type: string
     - default: .
       description: Path to the source code of an application's component from where to build image.
@@ -109,9 +104,6 @@ spec:
       type: string
     - default:
       - linux/x86_64
-      - linux/arm64
-      - linux/ppc64le
-      - linux/s390x
       description: List of platforms to build the container images on
       name: build-platforms
       type: array
@@ -295,33 +287,6 @@ spec:
         operator: in
         values:
         - "true"
-    - name: build-tekton-bundle
-      params:
-      - name: IMAGE
-        value: $(params.output-image).bundle
-      - name: CONTEXT
-        value: tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml tasks/verify-conforma-konflux-ta/0.1/verify-conforma-konflux-ta.yaml
-      - name: STEPS_IMAGE
-        value: $(params.bundle-cli-ref-repo)@$(tasks.build-image-index.results.IMAGE_DIGEST)
-      - name: URL
-        value: $(params.git-url)
-      - name: REVISION
-        value: $(params.revision)
-      - name: SOURCE_ARTIFACT
-        value: $(tasks.clone-repository.results.SOURCE_ARTIFACT)
-      - name: STEPS_IMAGE_STEP_NAMES
-        value: "!use-trusted-artifact,!create-trusted-artifact"
-      runAfter:
-      - build-image-index
-      taskRef:
-        params:
-        - name: name
-          value: tkn-bundle-oci-ta
-        - name: bundle
-          value: quay.io/konflux-ci/tekton-catalog/task-tkn-bundle-oci-ta:0.2@sha256:0e12654b0532ca720523693a5a85e67e0221d3678e2f54c675a61e72c5c240b3
-        - name: kind
-          value: task
-        resolver: bundles
     - name: deprecated-base-image-check
       params:
       - name: IMAGE_URL
@@ -564,7 +529,7 @@ spec:
     - name: netrc
       optional: true
   taskRunTemplate:
-    serviceAccountName: build-pipeline-cli-main
+    serviceAccountName: build-pipeline-cli-v08
   workspaces:
   - name: git-auth
     secret:
