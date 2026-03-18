@@ -761,6 +761,11 @@ func createAndPushKeylessImage(ctx context.Context, imageName string) (context.C
 				continue
 			}
 
+			// Skip empty signatures (DSSE envelopes have empty signature annotations)
+			if signature == "" {
+				continue
+			}
+
 			sig := Signature{
 				Signature: signature,
 			}
@@ -995,7 +1000,10 @@ func RawAttestationSignaturesFrom(ctx context.Context) map[string]string {
 
 	ret := map[string]string{}
 	for ref, signature := range state.AttestationSignatures {
-		ret[fmt.Sprintf("ATTESTATION_SIGNATURE_%s", ref)] = signature.Signature
+		// Only add the variable if the signature is not empty to avoid polluting snapshots
+		if signature.Signature != "" {
+			ret[fmt.Sprintf("ATTESTATION_SIGNATURE_%s", ref)] = signature.Signature
+		}
 	}
 
 	return ret

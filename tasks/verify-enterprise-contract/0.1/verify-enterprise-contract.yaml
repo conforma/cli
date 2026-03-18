@@ -90,6 +90,20 @@ spec:
         keyless verification. The PUBLIC_KEY param will be ignored if this is provided.
       default: ""
 
+    - name: CERTIFICATE_IDENTITY_REGEXP
+      type: string
+      description: >-
+        Similar to CERTIFICATE_IDENTITY but the value is a regexp that will be matched.
+        Note that CERTIFICATE_IDENTITY takes precendence over this if both are present.
+      default: ""
+
+    - name: CERTIFICATE_OIDC_ISSUER_REGEXP
+      type: string
+      description: >-
+        Similar to CERTIFICATE_OIDC_ISSUER but a regexp that will be matched. Note that
+        CERTIFICATE_OIDC_ISSUER takes precendence over this if both are present.
+      default: ""
+
     - name: IGNORE_REKOR
       type: string
       description: >-
@@ -270,20 +284,48 @@ spec:
 
         # To keep bash logic as thin as possible we deliberately don't sanitize
         # these params. If something is wrong or missing let Conforma handle it.
-        if [ -n "${CERTIFICATE_IDENTITY}" ] || [ -n "${CERTIFICATE_OIDC_ISSUER}" ]; then
+
+        if [ -n "${CERTIFICATE_IDENTITY}" ] || \
+           [ -n "${CERTIFICATE_OIDC_ISSUER}" ] || \
+           [ -n "${CERTIFICATE_IDENTITY_REGEXP}" ] || \
+           [ -n "${CERTIFICATE_OIDC_ISSUER_REGEXP}" ]; then
+          # If *any* of the above are non-empty assume the intention is to
+          # try keyless verification
+
+          if [ -n "${CERTIFICATE_IDENTITY}" ]; then
+            cmd_args+=(
+              --certificate-identity="${CERTIFICATE_IDENTITY}"
+            )
+          elif [ -n "${CERTIFICATE_IDENTITY_REGEXP}" ]; then
+            cmd_args+=(
+              --certificate-identity-regexp="${CERTIFICATE_IDENTITY_REGEXP}"
+            )
+          fi
+
+          if [ -n "${CERTIFICATE_OIDC_ISSUER}" ]; then
+            cmd_args+=(
+              --certificate-oidc-issuer="${CERTIFICATE_OIDC_ISSUER}"
+            )
+          elif [ -n "${CERTIFICATE_OIDC_ISSUER_REGEXP}" ]; then
+            cmd_args+=(
+              --certificate-oidc-issuer-regexp="${CERTIFICATE_OIDC_ISSUER_REGEXP}"
+            )
+          fi
+
+          # Force --ignore-rekor to false since we need rekor
           cmd_args+=(
-            --certificate-identity="${CERTIFICATE_IDENTITY}"
-            --certificate-oidc-issuer="${CERTIFICATE_OIDC_ISSUER}"
+            --ignore-rekor=false
           )
-        elif [ -n "${PUBLIC_KEY}" ]; then
+        else
+          # Assume traditional signing secret verification
           cmd_args+=(
             --public-key="${PUBLIC_KEY}"
+            --ignore-rekor="${IGNORE_REKOR}"
           )
         fi
 
         cmd_args+=(
           --rekor-url="${REKOR_HOST}"
-          --ignore-rekor="${IGNORE_REKOR}"
           --workers="${WORKERS}"
           --info="${INFO}"
           --timeout=0
@@ -313,6 +355,10 @@ spec:
           value: "$(params.CERTIFICATE_IDENTITY)"
         - name: CERTIFICATE_OIDC_ISSUER
           value: "$(params.CERTIFICATE_OIDC_ISSUER)"
+        - name: CERTIFICATE_IDENTITY_REGEXP
+          value: "$(params.CERTIFICATE_IDENTITY_REGEXP)"
+        - name: CERTIFICATE_OIDC_ISSUER_REGEXP
+          value: "$(params.CERTIFICATE_OIDC_ISSUER_REGEXP)"
         - name: REKOR_HOST
           value: "$(params.REKOR_HOST)"
         - name: IGNORE_REKOR
