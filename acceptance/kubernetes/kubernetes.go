@@ -36,6 +36,7 @@ import (
 	"github.com/conforma/cli/acceptance/kubernetes/stub"
 	"github.com/conforma/cli/acceptance/kubernetes/types"
 	"github.com/conforma/cli/acceptance/registry"
+	"github.com/conforma/cli/acceptance/rekor"
 	"github.com/conforma/cli/acceptance/snaps"
 	"github.com/conforma/cli/acceptance/testenv"
 )
@@ -121,7 +122,6 @@ func buildSnapshotArtifact(ctx context.Context, specification *godog.DocString) 
 	}
 
 	return c.cluster.BuildSnapshotArtifact(ctx, specification.Content)
-
 }
 
 func createNamedPolicy(ctx context.Context, name string, specification *godog.DocString) error {
@@ -172,6 +172,26 @@ func createNamedSnapshot(ctx context.Context, name string, specification *godog.
 	}
 
 	return c.cluster.CreateNamedSnapshot(ctx, name, specification.Content)
+}
+
+func createConfigMap(ctx context.Context, name, namespace string, content *godog.DocString) error {
+	c := testenv.FetchState[ClusterState](ctx)
+
+	if err := mustBeUp(ctx, *c); err != nil {
+		return err
+	}
+
+	return c.cluster.CreateConfigMap(ctx, name, namespace, content.Content)
+}
+
+func createNamedNamespace(ctx context.Context, name string) error {
+	c := testenv.FetchState[ClusterState](ctx)
+
+	if err := mustBeUp(ctx, *c); err != nil {
+		return err
+	}
+
+	return c.cluster.CreateNamedNamespace(ctx, name)
 }
 
 func createNamedSnapshotWithManyComponents(ctx context.Context, name string, amount int, key string) (context.Context, error) {
@@ -366,6 +386,11 @@ func taskLogsShouldMatchTheSnapshot(ctx context.Context, stepName string) error 
 
 	vars["EC_VERSION"] = v
 
+	// Add Rekor URL for snapshot normalization
+	if rekorURL, err := rekor.StubRekor(ctx); err == nil {
+		vars["REKOR"] = rekorURL
+	}
+
 	for _, step := range info.Steps {
 		if step.Name == stepName {
 			return snaps.MatchSnapshot(ctx, step.Name, step.Logs, vars)
@@ -472,6 +497,56 @@ func stepEnvVarShouldBe(ctx context.Context, stepName, envName, want string) err
 	return fmt.Errorf("step %q not found when looking for the %q env var", stepName, envName)
 }
 
+// createBasicPolicyWithKnownKey creates a basic policy with ${known_PUBLIC_KEY}
+// Avoid some repetition in feature files that use the same policy repeatedly
+func createBasicPolicyWithKnownKey(ctx context.Context) error {
+	policyContent := `{"publicKey": ${known_PUBLIC_KEY}}`
+	return createPolicy(ctx, &godog.DocString{Content: policyContent})
+}
+
+// createSLSAProvenancePolicy creates a policy for SLSA provenance checking
+// Avoid some repetition in feature files that use the same policy repeatedly
+func createSLSAProvenancePolicy(ctx context.Context) error {
+	policyContent := `{
+  "sources": [
+    {
+      "policy": [
+        "github.com/conforma/policy//policy/release?ref=0de5461c14413484575e63e96ddb514d8ab954b5",
+        "github.com/conforma/policy//policy/lib?ref=0de5461c14413484575e63e96ddb514d8ab954b5"
+      ],
+      "config": {
+        "include": [
+          "slsa_provenance_available"
+        ]
+      }
+    }
+  ]
+}`
+	return createPolicy(ctx, &godog.DocString{Content: policyContent})
+}
+
+// createGoldenContainerPolicy creates the hardcoded policy used in golden container scenarios
+// Avoid some repetition in feature files that use the same policy repeatedly
+func createGoldenContainerPolicy(ctx context.Context) error {
+	policyContent := `{
+  "publicKey": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----",
+  "sources": [
+    {
+      "policy": [
+        "github.com/conforma/policy//policy/release?ref=0de5461c14413484575e63e96ddb514d8ab954b5",
+        "github.com/conforma/policy//policy/lib?ref=0de5461c14413484575e63e96ddb514d8ab954b5"
+      ],
+      "config": {
+        "include": [
+          "slsa_provenance_available"
+        ]
+      }
+    }
+  ]
+}`
+	return createPolicy(ctx, &godog.DocString{Content: policyContent})
+}
+
 // AddStepsTo adds cluster-related steps to the context
 func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step(`^a stub cluster running$`, startAndSetupState(stub.Start))
@@ -480,6 +555,9 @@ func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step(`^a snapshot artifact with content:$`, buildSnapshotArtifact)
 	sc.Step(`^policy configuration named "([^"]*)" with specification$`, createNamedPolicy)
 	sc.Step(`^a cluster policy with content:$`, createPolicy)
+	sc.Step(`^a basic policy with known public key$`, createBasicPolicyWithKnownKey)
+	sc.Step(`^a policy for SLSA provenance checking$`, createSLSAProvenancePolicy)
+	sc.Step(`^a golden container policy$`, createGoldenContainerPolicy)
 	sc.Step(`^version ([\d.]+) of the task named "([^"]*)" is run with parameters:$`, runTask)
 	sc.Step(`^version ([\d.]+) of the task named "([^"]*)" with workspace "([^"]*)" is run with parameters:$`, runTaskWithWorkspace)
 	sc.Step(`^the task should succeed$`, theTaskShouldSucceed)
@@ -493,6 +571,8 @@ func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step(`^the task results should match the snapshot$`, taskResultsShouldMatchTheSnapshot)
 	sc.Step(`^the task result "([^"]*)" should equal "([^"]*)"$`, taskResultShouldEqual)
 	sc.Step(`^policy configuration named "([^"]*)" with (\d+) policy sources from "([^"]*)"(?:, patched with)$`, createNamedPolicyWithManySources)
+	sc.Step(`^a namespace named "([^"]*)" exists$`, createNamedNamespace)
+	sc.Step(`^a ConfigMap "([^"]*)" in namespace "([^"]*)" with content:$`, createConfigMap)
 	// stop usage of the cluster once a test is done, godog will call this
 	// function on failure and on the last step, so more than once if the
 	// failure is not on the last step and once if there was no failure or the

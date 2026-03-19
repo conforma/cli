@@ -183,3 +183,7 @@ benchmark/*/data.tar.gz
 
 # JUnit file output from acceptance tests
 junit-acceptance.xml
+
+# Generated TUF ConfigMaps (now created just-in-time)
+hack/tuf/tuf-files-configmap.yaml
+hack/tuf/tuf-root-configmap.yaml
