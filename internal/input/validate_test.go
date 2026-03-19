@@ -139,11 +139,11 @@ func Test_ValidatePipeline(t *testing.T) {
 	}
 
 	appFS := afero.NewMemMapFs()
-	errEmptyDir := appFS.MkdirAll(emptyDir, 0777)
+	errEmptyDir := appFS.MkdirAll(emptyDir, 0o777)
 	assert.NoError(t, errEmptyDir)
-	errDir := appFS.MkdirAll(nonEmptyDir, 0777)
+	errDir := appFS.MkdirAll(nonEmptyDir, 0o777)
 	assert.NoError(t, errDir)
-	errFile := afero.WriteFile(appFS, validFile, []byte("data"), 0777)
+	errFile := afero.WriteFile(appFS, validFile, []byte("data"), 0o777)
 	assert.NoError(t, errFile)
 	ctx := utils.WithFS(context.Background(), appFS)
 	policy, err := policy.NewInputPolicy(ctx, "", "2023-01-01T00:00:00.00Z")

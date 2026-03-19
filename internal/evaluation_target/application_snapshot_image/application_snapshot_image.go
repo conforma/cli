@@ -461,7 +461,7 @@ func (a *ApplicationSnapshotImage) WriteInputFile(ctx context.Context) (string, 
 	log.Debugf("Created dir %s", inputDir)
 	inputJSONPath := path.Join(inputDir, "input.json")
 
-	f, err := fs.OpenFile(inputJSONPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0644)
+	f, err := fs.OpenFile(inputJSONPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o644)
 	if err != nil {
 		log.Debugf("Problem creating file in %s", inputDir)
 		return "", nil, err

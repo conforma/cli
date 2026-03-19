@@ -70,7 +70,7 @@ func TestChoosePolicyFile(t *testing.T) {
 			ctx := utils.WithFS(context.Background(), fs)
 
 			for _, f := range tt.files {
-				err := afero.WriteFile(fs, f, []byte(""), 0644)
+				err := afero.WriteFile(fs, f, []byte(""), 0o644)
 				assert.NoError(t, err)
 			}
 

@@ -158,7 +158,7 @@ func TestToJunit(t *testing.T) {
 				Suites: []junit.Testsuite{
 					{
 						Name:      "Name (registry.io/repository/image:tag)",
-						Timestamp: "0001-01-01T00:00:00Z",
+						Timestamp: "0o001-01-01T00:00:00Z",
 						Tests:     3,
 						Failures:  1,
 						Skipped:   1,

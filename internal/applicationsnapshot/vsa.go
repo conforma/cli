@@ -65,7 +65,7 @@ type SnapshotPredicate struct {
 type SnapshotPredicateWriter struct {
 	FS            afero.Fs    // defaults to afero.NewOsFs()
 	TempDirPrefix string      // defaults to "snapshot-predicate-"
-	FilePerm      os.FileMode // defaults to 0600
+	FilePerm      os.FileMode // defaults to 0o600
 }
 
 // NewSnapshotPredicateWriter creates a new application snapshot predicate file writer
