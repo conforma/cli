@@ -338,6 +338,9 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 
 			showSuccesses, _ := cmd.Flags().GetBool("show-successes")
 			showWarnings, _ := cmd.Flags().GetBool("show-warnings")
+			// Show policy docs link when validating from a snapshot file
+			// Don't show for single image validation (demos/tutorials)
+			showPolicyDocsLink := data.images != "" || data.filePath != ""
 
 			// worker is responsible for processing one component at a time from the jobs channel,
 			// and for emitting a corresponding result for the component on the results channel.
@@ -429,13 +432,14 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 			}
 
 			reportData := validate_utils.ReportData{
-				Snapshot:      data.snapshot,
-				Components:    components,
-				Policy:        data.policy,
-				PolicyInputs:  manyPolicyInput,
-				Expansion:     data.expansion,
-				ShowSuccesses: showSuccesses,
-				ShowWarnings:  showWarnings,
+				Snapshot:           data.snapshot,
+				Components:         components,
+				Policy:             data.policy,
+				PolicyInputs:       manyPolicyInput,
+				Expansion:          data.expansion,
+				ShowSuccesses:      showSuccesses,
+				ShowWarnings:       showWarnings,
+				ShowPolicyDocsLink: showPolicyDocsLink,
 			}
 			outputOpts := validate_utils.ReportOutputOptions{
 				Output:     data.output,
