@@ -1,4 +1,5 @@
 * xref:tasks.adoc[Tekton Tasks]
+** xref:collect-keyless-params.adoc[collect-keyless-params]
 ** xref:verify-conforma-konflux-ta.adoc[verify-conforma-konflux-ta]
 ** xref:verify-conforma-vsa-release-ta.adoc[verify-conforma-vsa-release-ta]
 ** xref:verify-enterprise-contract.adoc[verify-enterprise-contract]

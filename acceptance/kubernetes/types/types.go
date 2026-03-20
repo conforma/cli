@@ -31,6 +31,8 @@ type Cluster interface {
 	AwaitUntilTaskIsDone(context.Context) (bool, error)
 	TaskInfo(context.Context) (*TaskInfo, error)
 	CreateNamedSnapshot(context.Context, string, string) error
+	CreateNamedNamespace(context.Context, string) error
+	CreateConfigMap(context.Context, string, string, string) error
 	Registry(context.Context) (string, error)
 	BuildSnapshotArtifact(context.Context, string) (context.Context, error)
 }
