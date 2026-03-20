@@ -374,8 +374,38 @@ Feature: Verify Enterprise Contract Tekton Tasks
       | CERTIFICATE_IDENTITY    | conformacommunity@gmail.com   |
       | CERTIFICATE_OIDC_ISSUER | https://accounts.google.com   |
       | REKOR_HOST              | https://rekor.sigstore.dev    |
-      | IGNORE_REKOR            | false                         |
       | STRICT                  | true                          |
+    Then the task should succeed
+     And the task logs for step "report-json" should match the snapshot
+     And the task results should match the snapshot
+
+  Scenario: Keyless signing verification cosign v2 style with regexp params
+    Given a working namespace
+    Given a cluster policy with content:
+      ```
+      {
+        "sources": [
+          {
+            "policy": [
+              "github.com/conforma/policy//policy/release?ref=0de5461c14413484575e63e96ddb514d8ab954b5",
+              "github.com/conforma/policy//policy/lib?ref=0de5461c14413484575e63e96ddb514d8ab954b5"
+            ],
+            "config": {
+              "include": [
+                "slsa_provenance_available"
+              ]
+            }
+          }
+        ]
+      }
+      ```
+    When version 0.1 of the task named "verify-enterprise-contract" is run with parameters:
+      | IMAGES                         | {"components": [{"containerImage": "quay.io/conforma/test:keyless_v2@sha256:03a10dff06ae364ef9727d562e7077b135b00c7a978e571c4354519e6d0f23b8"}]} |
+      | POLICY_CONFIGURATION           | ${NAMESPACE}/${POLICY_NAME} |
+      | CERTIFICATE_IDENTITY_REGEXP    | ^conformacommunity@         |
+      | CERTIFICATE_OIDC_ISSUER_REGEXP | https://.*\.google\.com     |
+      | REKOR_HOST                     | https://rekor.sigstore.dev  |
+      | STRICT                         | true                        |
     Then the task should succeed
      And the task logs for step "report-json" should match the snapshot
      And the task results should match the snapshot
@@ -410,5 +440,38 @@ Feature: Verify Enterprise Contract Tekton Tasks
       | IGNORE_REKOR            | false                         |
       | STRICT                  | true                          |
     Then the task should succeed
+     And the task logs for step "report-json" should match the snapshot
+     And the task results should match the snapshot
+
+  # Confirm we can verify the signatures on a keylessly signed image signed with cosign v3
+  Scenario: Keyless signing verification cosign v3 style with regexp params
+    Given a working namespace
+    Given a cluster policy with content:
+      ```
+      {
+        "sources": [
+          {
+            "policy": [
+              "github.com/conforma/policy//policy/release?ref=0de5461c14413484575e63e96ddb514d8ab954b5",
+              "github.com/conforma/policy//policy/lib?ref=0de5461c14413484575e63e96ddb514d8ab954b5"
+            ],
+            "config": {
+              "include": [
+                "slsa_provenance_available"
+              ]
+            }
+          }
+        ]
+      }
+      ```
+    When version 0.1 of the task named "verify-enterprise-contract" is run with parameters:
+      | IMAGES                         | {"components": [{"containerImage": "quay.io/conforma/test:keyless_v3@sha256:712ca3a7fcd41fe6b3e6f434a31f738743b6c31f1d81ad458502d6b0239a8903"}]} |
+      | POLICY_CONFIGURATION           | ${NAMESPACE}/${POLICY_NAME}   |
+      # Let's make this one fail:
+      | CERTIFICATE_IDENTITY_REGEXP    | ^konformakommunity@           |
+      | CERTIFICATE_OIDC_ISSUER_REGEXP | https://.*\.google\.com       |
+      | REKOR_HOST                     | https://rekor.sigstore.dev    |
+      | STRICT                         | true                          |
+    Then the task should fail
      And the task logs for step "report-json" should match the snapshot
      And the task results should match the snapshot
