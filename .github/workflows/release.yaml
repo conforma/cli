@@ -148,17 +148,18 @@ jobs:
         env:
           TASK_REPO: quay.io/conforma/tekton-task
           IMAGE_REPO: quay.io/conforma/cli
-          TASKS: "tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml tasks/verify-conforma-konflux-ta/0.1/verify-conforma-konflux-ta.yaml"
+          TASKS: "tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml tasks/verify-conforma-konflux-ta/0.1/verify-conforma-konflux-ta.yaml tasks/collect-keyless-params/0.1/collect-keyless-params.yaml"
         run: make task-bundle-snapshot TASK_REPO=$TASK_REPO TASK_TAG=$TAG ADD_TASK_TAG="$TAG_TIMESTAMP snapshot" TASKS=<( yq e ".spec.steps[].image? = \"$IMAGE_REPO:$TAG\"" $TASKS | yq 'select(. != null)')
 
       - name: Registry login (quay.io/enterprise-contract)
         run: podman login -u ${{ secrets.BUNDLE_PUSH_USER_EC  }} -p ${{ secrets.BUNDLE_PUSH_PASS_EC }} quay.io
 
+        # This repo is deprecated and probably no one uses it any more. At some point we should stop updating it.
       - name: Create and push the tekton bundle (quay.io/enterprise-contract/ec-task-bundle)
         env:
           TASK_REPO: quay.io/enterprise-contract/ec-task-bundle
           IMAGE_REPO: quay.io/enterprise-contract/ec-cli
-          TASKS: "tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml tasks/verify-conforma-konflux-ta/0.1/verify-conforma-konflux-ta.yaml"
+          TASKS: "tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml tasks/verify-conforma-konflux-ta/0.1/verify-conforma-konflux-ta.yaml tasks/collect-keyless-params/0.1/collect-keyless-params.yaml"
         run: make task-bundle-snapshot TASK_REPO=$TASK_REPO TASK_TAG=$TAG ADD_TASK_TAG="$TAG_TIMESTAMP" TASKS=<( yq e ".spec.steps[].image? = \"$IMAGE_REPO:$TAG\"" $TASKS | yq 'select(. != null)')
 
       - name: Download statistics
