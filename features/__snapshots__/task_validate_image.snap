@@ -453,3 +453,70 @@ true
   "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":5,\"failures\":0,\"warnings\":0,\"result\":\"SUCCESS\"}\n"
 }
 ---
+
+[Collect keyless signing parameters from ConfigMap:collect-signing-params - 1]
+Reading ConfigMap konflux-info/cluster-config
+ConfigMap found, extracting keyless signing parameters
+results.keylessSigningEnabled: true
+results.defaultOIDCIssuer: https://kubernetes.default.svc.cluster.local
+results.rekorExternalUrl: https://rekor.example.com
+results.fulcioExternalUrl: https://fulcio.example.com
+results.tufExternalUrl: https://tuf.example.com
+results.buildIdentity: https://kubernetes.io/namespaces/openshift-pipelines/serviceaccounts/tekton-chains-controller
+results.buildIdentityRegexp: ^https://konflux-ci.dev/.*$
+
+---
+
+[Collect keyless signing parameters from ConfigMap with keyless signing disabled:collect-signing-params - 1]
+Reading ConfigMap konflux-info/cluster-config-2
+ConfigMap found, extracting keyless signing parameters
+enableKeylessSigning is not set, using default empty values
+results.keylessSigningEnabled: false
+results.defaultOIDCIssuer: 
+results.rekorExternalUrl: 
+results.fulcioExternalUrl: 
+results.tufExternalUrl: 
+results.buildIdentity: 
+results.buildIdentityRegexp: 
+
+---
+
+[Collect keyless signing parameters when there is a malformed ConfigMap:collect-signing-params - 1]
+Reading ConfigMap konflux-info/cluster-config-3
+ConfigMap found, extracting keyless signing parameters
+enableKeylessSigning is not set, using default empty values
+results.keylessSigningEnabled: false
+results.defaultOIDCIssuer: 
+results.rekorExternalUrl: 
+results.fulcioExternalUrl: 
+results.tufExternalUrl: 
+results.buildIdentity: 
+results.buildIdentityRegexp: 
+
+---
+
+[Collect keyless signing parameters when the ConfigMap does not exist:collect-signing-params - 1]
+Reading ConfigMap konflux-info/doesnt-exist-config
+ConfigMap not found, using default empty values
+results.keylessSigningEnabled: false
+results.defaultOIDCIssuer: 
+results.rekorExternalUrl: 
+results.fulcioExternalUrl: 
+results.tufExternalUrl: 
+results.buildIdentity: 
+results.buildIdentityRegexp: 
+
+---
+
+[Collect keyless signing parameters when the namespace does not exist:collect-signing-params - 1]
+Reading ConfigMap doesnt-exist-namespace/whatever
+ConfigMap not found, using default empty values
+results.keylessSigningEnabled: false
+results.defaultOIDCIssuer: 
+results.rekorExternalUrl: 
+results.fulcioExternalUrl: 
+results.tufExternalUrl: 
+results.buildIdentity: 
+results.buildIdentityRegexp: 
+
+---
