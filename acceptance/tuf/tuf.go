@@ -100,6 +100,7 @@ func initializeRoot(ctx context.Context) (context.Context, error) {
 }
 
 // Stub returns the `http://host:port` of the stubbed TUF.
+// This is used for CLI context (external WireMock)
 func Stub(ctx context.Context) (string, error) {
 	endpoint, err := wiremock.Endpoint(ctx)
 	if err != nil {

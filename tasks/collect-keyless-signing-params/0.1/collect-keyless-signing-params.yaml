@@ -1,0 +1,167 @@
+---
+# Copyright The Conforma Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: collect-keyless-signing-params
+  annotations:
+    tekton.dev/displayName: Collect Keyless Signing Parameters
+    tekton.dev/pipelines.minVersion: "0.12.1"
+    tekton.dev/tags: ec, keyless, signing, configuration
+  labels:
+    app.kubernetes.io/version: "0.1"
+
+spec:
+  description: |
+    Tekton task to collect Konflux configuration parameters related to
+    keyless signing using cosign. The task attempts to read the "cluster-config"
+    ConfigMap in the "konflux-info" namespace to extract signing parameters.
+
+    In case the ConfigMap is not found, the task will output empty strings for all parameters,
+    allowing the pipeline to continue without signing parameters.
+
+  params:
+    - name: configMapName
+      type: string
+      description: The name of the ConfigMap to read signing parameters from
+      default: cluster-config
+
+    - name: configMapNamespace
+      type: string
+      description: The namespace where the ConfigMap is located
+      default: konflux-info
+
+  results:
+    - name: defaultOIDCIssuer
+      type: string
+      description: |
+        A default OIDC issuer URL to be used for signing.
+
+    - name: rekorExternalUrl
+      type: string
+      description: |
+        The external URL of the Rekor transparency log.
+
+    - name: fulcioExternalUrl
+      type: string
+      description: |
+        The external URL of the Fulcio certificate authority.
+
+    - name: tufExternalUrl
+      type: string
+      description: |
+        The external URL of the TUF repository.
+
+    - name: buildIdentity
+      type: string
+      description: |
+        The build identity from the OIDC token claims, if applicable.
+
+    - name: buildIdentityRegexp
+      type: string
+      description: |
+        A regular expression to extract build identity from the OIDC token claims, if applicable.
+
+    - name: keylessSigningEnabled
+      type: string
+      description: |
+        A flag indicating whether keyless signing is enabled based on the presence of signing parameters.
+
+  stepTemplate:
+    securityContext:
+      runAsUser: 1001
+
+  steps:
+    - name: collect-signing-params
+      image: quay.io/conforma/cli:latest
+      computeResources:
+        limits:
+          memory: 128Mi
+          cpu: 50m
+        requests:
+          memory: 128Mi
+          cpu: 50m
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+
+        # Default value is "false"
+        keylessSigningEnabled="false"
+
+        # Default values are empty strings
+        defaultOIDCIssuer=""
+        rekorExternalUrl=""
+        fulcioExternalUrl=""
+        tufExternalUrl=""
+        buildIdentity=""
+        buildIdentityRegexp=""
+
+        # Read from the ConfigMap
+        echo "Reading ConfigMap ${configMapNamespace}/${configMapName}"
+        KFLX_CONFIG_PATH='/tmp/cluster-config.json'
+        if kubectl get configmap "${configMapName}" -n "${configMapNamespace}" -o json --ignore-not-found > "${KFLX_CONFIG_PATH}"; then
+            if [ -s "${KFLX_CONFIG_PATH}" ]; then
+                echo "ConfigMap found, extracting keyless signing parameters"
+
+                # First we read "keylessSigningEnabled"
+                keylessSigningEnabled=$(jq -r '.data.enableKeylessSigning // "false"' "$KFLX_CONFIG_PATH")
+
+                if [ "$keylessSigningEnabled" = "true" ]; then
+                  # If that is set to "true" then read the other values
+                  defaultOIDCIssuer=$(jq -r '.data.defaultOIDCIssuer // ""' "$KFLX_CONFIG_PATH")
+                  rekorExternalUrl=$(jq -r '.data.rekorExternalUrl // ""' "$KFLX_CONFIG_PATH")
+                  fulcioExternalUrl=$(jq -r '.data.fulcioExternalUrl // ""' "$KFLX_CONFIG_PATH")
+                  tufExternalUrl=$(jq -r '.data.tufExternalUrl // ""' "$KFLX_CONFIG_PATH")
+                  buildIdentity=$(jq -r '.data.buildIdentity // ""' "$KFLX_CONFIG_PATH")
+                  buildIdentityRegexp=$(jq -r '.data.buildIdentityRegexp // ""' "$KFLX_CONFIG_PATH")
+                else
+                  # Otherwise we ignore the rest of the ConfigMap
+                  echo "enableKeylessSigning is not set, using default empty values"
+                fi
+            else
+                # Because we used --ignore-not-found this doesn't produce an error
+                echo "ConfigMap not found, using default empty values"
+            fi
+        else
+            # Some error other than "not found"
+            # (Stderr from kubectl should be visible in the task log.)
+            echo "Problem reading ConfigMap, using default empty values"
+        fi
+
+        # Write to task results
+        echo -n "$keylessSigningEnabled" > "$(results.keylessSigningEnabled.path)"
+        echo -n "$defaultOIDCIssuer" > "$(results.defaultOIDCIssuer.path)"
+        echo -n "$rekorExternalUrl" > "$(results.rekorExternalUrl.path)"
+        echo -n "$fulcioExternalUrl" > "$(results.fulcioExternalUrl.path)"
+        echo -n "$tufExternalUrl" > "$(results.tufExternalUrl.path)"
+        echo -n "$buildIdentity" > "$(results.buildIdentity.path)"
+        echo -n "$buildIdentityRegexp" > "$(results.buildIdentityRegexp.path)"
+
+        # Output for troubleshooting/debugging
+        echo "results.keylessSigningEnabled: $keylessSigningEnabled"
+        echo "results.defaultOIDCIssuer: $defaultOIDCIssuer"
+        echo "results.rekorExternalUrl: $rekorExternalUrl"
+        echo "results.fulcioExternalUrl: $fulcioExternalUrl"
+        echo "results.tufExternalUrl: $tufExternalUrl"
+        echo "results.buildIdentity: $buildIdentity"
+        echo "results.buildIdentityRegexp: $buildIdentityRegexp"
+      env:
+        - name: configMapNamespace
+          value: "$(params.configMapNamespace)"
+        - name: configMapName
+          value: "$(params.configMapName)"

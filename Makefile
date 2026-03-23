@@ -118,6 +118,26 @@ test: ## Run all unit tests
 ACCEPTANCE_TIMEOUT:=20m
 .ONESHELL:
 .SHELLFLAGS=-e -c
+
+# Generate TUF ConfigMaps if they don't exist or source files are newer
+hack/tuf/tuf-files-configmap.yaml: acceptance/wiremock/recordings/tuf/__files/* acceptance/wiremock/recordings/tuf/mappings/* acceptance/tuf/root.json hack/tuf/create-tuf-files.sh
+	@echo "Generating TUF ConfigMaps..."
+	@hack/tuf/create-tuf-files.sh
+
+# The root ConfigMap is generated at the same time as the files ConfigMap
+hack/tuf/tuf-root-configmap.yaml: hack/tuf/tuf-files-configmap.yaml
+
+.PHONY: tuf-yaml-clean
+tuf-yaml-clean: ## Remove generated TUF ConfigMap YAML files
+	@echo "Cleaning TUF ConfigMap YAML files..."
+	@rm -f hack/tuf/tuf-files-configmap.yaml hack/tuf/tuf-root-configmap.yaml
+
+.PHONY: tuf-yaml-refresh
+tuf-yaml-refresh: tuf-yaml-clean tuf-yaml ## Force regeneration of TUF ConfigMap YAML files
+
+.PHONY: tuf-yaml
+tuf-yaml: hack/tuf/tuf-files-configmap.yaml hack/tuf/tuf-root-configmap.yaml ## Generate TUF ConfigMap YAML files for acceptance tests
+
 .PHONY: acceptance
 
 acceptance: ## Run all acceptance tests
@@ -130,13 +150,14 @@ acceptance: ## Run all acceptance tests
 	cp -R . "$$ACCEPTANCE_WORKDIR"; \
 	cd "$$ACCEPTANCE_WORKDIR" && \
 	$(MAKE) build && \
+	$(MAKE) tuf-yaml && \
 	export GOCOVERDIR="$${ACCEPTANCE_WORKDIR}/coverage"; \
 	cd acceptance && go test -timeout $(ACCEPTANCE_TIMEOUT) ./... ; go tool covdata textfmt -i=$${GOCOVERDIR} -o="$(ROOT_DIR)/coverage-acceptance.out"
 
 # Add @focus above the feature you're hacking on to use this
 # (Mainly for use with the feature-% target below)
 .PHONY: focus-acceptance
-focus-acceptance: build ## Run acceptance tests with @focus tag
+focus-acceptance: build tuf-yaml ## Run acceptance tests with @focus tag
 	@cd acceptance && go test . -args -tags=@focus
 
 # Uses sed hackery to insert a @focus tag and then remove it afterwards.
@@ -157,7 +178,7 @@ feature_%: ## Run acceptance tests for a single feature file, e.g. make feature_
 	fi
 
 # (Replace spaces with underscores in the scenario name.)
-scenario_%: build ## Run acceptance tests for a single scenario, e.g. make scenario_inline_policy
+scenario_%: build tuf-yaml ## Run acceptance tests for a single scenario, e.g. make scenario_inline_policy
 	@cd acceptance && go test -test.run 'TestFeatures/$*'
 
 benchmark/%/data.tar.gz:

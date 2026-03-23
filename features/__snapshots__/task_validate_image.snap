@@ -63,7 +63,7 @@ Error: Get "http://tuf.invalid/root.json": dial tcp: lookup tuf.invalid on 10.96
 ---
 
 [Initialize TUF succeeds:initialize-tuf - 1]
-${TIMESTAMP} INFO Step was skipped due to when expressions were evaluated to false.
+WARNING: Could not fetch signing_config.json from the TUF mirror (encountered error: getting info for target "signing_config.v0.2.json": target signing_config.v0.2.json not found). It is recommended to use a signing config file rather than provide service URLs when signing.
 
 ---
 
@@ -452,4 +452,170 @@ true
 {
   "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":5,\"failures\":0,\"warnings\":0,\"result\":\"SUCCESS\"}\n"
 }
+---
+
+[Keyless signing verification with local test image:detailed-report - 1]
+Success: true
+Result: SUCCESS
+Violations: 0, Warnings: 0, Successes: 5
+Component: 
+ImageRef: ${REGISTRY}/acceptance/ec-happy-day-keyless@sha256:${REGISTRY_acceptance/ec-happy-day-keyless:latest_DIGEST}
+
+
+---
+
+[Keyless signing verification with local test image:results - 1]
+{
+  "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":5,\"failures\":0,\"warnings\":0,\"result\":\"SUCCESS\"}\n"
+}
+---
+
+[Keyless signing verification with local test image using regexp params:detailed-report - 1]
+Success: true
+Result: SUCCESS
+Violations: 0, Warnings: 0, Successes: 5
+Component: 
+ImageRef: ${REGISTRY}/acceptance/ec-happy-day-keyless@sha256:${REGISTRY_acceptance/ec-happy-day-keyless:latest_DIGEST}
+
+
+---
+
+[Keyless signing verification with local test image using regexp params:results - 1]
+{
+  "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":5,\"failures\":0,\"warnings\":0,\"result\":\"SUCCESS\"}\n"
+}
+---
+
+[Collect keyless signing parameters when there is a malformed ConfigMap:collect-signing-params - 1]
+Reading ConfigMap konflux-info/cluster-config-3
+ConfigMap found, extracting keyless signing parameters
+enableKeylessSigning is not set, using default empty values
+results.keylessSigningEnabled: false
+results.defaultOIDCIssuer: 
+results.rekorExternalUrl: 
+results.fulcioExternalUrl: 
+results.tufExternalUrl: 
+results.buildIdentity: 
+results.buildIdentityRegexp: 
+
+---
+
+[Collect keyless signing parameters when the namespace does not exist:collect-signing-params - 1]
+Reading ConfigMap doesnt-exist-namespace/whatever
+ConfigMap not found, using default empty values
+results.keylessSigningEnabled: false
+results.defaultOIDCIssuer: 
+results.rekorExternalUrl: 
+results.fulcioExternalUrl: 
+results.tufExternalUrl: 
+results.buildIdentity: 
+results.buildIdentityRegexp: 
+
+---
+
+[Collect keyless signing parameters when the ConfigMap does not exist:collect-signing-params - 1]
+Reading ConfigMap konflux-info/doesnt-exist-config
+ConfigMap not found, using default empty values
+results.keylessSigningEnabled: false
+results.defaultOIDCIssuer: 
+results.rekorExternalUrl: 
+results.fulcioExternalUrl: 
+results.tufExternalUrl: 
+results.buildIdentity: 
+results.buildIdentityRegexp: 
+
+---
+
+[Collect keyless signing parameters from ConfigMap with keyless signing disabled:collect-signing-params - 1]
+Reading ConfigMap konflux-info/cluster-config-2
+ConfigMap found, extracting keyless signing parameters
+enableKeylessSigning is not set, using default empty values
+results.keylessSigningEnabled: false
+results.defaultOIDCIssuer: 
+results.rekorExternalUrl: 
+results.fulcioExternalUrl: 
+results.tufExternalUrl: 
+results.buildIdentity: 
+results.buildIdentityRegexp: 
+
+---
+
+[Collect keyless signing parameters from ConfigMap:collect-signing-params - 1]
+Reading ConfigMap konflux-info/cluster-config
+ConfigMap found, extracting keyless signing parameters
+results.keylessSigningEnabled: true
+results.defaultOIDCIssuer: https://kubernetes.default.svc.cluster.local
+results.rekorExternalUrl: https://rekor.example.com
+results.fulcioExternalUrl: https://fulcio.example.com
+results.tufExternalUrl: https://tuf.example.com
+results.buildIdentity: https://kubernetes.io/namespaces/openshift-pipelines/serviceaccounts/tekton-chains-controller
+results.buildIdentityRegexp: ^https://konflux-ci.dev/.*$
+
+---
+
+[Collect keyless signing parameters when there is a malformed ConfigMap:collect-signing-params - 1]
+Reading ConfigMap konflux-info/cluster-config-3
+ConfigMap found, extracting keyless signing parameters
+enableKeylessSigning is not set, using default empty values
+results.keylessSigningEnabled: false
+results.defaultOIDCIssuer: 
+results.rekorExternalUrl: 
+results.fulcioExternalUrl: 
+results.tufExternalUrl: 
+results.buildIdentity: 
+results.buildIdentityRegexp: 
+
+---
+
+[Collect keyless signing parameters when the namespace does not exist:collect-signing-params - 1]
+Reading ConfigMap doesnt-exist-namespace/whatever
+ConfigMap not found, using default empty values
+results.keylessSigningEnabled: false
+results.defaultOIDCIssuer: 
+results.rekorExternalUrl: 
+results.fulcioExternalUrl: 
+results.tufExternalUrl: 
+results.buildIdentity: 
+results.buildIdentityRegexp: 
+
+---
+
+[Collect keyless signing parameters when the ConfigMap does not exist:collect-signing-params - 1]
+Reading ConfigMap konflux-info/doesnt-exist-config
+ConfigMap not found, using default empty values
+results.keylessSigningEnabled: false
+results.defaultOIDCIssuer: 
+results.rekorExternalUrl: 
+results.fulcioExternalUrl: 
+results.tufExternalUrl: 
+results.buildIdentity: 
+results.buildIdentityRegexp: 
+
+---
+
+[Collect keyless signing parameters from ConfigMap with keyless signing disabled:collect-signing-params - 1]
+Reading ConfigMap konflux-info/cluster-config-2
+ConfigMap found, extracting keyless signing parameters
+enableKeylessSigning is not set, using default empty values
+results.keylessSigningEnabled: false
+results.defaultOIDCIssuer: 
+results.rekorExternalUrl: 
+results.fulcioExternalUrl: 
+results.tufExternalUrl: 
+results.buildIdentity: 
+results.buildIdentityRegexp: 
+
+---
+
+[Collect keyless signing parameters from ConfigMap:collect-signing-params - 1]
+Reading ConfigMap konflux-info/cluster-config
+ConfigMap found, extracting keyless signing parameters
+results.keylessSigningEnabled: true
+results.defaultOIDCIssuer: https://kubernetes.default.svc.cluster.local
+results.rekorExternalUrl: https://rekor.example.com
+results.fulcioExternalUrl: https://fulcio.example.com
+results.tufExternalUrl: https://tuf.example.com
+results.buildIdentity: https://kubernetes.io/namespaces/openshift-pipelines/serviceaccounts/tekton-chains-controller
+results.buildIdentityRegexp: ^https://konflux-ci.dev/.*$
+
 ---
