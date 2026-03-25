@@ -1,3 +1,5 @@
+# Makefile
+
 MAKEFLAGS+=-j --no-print-directory
 VERSION_FILE=./VERSION
 VERSION:=$$(hack/derive-version.sh)
