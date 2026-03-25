@@ -1,9 +1,29 @@
+# Copyright The Conforma Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+## Build
+
 FROM --platform=linux/amd64   quay.io/redhat-user-workloads/rhtap-contract-tenant/ec-v08/cli-v08@sha256:7d2ecffad4cee873caee676eda74c5acd6254e64bbca8280b1d69f0806426999 AS build-amd64
 FROM --platform=linux/arm64   quay.io/redhat-user-workloads/rhtap-contract-tenant/ec-v08/cli-v08@sha256:9f39e82fd59f414bc26207d18588c5ffbf8c9c0ca00e81e68f80f2c39db01657 AS build-arm64
 FROM --platform=linux/ppc64le quay.io/redhat-user-workloads/rhtap-contract-tenant/ec-v08/cli-v08@sha256:2e385572d9cc508288e5a4cc7a44c22de4266be860e725a7795d4402db1314c0 AS build-ppc64le
 FROM --platform=linux/s390x   quay.io/redhat-user-workloads/rhtap-contract-tenant/ec-v08/cli-v08@sha256:e725abfa91aa21d28d2ae5b5c5fa5544bcd3998b48c18d268d981c1ad51d3f1f AS build-s390x
 
-FROM registry.redhat.io/ubi9/go-toolset:9.7@sha256:799cc027d5ad58cdc156b65286eb6389993ec14c496cf748c09834b7251e78dc AS packager
+# Use "build" to avoid an error from the version checker in 
+# https://github.com/conforma/github-workflows/tree/main/golang-version-check
+FROM registry.access.redhat.com/ubi9/go-toolset:1.25.3@sha256:e8938564f866174a6d79e55dfe577c2ed184b1f53e91d782173fb69b07ce69ef AS build
 USER root
 RUN mkdir -p /binaries
 
@@ -48,7 +68,7 @@ RUN gzip -d /tmp/ec_windows_amd64.exe.gz && \
     rm /tmp/ec_windows_amd64.exe
 
 # Final minimal image with all binaries
-FROM registry.redhat.io/ubi9/ubi-minimal@sha256:69f5c9886ecb19b23e88275a5cd904c47dd982dfa370fbbd0c356d7b1047ef68
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:83006d535923fcf1345067873524a3980316f51794f01d8655be55d6e9387183
 
 LABEL description="Flat image containing Conforma CLI binaries for all platforms and architectures"
 LABEL io.k8s.description="Flat image containing Conforma CLI binaries for all platforms and architectures"
@@ -58,7 +78,7 @@ LABEL io.openshift.tags="conforma trusted-artifact-signer cli-stack"
 LABEL summary="Provides Conforma CLI binaries as tar.gz archives for CDN distribution."
 LABEL com.redhat.component="conforma-cli-stack"
 
-COPY --from=packager /binaries/ /binaries/
+COPY --from=build /binaries/ /binaries/
 COPY --from=build-amd64 /licenses/ /licenses/
 
 RUN chown -R root:0 /binaries && chmod -R g+r /binaries
