@@ -114,8 +114,8 @@
     "sources": [
       {
         "policy": [
-          "git::github.com/conforma/policy//policy/release?ref=d34eab36b23d43748e451004177ca144296bf323",
-          "git::github.com/conforma/policy//policy/lib?ref=d34eab36b23d43748e451004177ca144296bf323"
+          "git::github.com/conforma/policy//policy/release?ref=b1f08f104e7678a8f40ed792e40c0799c1198e7a",
+          "git::github.com/conforma/policy//policy/lib?ref=b1f08f104e7678a8f40ed792e40c0799c1198e7a"
         ],
         "config": {
           "include": [
@@ -144,8 +144,8 @@
     "sources": [
       {
         "policy": [
-          "git::github.com/conforma/policy//policy/release?ref=d34eab36b23d43748e451004177ca144296bf323",
-          "git::github.com/conforma/policy//policy/lib?ref=d34eab36b23d43748e451004177ca144296bf323"
+          "git::github.com/conforma/policy//policy/release?ref=b1f08f104e7678a8f40ed792e40c0799c1198e7a",
+          "git::github.com/conforma/policy//policy/lib?ref=b1f08f104e7678a8f40ed792e40c0799c1198e7a"
         ],
         "config": {
           "include": [

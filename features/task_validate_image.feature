@@ -16,8 +16,8 @@ Feature: Verify Enterprise Contract Tekton Tasks
         "sources": [
           {
             "policy": [
-              "github.com/conforma/policy//policy/release?ref=0de5461c14413484575e63e96ddb514d8ab954b5",
-              "github.com/conforma/policy//policy/lib?ref=0de5461c14413484575e63e96ddb514d8ab954b5"
+              "github.com/conforma/policy//policy/release?ref=release-v0.8",
+              "github.com/conforma/policy//policy/lib?ref=release-v0.8"
             ],
             "config": {
               "include": [
@@ -356,8 +356,8 @@ Feature: Verify Enterprise Contract Tekton Tasks
         "sources": [
           {
             "policy": [
-              "github.com/conforma/policy//policy/release?ref=0de5461c14413484575e63e96ddb514d8ab954b5",
-              "github.com/conforma/policy//policy/lib?ref=0de5461c14413484575e63e96ddb514d8ab954b5"
+              "github.com/conforma/policy//policy/release?ref=release-v0.8",
+              "github.com/conforma/policy//policy/lib?ref=release-v0.8"
             ],
             "config": {
               "include": [
@@ -389,8 +389,8 @@ Feature: Verify Enterprise Contract Tekton Tasks
         "sources": [
           {
             "policy": [
-              "github.com/conforma/policy//policy/release?ref=0de5461c14413484575e63e96ddb514d8ab954b5",
-              "github.com/conforma/policy//policy/lib?ref=0de5461c14413484575e63e96ddb514d8ab954b5"
+              "github.com/conforma/policy//policy/release?ref=release-v0.8",
+              "github.com/conforma/policy//policy/lib?ref=release-v0.8"
             ],
             "config": {
               "include": [

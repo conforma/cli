@@ -25,8 +25,8 @@ Feature: Verify Conforma Trusted Artifact Tekton Task
         "sources": [
           {
             "policy": [
-              "git::github.com/conforma/policy//policy/release?ref=d34eab36b23d43748e451004177ca144296bf323",
-              "git::github.com/conforma/policy//policy/lib?ref=d34eab36b23d43748e451004177ca144296bf323"
+              "git::github.com/conforma/policy//policy/release?ref=release-v0.8",
+              "git::github.com/conforma/policy//policy/lib?ref=release-v0.8"
             ],
             "config": {
               "include": [
@@ -65,7 +65,7 @@ Feature: Verify Conforma Trusted Artifact Tekton Task
     When version 0.1 of the task named "verify-conforma-konflux-ta" is run with parameters:
       | SNAPSHOT_FILENAME       | snapshotartifact                                                                                                                                                                                                                                                                                                                                                                                          |
       | SOURCE_DATA_ARTIFACT    | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST}                                                                                                                                                                                                                                                                                                                                     |
-      | POLICY_CONFIGURATION    | {"publicKey":"-----BEGIN PUBLIC KEY-----\\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\\n-----END PUBLIC KEY-----","sources":[{"policy":["git::github.com/conforma/policy//policy/release?ref=d34eab36b23d43748e451004177ca144296bf323","git::github.com/conforma/policy//policy/lib?ref=d34eab36b23d43748e451004177ca144296bf323"],"config":{"include":["slsa_provenance_available"]}}]} |
+      | POLICY_CONFIGURATION    | {"publicKey":"-----BEGIN PUBLIC KEY-----\\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\\n-----END PUBLIC KEY-----","sources":[{"policy":["git::github.com/conforma/policy//policy/release?ref=release-v0.8","git::github.com/conforma/policy//policy/lib?ref=release-v0.8"],"config":{"include":["slsa_provenance_available"]}}]} |
       | STRICT                  | true                                                                                                                                                                                                                                                                                                                                                                                                      |
       | IGNORE_REKOR            | true                                                                                                                                                                                                                                                                                                                                                                                                      |
       | ENABLE_VSA              | true                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -90,7 +90,7 @@ Feature: Verify Conforma Trusted Artifact Tekton Task
     When version 0.1 of the task named "verify-conforma-konflux-ta" is run with parameters:
       | SNAPSHOT_FILENAME       | snapshotartifact                                                                                    |
       | SOURCE_DATA_ARTIFACT    | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST} |
-      | POLICY_CONFIGURATION    | {"publicKey":"-----BEGIN PUBLIC KEY-----\\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\\n-----END PUBLIC KEY-----","sources":[{"policy":["git::github.com/conforma/policy//policy/release?ref=d34eab36b23d43748e451004177ca144296bf323","git::github.com/conforma/policy//policy/lib?ref=d34eab36b23d43748e451004177ca144296bf323"],"config":{"include":["slsa_provenance_available"]}}]} |
+      | POLICY_CONFIGURATION    | {"publicKey":"-----BEGIN PUBLIC KEY-----\\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\\n-----END PUBLIC KEY-----","sources":[{"policy":["git::github.com/conforma/policy//policy/release?ref=release-v0.8","git::github.com/conforma/policy//policy/lib?ref=release-v0.8"],"config":{"include":["slsa_provenance_available"]}}]} |
       | STRICT                  | true                                                                                                     |
       | IGNORE_REKOR            | true                                                                                                     |
       | TRUSTED_ARTIFACTS_DEBUG | "true"                                                                                                   |
