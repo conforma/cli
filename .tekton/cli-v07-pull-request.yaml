@@ -37,7 +37,7 @@ spec:
   - name: build-source-image
     value: "true"
   - name: build-args-file
-    value: quick-build-args.conf
+    value: main-pre-merge-build-args.conf
   - name: hermetic
     value: "true"
   - name: enable-cache-proxy
