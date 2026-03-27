@@ -177,8 +177,8 @@ ${____known_PUBLIC_KEY}
       include:
       - test.no_test_warnings
     policy:
-    - github.com/conforma/policy//policy/release
-    - github.com/conforma/policy//policy/lib
+    - github.com/conforma/policy//policy/release?ref=release-v0.7
+    - github.com/conforma/policy//policy/lib?ref=release-v0.7
 success: true
 
 ---
@@ -382,8 +382,8 @@ policy:
       include:
       - slsa_provenance_available
     policy:
-    - github.com/conforma/policy//policy/release
-    - github.com/conforma/policy//policy/lib
+    - github.com/conforma/policy//policy/release?ref=release-v0.7
+    - github.com/conforma/policy//policy/lib?ref=release-v0.7
     ruleData:
       key1: value1
       key2: value2
@@ -486,8 +486,8 @@ policy:
       include:
       - slsa_provenance_available
     policy:
-    - github.com/conforma/policy//policy/release
-    - github.com/conforma/policy//policy/lib
+    - github.com/conforma/policy//policy/release?ref=release-v0.7
+    - github.com/conforma/policy//policy/lib?ref=release-v0.7
 success: true
 
 ---
@@ -847,8 +847,8 @@ true
     "sources": [
       {
         "policy": [
-          "github.com/conforma/policy//policy/release",
-          "github.com/conforma/policy//policy/lib"
+          "github.com/conforma/policy//policy/release?ref=release-v0.7",
+          "github.com/conforma/policy//policy/lib?ref=release-v0.7"
         ],
         "config": {
           "include": [
@@ -1201,8 +1201,8 @@ true
     "sources": [
       {
         "policy": [
-          "github.com/conforma/policy//policy/release",
-          "github.com/conforma/policy//policy/lib"
+          "github.com/conforma/policy//policy/release?ref=release-v0.7",
+          "github.com/conforma/policy//policy/lib?ref=release-v0.7"
         ],
         "config": {
           "include": [

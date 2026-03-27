@@ -46,8 +46,8 @@ Feature: Verify Enterprise Contract Tekton Tasks
         "sources": [
           {
             "policy": [
-              "github.com/conforma/policy//policy/release",
-              "github.com/conforma/policy//policy/lib"
+              "github.com/conforma/policy//policy/release?ref=release-v0.7",
+              "github.com/conforma/policy//policy/lib?ref=release-v0.7"
             ],
             "config": {
               "include": [
@@ -77,8 +77,8 @@ Feature: Verify Enterprise Contract Tekton Tasks
         "sources": [
           {
             "policy": [
-              "github.com/conforma/policy//policy/release",
-              "github.com/conforma/policy//policy/lib"
+              "github.com/conforma/policy//policy/release?ref=release-v0.7",
+              "github.com/conforma/policy//policy/lib?ref=release-v0.7"
             ],
             "config": {
               "include": [
@@ -109,8 +109,8 @@ Feature: Verify Enterprise Contract Tekton Tasks
         "sources": [
           {
             "policy": [
-              "github.com/conforma/policy//policy/release",
-              "github.com/conforma/policy//policy/lib"
+              "github.com/conforma/policy//policy/release?ref=release-v0.7",
+              "github.com/conforma/policy//policy/lib?ref=release-v0.7"
             ],
             "config": {
               "include": [
@@ -146,8 +146,8 @@ Feature: Verify Enterprise Contract Tekton Tasks
         "sources": [
           {
             "policy": [
-              "github.com/conforma/policy//policy/release",
-              "github.com/conforma/policy//policy/lib"
+              "github.com/conforma/policy//policy/release?ref=release-v0.7",
+              "github.com/conforma/policy//policy/lib?ref=release-v0.7"
             ],
             "config": {
               "include": [
@@ -181,8 +181,8 @@ Feature: Verify Enterprise Contract Tekton Tasks
         "sources": [
           {
             "policy": [
-              "github.com/conforma/policy//policy/release",
-              "github.com/conforma/policy//policy/lib"
+              "github.com/conforma/policy//policy/release?ref=release-v0.7",
+              "github.com/conforma/policy//policy/lib?ref=release-v0.7"
             ],
             "config": {
               "include": [
