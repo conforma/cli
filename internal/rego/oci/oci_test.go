@@ -35,6 +35,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/registry"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/empty"
 	v1fake "github.com/google/go-containerregistry/pkg/v1/fake"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/partial"
@@ -62,6 +63,10 @@ func TestOCIBlob(t *testing.T) {
 		uri       *ast.Term
 		err       bool
 		remoteErr error
+		tagRef    bool // when true, mock Image() instead of Layer() for tag-based fetch
+		imageErr  error
+		noLayers  bool  // when true with tagRef, mock Image() to return an image with no layers
+		layersErr error // when set with tagRef, mock Image() to return a fake image that errors on Layers()
 	}{
 		{
 			name: "success",
@@ -99,6 +104,60 @@ func TestOCIBlob(t *testing.T) {
 			uri:  ast.StringTerm("registry.local/spam@sha256:4bbf56a3a9231f752d3b9c174637975f0f83ed2b15e65799837c571e4ef3374b"),
 			err:  true,
 		},
+		{
+			name:   "tag reference fetches first layer from image",
+			data:   `{"bomFormat": "CycloneDX", "specVersion": "1.6"}`,
+			uri:    ast.StringTerm("registry.local/spam:sha256-abc123def456.sbom"),
+			tagRef: true,
+		},
+		{
+			name:     "tag reference with image fetch error",
+			data:     `{"spam": "maps"}`,
+			uri:      ast.StringTerm("registry.local/spam:sha256-abc123def456.sbom"),
+			tagRef:   true,
+			imageErr: errors.New("image not found"),
+			err:      true,
+		},
+		{
+			name:     "tag reference with no layers",
+			data:     `{"spam": "maps"}`,
+			uri:      ast.StringTerm("registry.local/spam:sha256-abc123def456.sbom"),
+			tagRef:   true,
+			noLayers: true,
+			err:      true,
+		},
+		{
+			name:      "tag reference layers error",
+			data:      `{"spam": "maps"}`,
+			uri:       ast.StringTerm("registry.local/spam:sha256-abc123def456.sbom"),
+			tagRef:    true,
+			layersErr: errors.New("layers failed"),
+			err:       true,
+		},
+		{
+			name: "non-cosign tag reference returns nil without image fetch",
+			data: `{"spam": "maps"}`,
+			uri:  ast.StringTerm("registry.local/spam:latest"),
+			err:  true,
+		},
+		{
+			name: "non-cosign tag with cosign suffix but wrong format",
+			data: `{"spam": "maps"}`,
+			uri:  ast.StringTerm("registry.local/spam:release.sbom"),
+			err:  true,
+		},
+		{
+			name:   "tag reference fetches first layer from image with .att suffix",
+			data:   `{"bomFormat": "CycloneDX", "specVersion": "1.6"}`,
+			uri:    ast.StringTerm("registry.local/spam:sha256-abc123def456.att"),
+			tagRef: true,
+		},
+		{
+			name:   "tag reference fetches first layer from image with .sig suffix",
+			data:   `{"bomFormat": "CycloneDX", "specVersion": "1.6"}`,
+			uri:    ast.StringTerm("registry.local/spam:sha256-abc123def456.sig"),
+			tagRef: true,
+		},
 	}
 
 	for _, c := range cases {
@@ -106,7 +165,22 @@ func TestOCIBlob(t *testing.T) {
 			ClearCaches() // Clear cache before each subtest
 
 			client := fake.FakeClient{}
-			if c.remoteErr != nil {
+			if c.tagRef {
+				if c.imageErr != nil {
+					client.On("Image", mock.Anything).Return(nil, c.imageErr)
+				} else if c.noLayers {
+					client.On("Image", mock.Anything).Return(empty.Image, nil)
+				} else if c.layersErr != nil {
+					fakeImg := &v1fake.FakeImage{}
+					fakeImg.LayersReturns(nil, c.layersErr)
+					client.On("Image", mock.Anything).Return(fakeImg, nil)
+				} else {
+					layer := static.NewLayer([]byte(c.data), types.OCIUncompressedLayer)
+					img, imgErr := mutate.AppendLayers(empty.Image, layer)
+					require.NoError(t, imgErr)
+					client.On("Image", mock.Anything).Return(img, nil)
+				}
+			} else if c.remoteErr != nil {
 				client.On("Layer", mock.Anything, mock.Anything).Return(nil, c.remoteErr)
 			} else {
 				layer := static.NewLayer([]byte(c.data), types.OCIUncompressedLayer)

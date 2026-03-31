@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -67,6 +68,10 @@ const (
 )
 
 var maxTarEntrySize int64 = maxTarEntrySizeConst // Use var to allow override in tests
+
+// cosignTagPattern matches legacy cosign tag refs produced by ec.oci.image_tag_refs.
+// Format: sha256-<hex>.(sbom|att|sig) — e.g. "sha256-d34db33f...abcd.sbom"
+var cosignTagPattern = regexp.MustCompile(`:sha256-[0-9a-f]+\.(sbom|att|sig)$`)
 
 func registerOCIBlob() {
 	decl := rego.Function{
@@ -515,22 +520,70 @@ func ociBlobInternal(bctx rego.BuiltinContext, a *ast.Term, verifyDigest bool) (
 		}
 		logger.Debug("Starting blob retrieval")
 
+		client := oci.NewClient(bctx.Context)
+
+		var rawLayer v1.Layer
+		var expectedDigest string
 		ref, err := name.NewDigest(refStr)
 		if err != nil {
-			logger.WithFields(log.Fields{
-				"action": "new digest",
-				"error":  err,
-			}).Error("failed to create new digest")
-			return nil, nil //nolint:nilerr // intentional: return nil to signal failure without OPA error
-		}
-
-		rawLayer, err := oci.NewClient(bctx.Context).Layer(ref)
-		if err != nil {
-			logger.WithFields(log.Fields{
-				"action": "fetch layer",
-				"error":  err,
-			}).Error("failed to fetch OCI layer")
-			return nil, nil //nolint:nilerr
+			// Fall back to tag-based fetch: resolve the tag to an image and
+			// extract the first layer. This supports legacy cosign tag refs
+			// (e.g. .sbom, .att) returned by ec.oci.image_tag_refs.
+			if !cosignTagPattern.MatchString(refStr) {
+				logger.WithFields(log.Fields{
+					"action": "parse digest",
+					"error":  err,
+					// Debug, not Error: this is the expected path for non-cosign refs, not a failure.
+				}).Debug("ref is not a digest ref and not a cosign tag artifact")
+				return nil, nil //nolint:nilerr
+			}
+			tagRef, tagErr := name.ParseReference(refStr)
+			if tagErr != nil {
+				logger.WithFields(log.Fields{
+					"action": "parse reference",
+					"error":  tagErr,
+				}).Error("failed to parse reference")
+				return nil, nil //nolint:nilerr
+			}
+			img, imgErr := client.Image(tagRef)
+			if imgErr != nil {
+				logger.WithFields(log.Fields{
+					"action": "fetch image",
+					"error":  imgErr,
+				}).Error("failed to fetch image for tag reference")
+				return nil, nil //nolint:nilerr
+			}
+			layers, layersErr := img.Layers()
+			if layersErr != nil || len(layers) == 0 {
+				logger.WithFields(log.Fields{
+					"action": "get layers",
+					"error":  layersErr,
+				}).Error("failed to get layers from image")
+				return nil, nil //nolint:nilerr
+			}
+			rawLayer = layers[0]
+			layerDigest, digestErr := rawLayer.Digest()
+			if digestErr != nil {
+				logger.WithFields(log.Fields{
+					"action": "get layer digest",
+					"error":  digestErr,
+				}).Error("failed to get layer digest")
+				return nil, nil //nolint:nilerr
+			}
+			// For tag refs, digest verification is intentionally weak: it only checks
+			// transport integrity (computed vs registry-reported digest), not a
+			// caller-specified expectation, since there is no digest in the ref.
+			expectedDigest = layerDigest.String()
+		} else {
+			expectedDigest = ref.DigestStr()
+			rawLayer, err = client.Layer(ref)
+			if err != nil {
+				logger.WithFields(log.Fields{
+					"action": "fetch layer",
+					"error":  err,
+				}).Error("failed to fetch OCI layer")
+				return nil, nil //nolint:nilerr
+			}
 		}
 
 		layer, err := rawLayer.Uncompressed()
@@ -572,7 +625,6 @@ func ociBlobInternal(bctx rego.BuiltinContext, a *ast.Term, verifyDigest bool) (
 		// that's not as easy as it sounds, since it may require another
 		// io.Copy which could be inefficient. For now let's just skip it.
 		//
-		expectedDigest := ref.DigestStr()
 		if verifyDigest {
 			computedDigest := fmt.Sprintf("sha256:%x", hasher.Sum(nil))
 			if computedDigest != expectedDigest {
