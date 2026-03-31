@@ -10,8 +10,8 @@ require (
 	github.com/doiit/picocolors v1.0.1
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/gkampitakis/go-snaps v0.5.7
-	github.com/go-git/go-billy/v5 v5.6.2
-	github.com/go-git/go-git/v5 v5.16.5
+	github.com/go-git/go-billy/v5 v5.8.0
+	github.com/go-git/go-git/v5 v5.17.1
 	github.com/go-openapi/strfmt v0.25.0
 	github.com/google/go-containerregistry v0.20.7
 	github.com/in-toto/in-toto-golang v0.9.0
@@ -67,7 +67,7 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/census-instrumentation/opencensus-proto v0.4.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/cloudflare/circl v1.6.1 // indirect
+	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/cockroachdb/apd/v3 v3.2.1 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
