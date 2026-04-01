@@ -8,7 +8,7 @@ require (
 	github.com/cucumber/godog v0.15.0
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/doiit/picocolors v1.0.1
-	github.com/evanphx/json-patch/v5 v5.9.0
+	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/gkampitakis/go-snaps v0.5.7
 	github.com/go-git/go-billy/v5 v5.8.0
 	github.com/go-git/go-git/v5 v5.17.1
@@ -27,7 +27,7 @@ require (
 	github.com/sigstore/sigstore v1.10.4
 	github.com/stretchr/testify v1.11.1
 	github.com/tektoncd/cli v0.37.1
-	github.com/tektoncd/pipeline v0.70.0
+	github.com/tektoncd/pipeline v1.0.1
 	github.com/testcontainers/testcontainers-go v0.34.0
 	github.com/transparency-dev/merkle v0.0.2
 	github.com/wiremock/go-wiremock v1.11.0
@@ -248,7 +248,7 @@ require (
 	golang.org/x/term v0.38.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
-	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
+	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/api v0.260.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251222181119-0a764e51fe1b // indirect
@@ -264,7 +264,7 @@ require (
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
-	knative.dev/pkg v0.0.0-20250117084104-c43477f0052b // indirect
+	knative.dev/pkg v0.0.0-20250415155312-ed3e2158b883 // indirect
 	sigs.k8s.io/controller-runtime v0.19.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect

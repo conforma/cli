@@ -43,7 +43,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/stuart-warren/yamlfmt v0.2.0
-	github.com/tektoncd/pipeline v0.70.0
+	github.com/tektoncd/pipeline v1.0.1
 	github.com/testcontainers/testcontainers-go v0.34.1-0.20241204123437-72be13940122 // using unreleased version that contains the fix in https://github.com/testcontainers/testcontainers-go/pull/2899
 	github.com/testcontainers/testcontainers-go/modules/registry v0.34.0
 	golang.org/x/benchmarks v0.0.0-20241115175113-a2b48b605b42
@@ -193,7 +193,7 @@ require (
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.36.0 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.3.0 // indirect
-	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
+	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
@@ -405,7 +405,7 @@ require (
 	golang.org/x/term v0.39.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	golang.org/x/tools v0.40.0 // indirect
-	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
+	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/api v0.260.0 // indirect
 	google.golang.org/genproto v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
@@ -418,7 +418,7 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
-	knative.dev/pkg v0.0.0-20250117084104-c43477f0052b // indirect
+	knative.dev/pkg v0.0.0-20250415155312-ed3e2158b883 // indirect
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 	sigs.k8s.io/controller-runtime v0.19.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
