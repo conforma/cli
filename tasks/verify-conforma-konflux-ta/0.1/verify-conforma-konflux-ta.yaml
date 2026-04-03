@@ -390,6 +390,7 @@ spec:
           --timeout=0
           --strict=false
           --show-successes=true
+          --show-policy-docs-link=true
           --effective-time="${EFFECTIVE_TIME}"
           --extra-rule-data="${EXTRA_RULE_DATA}"
           --retry-max-wait="${RETRY_MAX_WAIT}"
