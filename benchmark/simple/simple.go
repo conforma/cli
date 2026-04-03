@@ -97,9 +97,6 @@ func ec(dir string) func() {
 }`, dir)
 
 	return func() {
-
-		os.Setenv("EC_CACHE", "false")
-
 		if err := suite.Execute([]string{
 			"validate",
 			"image",

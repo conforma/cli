@@ -19,7 +19,6 @@
 package oci
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -27,12 +26,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/registry"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/random"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/types"
@@ -101,25 +100,21 @@ func TestCreateRemoteOptions(t *testing.T) {
 	}
 }
 
-func TestCacheInit(t *testing.T) {
-	// by default the cache should be on
-	assert.NotNil(t, initCache())
-
-	t.Setenv("EC_CACHE", "false")
-	assert.Nil(t, initCache())
-
-	t.Cleanup(func() {
-		t.Setenv("EC_CACHE", "true")
-		assert.NotNil(t, initCache())
-	})
+func readAndVerifyLayer(t *testing.T, l v1.Layer) {
+	t.Helper()
+	r, err := l.Uncompressed()
+	require.NoError(t, err)
+	defer r.Close()
+	_, err = io.ReadAll(r)
+	require.NoError(t, err)
 }
 
 func TestImage(t *testing.T) {
-	img, err := random.Image(4096, 2)
+	const numLayers = 2
+	img, err := random.Image(4096, numLayers)
 	require.NoError(t, err)
 
-	l := &bytes.Buffer{}
-	registry := httptest.NewServer(registry.New(registry.Logger(log.New(l, "", 0))))
+	registry := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
 	t.Cleanup(registry.Close)
 
 	u, err := url.Parse(registry.URL)
@@ -130,35 +125,24 @@ func TestImage(t *testing.T) {
 
 	require.NoError(t, remote.Push(ref, img))
 
-	fetchFully := func() {
-		client := defaultClient{}
+	client := defaultClient{ctx: context.Background()}
+	fetched, err := client.Image(ref)
+	require.NoError(t, err)
 
-		img, err := client.Image(ref)
-		require.NoError(t, err)
-		layers, err := img.Layers()
-		require.NoError(t, err)
-		for _, l := range layers {
-			r, err := l.Uncompressed()
-			require.NoError(t, err)
-			_, err = io.ReadAll(r)
-			require.NoError(t, err)
-		}
+	layers, err := fetched.Layers()
+	require.NoError(t, err)
+	assert.Len(t, layers, numLayers)
+
+	for _, l := range layers {
+		readAndVerifyLayer(t, l)
 	}
-
-	fetchFully()
-	fetchFully()
-	fetchFully()
-
-	blobDownloadCount := strings.Count(l.String(), "GET /v2/repository/image/blobs/sha256:")
-	assert.Equal(t, 5, blobDownloadCount) // three configs fetched each time and two layers fetched only once
 }
 
 func TestLayer(t *testing.T) {
 	layer, err := random.Layer(1024, types.OCIUncompressedLayer)
 	require.NoError(t, err)
 
-	l := &bytes.Buffer{}
-	registry := httptest.NewServer(registry.New(registry.Logger(log.New(l, "", 0))))
+	registry := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
 	t.Cleanup(registry.Close)
 
 	u, err := url.Parse(registry.URL)
@@ -174,24 +158,14 @@ func TestLayer(t *testing.T) {
 	require.NoError(t, err)
 	layerURI := fmt.Sprintf("%s@%s", uri, digest)
 
-	fetchCount := 5
-	for i := 0; i < fetchCount; i++ {
-		d, err := name.NewDigest(layerURI)
-		require.NoError(t, err)
+	d, err := name.NewDigest(layerURI)
+	require.NoError(t, err)
 
-		client := defaultClient{}
-		l, err := client.Layer(d)
+	client := defaultClient{ctx: context.Background()}
+	fetched, err := client.Layer(d)
+	require.NoError(t, err)
 
-		require.NoError(t, err)
-		r, err := l.Uncompressed()
-		require.NoError(t, err)
-		_, err = io.ReadAll(r)
-		require.NoError(t, err)
-	}
-
-	msg := fmt.Sprintf("GET /v2/repository/image/blobs/%s", digest)
-	blobDownloadCount := strings.Count(l.String(), msg)
-	assert.Equal(t, fetchCount, blobDownloadCount)
+	readAndVerifyLayer(t, fetched)
 }
 
 func TestScopedAuth(t *testing.T) {

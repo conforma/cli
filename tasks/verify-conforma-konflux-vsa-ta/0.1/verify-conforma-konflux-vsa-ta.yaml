@@ -290,8 +290,6 @@ spec:
         - name: SSL_CERT_DIR
           value: >-
             /tekton-custom-certs:/etc/ssl/certs:/etc/pki/tls/certs:/system/etc/security/cacerts:$(params.SSL_CERT_DIR)
-        - name: EC_CACHE
-          value: "false"
       computeResources:
         requests:
           cpu: 100m
@@ -371,12 +369,6 @@ spec:
           # trailing ":" - this is ok.
           value: >-
             /tekton-custom-certs:/etc/ssl/certs:/etc/pki/tls/certs:/system/etc/security/cacerts:$(params.SSL_CERT_DIR)
-        # The EC cache is used to avoid fetching the same image layers
-        # from the registry more than once. However, this is not thread
-        # safe. This results in inconsistencies when extracting files from
-        # an image, see https://github.com/conforma/cli/issues/1109
-        - name: EC_CACHE
-          value: "false"
       computeResources:
         requests:
           cpu: 100m
