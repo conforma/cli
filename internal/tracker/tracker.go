@@ -36,7 +36,7 @@ const ociPrefix = "oci://"
 type taskRecord struct {
 	Ref string `json:"ref"`
 	// ExpiresOn should be omitted if there isn't a value. Not using a pointer means it will always
-	// have a value, e.g. 0001-01-01T00:00:00Z.
+	// have a value, e.g. 0o001-01-01T00:00:00Z.
 	ExpiresOn  *time.Time `json:"expires_on,omitempty"`
 	Tag        string     `json:"-"`
 	Repository string     `json:"-"`

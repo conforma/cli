@@ -138,8 +138,8 @@ func TestInspectDir(t *testing.T) {
 			for path, value := range files {
 				fullpath := filepath.Join(policiesDir, path)
 				dir := filepath.Dir(fullpath)
-				require.NoError(t, fs.MkdirAll(dir, 0755))
-				require.NoError(t, afero.WriteFile(fs, fullpath, []byte(value), 0660))
+				require.NoError(t, fs.MkdirAll(dir, 0o755))
+				require.NoError(t, afero.WriteFile(fs, fullpath, []byte(value), 0o660))
 			}
 
 			if c.symlink {
@@ -232,7 +232,7 @@ func TestCheckRules(t *testing.T) {
 	for _, c := range cases[len(cases)-1:] {
 		t.Run(c.name, func(t *testing.T) {
 			tmp := t.TempDir()
-			require.NoError(t, os.WriteFile(path.Join(tmp, "rules.rego"), []byte(c.rego), 0600))
+			require.NoError(t, os.WriteFile(path.Join(tmp, "rules.rego"), []byte(c.rego), 0o600))
 
 			_, err := InspectDir(afero.NewOsFs(), tmp)
 			if c.err != "" {

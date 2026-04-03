@@ -100,12 +100,12 @@ func Launch(data string) (suite.Closer, error) {
 		return nil, err
 	}
 
-	if err := os.Chmod(dir, 0755); err != nil {
+	if err := os.Chmod(dir, 0o755); err != nil {
 		return closer.Close, err
 	}
 
 	certPath := path.Join(dir, "fake_quay.cer")
-	if err := os.WriteFile(certPath, certificate, 0600); err != nil {
+	if err := os.WriteFile(certPath, certificate, 0o600); err != nil {
 		return closer.Close, err
 	}
 
@@ -113,7 +113,7 @@ func Launch(data string) (suite.Closer, error) {
 		return closer.Close, err
 	}
 
-	if err := os.WriteFile(path.Join(dir, "fake_quay.key"), key, 0600); err != nil {
+	if err := os.WriteFile(path.Join(dir, "fake_quay.key"), key, 0o600); err != nil {
 		return closer.Close, err
 	}
 

@@ -157,7 +157,7 @@ func (k *kindCluster) BuildSnapshotArtifact(ctx context.Context, content string)
 	filePath := "snapshotartifact"
 
 	// #nosec G306 -- reduce-snapshot.sh needs these permissions
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
 		return ctx, fmt.Errorf("failed to write JSON to file: %w", err)
 	}
 

@@ -76,7 +76,7 @@ func Persist(ctx context.Context) (bool, error) {
 		return true, fmt.Errorf("unable to store JSON data in .persisted file: %v", err.Error())
 	}
 
-	err = persister(persistedFile, b, 0644)
+	err = persister(persistedFile, b, 0o644)
 	if err != nil {
 		return true, fmt.Errorf("unable to write to %s file: %v", persistedFile, err.Error())
 	}

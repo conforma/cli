@@ -137,7 +137,7 @@ func trackBundleCmd(track trackBundleFn, pullImage pullImageFn, pushImage pushIm
 			case strings.HasPrefix(params.output, "oci:"):
 				err = pushImage(cmd.Context(), strings.TrimPrefix(params.output, "oci:"), out, invocation)
 			default:
-				err = afero.WriteFile(fs, params.output, out, 0666)
+				err = afero.WriteFile(fs, params.output, out, 0o666)
 			}
 
 			if err != nil {

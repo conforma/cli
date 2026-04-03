@@ -49,7 +49,7 @@ func Test_JSONDiffWithRegex(t *testing.T) {
 			name:     "passing",
 			expected: expected,
 			right: `{
-				"a": "0123",
+				"a": "0o123",
 				"b": {
 					"c": "a0B",
 					"d": [
@@ -63,7 +63,7 @@ func Test_JSONDiffWithRegex(t *testing.T) {
 			name:     "failing nested",
 			expected: expected,
 			right: `{
-				"a": "0123",
+				"a": "0o123",
 				"b": {
 					"c": "a0B",
 					"d": [

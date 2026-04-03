@@ -295,11 +295,11 @@ func TestGoGetterDownload(t *testing.T) {
 			tmpDir: "/tmp/test",
 			setupFS: func(fs afero.Fs, destDir string) error {
 				// Create the downloaded directory structure
-				if err := fs.MkdirAll(destDir, 0755); err != nil {
+				if err := fs.MkdirAll(destDir, 0o755); err != nil {
 					return err
 				}
 				// Create a policy.yaml file that choosePolicyFile can find
-				return afero.WriteFile(fs, path.Join(destDir, "policy.yaml"), []byte("test config"), 0644)
+				return afero.WriteFile(fs, path.Join(destDir, "policy.yaml"), []byte("test config"), 0o644)
 			},
 			mockDownloader: func(m *mockDownloader, destDir string) {
 				// Mock successful download
@@ -313,11 +313,11 @@ func TestGoGetterDownload(t *testing.T) {
 			src:    "https://github.com/example/policy2",
 			tmpDir: "/tmp/test2",
 			setupFS: func(fs afero.Fs, destDir string) error {
-				if err := fs.MkdirAll(destDir, 0755); err != nil {
+				if err := fs.MkdirAll(destDir, 0o755); err != nil {
 					return err
 				}
 				// Create .ec/policy.json file (higher priority)
-				return afero.WriteFile(fs, path.Join(destDir, ".ec/policy.json"), []byte(`{"policy": "config"}`), 0644)
+				return afero.WriteFile(fs, path.Join(destDir, ".ec/policy.json"), []byte(`{"policy": "config"}`), 0o644)
 			},
 			mockDownloader: func(m *mockDownloader, destDir string) {
 				m.On("Download", mock.Anything, destDir, "https://github.com/example/policy2", false).
