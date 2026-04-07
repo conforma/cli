@@ -459,32 +459,32 @@ func checkOpts(ctx context.Context, p *policy) (*cosign.CheckOpts, error) {
 		log.Debug("Using keyless workflow")
 		log.Debugf("TUF_ROOT=%s", os.Getenv("TUF_ROOT"))
 		opts.Identities = []cosign.Identity{p.identity}
+	}
 
-		if !hasSigstoreEnvOverrides() {
-			if trustedRoot, trErr := cosign.TrustedRoot(); trErr == nil {
-				log.Debug("Using trusted root from TUF for verification")
-				opts.TrustedMaterial = trustedRoot
-			} else {
-				log.Debugf("Could not fetch trusted_root.json from TUF, falling back to individual targets: %v", trErr)
-			}
+	if !hasSigstoreEnvOverrides() {
+		if trustedRoot, trErr := cosign.TrustedRoot(); trErr == nil {
+			log.Debug("Using trusted root from TUF for verification")
+			opts.TrustedMaterial = trustedRoot
 		} else {
-			log.Debug("Sigstore env overrides detected, skipping trusted root from TUF")
+			log.Debugf("Could not fetch trusted_root.json from TUF, falling back to individual targets: %v", trErr)
 		}
+	} else {
+		log.Debug("Sigstore env overrides detected, skipping trusted root from TUF")
+	}
 
-		if opts.TrustedMaterial == nil {
-			if opts.RootCerts, err = fulcio.GetRoots(); err != nil {
-				return nil, err
-			}
-			log.Debug("Fetched Fulcio root certificates")
-			if opts.IntermediateCerts, err = fulcio.GetIntermediates(); err != nil {
-				return nil, err
-			}
-			log.Debug("Fetched Fulcio intermediate certificates")
-			if opts.CTLogPubKeys, err = cosign.GetCTLogPubs(ctx); err != nil {
-				return nil, err
-			}
-			log.Debug("Fetched CT log public keys")
+	if p.PublicKey == "" && opts.TrustedMaterial == nil {
+		if opts.RootCerts, err = fulcio.GetRoots(); err != nil {
+			return nil, err
 		}
+		log.Debug("Fetched Fulcio root certificates")
+		if opts.IntermediateCerts, err = fulcio.GetIntermediates(); err != nil {
+			return nil, err
+		}
+		log.Debug("Fetched Fulcio intermediate certificates")
+		if opts.CTLogPubKeys, err = cosign.GetCTLogPubs(ctx); err != nil {
+			return nil, err
+		}
+		log.Debug("Fetched CT log public keys")
 	}
 
 	opts.IgnoreTlog = p.ignoreRekor

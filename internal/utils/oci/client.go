@@ -20,16 +20,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"path"
 	"runtime/trace"
-	"strconv"
-	"sync"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/cache"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/sigstore/cosign/v3/pkg/cosign"
 	"github.com/sigstore/cosign/v3/pkg/oci"
@@ -42,28 +37,6 @@ import (
 type contextKey string
 
 const clientContextKey contextKey = "ec.oci.client"
-
-var imgCache = sync.OnceValue(initCache)
-
-func initCache() cache.Cache {
-	// if a value was set and it is parsed as false, turn the cache off
-	if v, err := strconv.ParseBool(os.Getenv("EC_CACHE")); err == nil && !v {
-		return nil
-	}
-
-	if userCache, err := os.UserCacheDir(); err != nil {
-		log.Debug("unable to find user cache directory")
-		return nil
-	} else {
-		imgCacheDir := path.Join(userCache, "ec", "images")
-		if err := os.MkdirAll(imgCacheDir, 0700); err != nil {
-			log.Debugf("unable to create temporary directory for image cache in %q: %v", imgCacheDir, err)
-			return nil
-		}
-		log.Debugf("using %q directory to store image cache", imgCacheDir)
-		return cache.NewFilesystemCache(imgCacheDir)
-	}
-}
 
 func CreateRemoteOptions(ctx context.Context) []remote.Option {
 	backoff := remote.Backoff{
@@ -217,16 +190,7 @@ func (c *defaultClient) Image(ref name.Reference) (v1.Image, error) {
 		trace.Logf(c.ctx, "", "image=%q", ref)
 	}
 
-	img, err := remote.Image(ref, c.opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	if c := imgCache(); c != nil {
-		img = cache.Image(img, c)
-	}
-
-	return img, nil
+	return remote.Image(ref, c.opts...)
 }
 
 func (c *defaultClient) Layer(ref name.Digest) (v1.Layer, error) {
@@ -236,8 +200,6 @@ func (c *defaultClient) Layer(ref name.Digest) (v1.Layer, error) {
 		trace.Logf(c.ctx, "", "image=%q", ref)
 	}
 
-	// TODO: Caching a layer directly is difficult and may not be possible, see:
-	//   https://github.com/google/go-containerregistry/issues/1821
 	layer, err := remote.Layer(ref, c.opts...)
 	if err != nil {
 		return nil, fmt.Errorf("fetching layer: %w", err)

@@ -102,9 +102,6 @@ naYJRuLprwIv6FDhZ5yFjYUEtsmoNcW7rx2KM6FOXGsCX3BNc7qhHELT+g==
 }`, dir)
 
 	return func() {
-
-		os.Setenv("EC_CACHE", "false")
-
 		if err := suite.Execute([]string{
 			"validate",
 			"image",
