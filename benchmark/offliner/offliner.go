@@ -1,3 +1,5 @@
+//go:build benchmark
+
 // Copyright The Conforma Contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -51,7 +53,7 @@ func items(sourceImages []name.Reference, destination name.Registry) map[string]
 
 func main() {
 	if len(os.Args) != 3 {
-		fmt.Fprintf(os.Stderr, "Usage: %s <image> <directory>\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s <image> <directory>", os.Args[0])
 		os.Exit(1)
 	}
 

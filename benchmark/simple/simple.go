@@ -1,3 +1,5 @@
+//go:build benchmark
+
 // Copyright The Conforma Contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -77,7 +79,10 @@ func ec(dir string) func() {
 }`
 
 	policy := fmt.Sprintf(`{
-"publicKey": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZP/0htjhVt2y0ohjgtIIgICOtQtA\nnaYJRuLprwIv6FDhZ5yFjYUEtsmoNcW7rx2KM6FOXGsCX3BNc7qhHELT+g==\n-----END PUBLIC KEY-----",
+"publicKey": "-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZP/0htjhVt2y0ohjgtIIgICOtQtA
+naYJRuLprwIv6FDhZ5yFjYUEtsmoNcW7rx2KM6FOXGsCX3BNc7qhHELT+g==
+-----END PUBLIC KEY-----",
 "sources": [
 {
   "data": [
