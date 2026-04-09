@@ -376,7 +376,7 @@ debug-version:
 
 # It's not so hard to do this by hand, but let's save some typing
 bump-minor-version:
-	@yq '(((. * 10) + 1) / 10)' -i $(VERSION_FILE) && \
+	@yq '(. | to_string | split(".") | .[0] + "." + (.[1] | to_number + 1 | to_string))' -i $(VERSION_FILE) && \
 	  git add $(VERSION_FILE) && \
 	  git commit $(VERSION_FILE) \
 	    -m "Bump minor version to $$(cat $(VERSION_FILE))" \
