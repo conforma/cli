@@ -1,10 +1,14 @@
 
-[inspecting a data source with a merge error:stdout - 1]
-
+[inspecting a data source:stdout - 1]
+{
+  "rule_data": {
+    "banana_fail_reason": "spider attack"
+  },
+  "spam_count": 42
+}
 ---
 
-[inspecting a data source with a merge error:stderr - 1]
-Error: Merge error. The 'rule_data' key was found more than once!
+[inspecting a data source:stderr - 1]
 
 ---
 
@@ -48,6 +52,15 @@ Error: Merge error. The 'rule_data' key was found more than once!
 
 ---
 
+[short names output:stdout - 1]
+kitty.purr
+
+---
+
+[short names output:stderr - 1]
+
+---
+
 [default output:stdout - 1]
 # Source: git::${GITHOST}/git/policy.git?ref=${LATEST_COMMIT}
 
@@ -63,25 +76,12 @@ Fluffy
 
 ---
 
-[inspecting a data source:stdout - 1]
-{
-  "rule_data": {
-    "banana_fail_reason": "spider attack"
-  },
-  "spam_count": 42
-}
----
-
-[inspecting a data source:stderr - 1]
+[inspecting a data source with a merge error:stdout - 1]
 
 ---
 
-[short names output:stdout - 1]
-kitty.purr
-
----
-
-[short names output:stderr - 1]
+[inspecting a data source with a merge error:stderr - 1]
+Error: Merge error. The 'rule_data' key was found more than once!
 
 ---
 

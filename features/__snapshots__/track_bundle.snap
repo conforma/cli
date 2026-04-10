@@ -1,16 +1,4 @@
 
-[:stdout - 1]
-/-/-/-/
-trusted_tasks:
-  oci://${REGISTRY}/acceptance/bundle:tag:
-    - ref: sha256:${REGISTRY_acceptance/bundle:tag_DIGEST}
-
----
-
-[:stderr - 1]
-
----
-
 [Fresh tags:stdout - 1]
 /-/-/-/
 trusted_tasks:
@@ -37,65 +25,39 @@ trusted_tasks:
 
 ---
 
-[Pipeline definition is ignored on its own:stdout - 1]
-/-/-/-/
-{}
-
----
-
-[Pipeline definition is ignored on its own:stderr - 1]
-
----
-
-[Track git references:stdout - 1]
+[:stdout - 1]
 /-/-/-/
 trusted_tasks:
-  git+https://github.com/konflux-ci/build-definitions.git//task/buildah/0.1/buildah.yaml:
-    - ref: 3672a457e3e89c0591369f609eba727b8e84108f
-
----
-
-[Track git references:stderr - 1]
-
----
-
-[track tekton-task alias:stdout - 1]
-/-/-/-/
-trusted_tasks:
-  git+https://github.com/konflux-ci/build-definitions.git//task/buildah/0.1/buildah.yaml:
-    - ref: 3672a457e3e89c0591369f609eba727b8e84108f
   oci://${REGISTRY}/acceptance/bundle:tag:
     - ref: sha256:${REGISTRY_acceptance/bundle:tag_DIGEST}
 
 ---
 
-[track tekton-task alias:stderr - 1]
+[:stderr - 1]
 
 ---
 
-[Track git references:stdout - 2]
+[Track git references, with prune:stdout - 1]
 /-/-/-/
 trusted_tasks:
   git+https://forge.io/organization/repository.git//task/0.1/task.yaml:
-    - ref: f0cacc1af00d
+    - ref: f0cacc1a
 
 ---
 
-[Track git references:stderr - 2]
+[Track git references, with prune:stderr - 1]
 
 ---
 
-[Track tekton-task alias:stdout - 1]
+[Track git references, with freshen:stdout - 1]
 /-/-/-/
 trusted_tasks:
-  git+https://github.com/konflux-ci/build-definitions.git//task/buildah/0.1/buildah.yaml:
-    - ref: 3672a457e3e89c0591369f609eba727b8e84108f
-  oci://${REGISTRY}/acceptance/bundle:tag:
-    - ref: sha256:${REGISTRY_acceptance/bundle:tag_DIGEST}
+  git+https://${GITHOST}/git/tasks.git//task.yaml:
+    - ref: ${LATEST_COMMIT}
 
 ---
 
-[Track tekton-task alias:stderr - 1]
+[Track git references, with freshen:stderr - 1]
 
 ---
 
@@ -113,19 +75,34 @@ trusted_tasks:
 
 ---
 
-[Track git references, with prune:stdout - 1]
+[Track git references:stdout - 1]
 /-/-/-/
 trusted_tasks:
-  git+https://forge.io/organization/repository.git//task/0.1/task.yaml:
-    - ref: f0cacc1a
+  git+https://github.com/konflux-ci/build-definitions.git//task/buildah/0.1/buildah.yaml:
+    - ref: 3672a457e3e89c0591369f609eba727b8e84108f
 
 ---
 
-[Track git references, with prune:stderr - 1]
+[Track git references:stderr - 1]
+
+---
+
+[Track tekton-task alias:stdout - 1]
+/-/-/-/
+trusted_tasks:
+  git+https://github.com/konflux-ci/build-definitions.git//task/buildah/0.1/buildah.yaml:
+    - ref: 3672a457e3e89c0591369f609eba727b8e84108f
+  oci://${REGISTRY}/acceptance/bundle:tag:
+    - ref: sha256:${REGISTRY_acceptance/bundle:tag_DIGEST}
+
+---
+
+[Track tekton-task alias:stderr - 1]
 
 ---
 
 [Track git references, without git id:stdout - 1]
+
 ---
 
 [Track git references, without git id:stderr - 1]
@@ -133,14 +110,12 @@ Error: expected "git+https://${GITHOST}/git/tasks.git//task.yaml" to contain the
 
 ---
 
-[Track git references, with freshen:stdout - 1]
+[Pipeline definition is ignored on its own:stdout - 1]
 /-/-/-/
-trusted_tasks:
-  git+https://${GITHOST}/git/tasks.git//task.yaml:
-    - ref: ${LATEST_COMMIT}
+{}
 
 ---
 
-[Track git references, with freshen:stderr - 1]
+[Pipeline definition is ignored on its own:stderr - 1]
 
 ---

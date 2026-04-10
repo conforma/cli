@@ -12,6 +12,7 @@
 [success:stderr - 1]
 
 ---
+
 [appstudio success:stdout - 1]
 {
   "timestamp": "${TIMESTAMP}",
