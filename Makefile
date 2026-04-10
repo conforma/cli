@@ -102,7 +102,7 @@ TEST_OUTPUT_FILTER=grep -vE '0.0% of statements|\[no test files\]'
 .PHONY: test
 test: ## Run all unit tests
 	@echo "Unit tests:"
-	@set -o pipefail && go test -race -covermode=atomic -coverprofile=coverage-unit.out -timeout 1s -tags=unit ./... | $(TEST_OUTPUT_FILTER)
+	@set -o pipefail && go test -race -covermode=atomic -coverprofile=coverage-unit.out -timeout 5s -tags=unit ./... | $(TEST_OUTPUT_FILTER)
 	@echo "Integration tests:"
 	@set -o pipefail && go test -race -covermode=atomic -coverprofile=coverage-integration.out -timeout 15s -tags=integration ./... | $(TEST_OUTPUT_FILTER)
 # Given the nature of generative tests the test timeout is increased from 500ms

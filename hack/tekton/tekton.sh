@@ -23,4 +23,10 @@ set -o nounset
 
 TKN_VERSION="${TKN_VERSION:-$(cd "$(git rev-parse --show-toplevel)" && go list -f '{{.Version}}' -m github.com/tektoncd/pipeline)}"
 
-curl -sSL "https://storage.googleapis.com/tekton-releases/pipeline/previous/${TKN_VERSION}/release.yaml"
+# Try Google Cloud Storage first (for older versions)
+if curl -fsSL "https://storage.googleapis.com/tekton-releases/pipeline/previous/${TKN_VERSION}/release.yaml" 2>/dev/null; then
+    exit 0
+fi
+
+# Fall back to GitHub releases (for newer versions like v1.10.2+)
+curl -fsSL "https://github.com/tektoncd/pipeline/releases/download/${TKN_VERSION}/release.yaml"

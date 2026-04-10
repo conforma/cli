@@ -1,31 +1,3 @@
-[Golden container image with trusted artifacts:results - 1]
-{
-  "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":5,\"failures\":0,\"warnings\":0,\"result\":\"SUCCESS\"}\n"
-}
----
-
-[Golden container image with trusted artifacts:show-config - 1]
-{
-  "policy": {
-    "sources": [
-      {
-        "policy": [
-          "git::github.com/conforma/policy//policy/release?ref=d34eab36b23d43748e451004177ca144296bf323",
-          "git::github.com/conforma/policy//policy/lib?ref=d34eab36b23d43748e451004177ca144296bf323"
-        ],
-        "config": {
-          "include": [
-            "slsa_provenance_available"
-          ]
-        }
-      }
-    ],
-    "publicKey": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----"
-  },
-  "key": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----\n",
-  "effective-time": "${TIMESTAMP}"
-}
----
 
 [Golden container image with trusted artifacts:report-json - 1]
 {
@@ -155,6 +127,35 @@
     "publicKey": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----"
   },
   "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[Golden container image with trusted artifacts:results - 1]
+{
+  "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":5,\"failures\":0,\"warnings\":0,\"result\":\"SUCCESS\"}\n"
+}
+---
+
+[Golden container image with trusted artifacts:show-config - 1]
+{
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::github.com/conforma/policy//policy/release?ref=d34eab36b23d43748e451004177ca144296bf323",
+          "git::github.com/conforma/policy//policy/lib?ref=d34eab36b23d43748e451004177ca144296bf323"
+        ],
+        "config": {
+          "include": [
+            "slsa_provenance_available"
+          ]
+        }
+      }
+    ],
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----"
+  },
+  "key": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----\n",
   "effective-time": "${TIMESTAMP}"
 }
 ---
