@@ -32,6 +32,7 @@ import (
 
 	imagespecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"golang.org/x/sync/errgroup"
 	"oras.land/oras-go/v2"
 	orasFile "oras.land/oras-go/v2/content/file"
 	"oras.land/oras-go/v2/registry/remote"
@@ -286,17 +287,21 @@ func (k *kindCluster) buildTaskBundleImage(ctx context.Context) error {
 		}
 	}
 
+	g, gCtx := errgroup.WithContext(ctx)
 	for version, tasks := range taskBundles {
-		tasksPath := strings.Join(tasks, ",")
-		cmd := exec.CommandContext(ctx, "make", "task-bundle", fmt.Sprintf("TASK_REPO=localhost:%d/ec-task-bundle", k.registryPort), fmt.Sprintf("TASKS=%s", tasksPath), fmt.Sprintf("TASK_TAG=%s", version)) /* #nosec */
-		if out, err := cmd.CombinedOutput(); err != nil {
-			fmt.Printf("[ERROR] Unable to build and push the Task bundle image, %q returned an error: %v\nCommand output:\n", cmd, err)
-			fmt.Print(string(out))
-			return err
-		}
+		g.Go(func() error {
+			tasksPath := strings.Join(tasks, ",")
+			cmd := exec.CommandContext(gCtx, "make", "task-bundle", fmt.Sprintf("TASK_REPO=localhost:%d/ec-task-bundle", k.registryPort), fmt.Sprintf("TASKS=%s", tasksPath), fmt.Sprintf("TASK_TAG=%s", version)) /* #nosec */
+			if out, err := cmd.CombinedOutput(); err != nil {
+				fmt.Printf("[ERROR] Unable to build and push the Task bundle image, %q returned an error: %v\nCommand output:\n", cmd, err)
+				fmt.Print(string(out))
+				return err
+			}
+			return nil
+		})
 	}
 
-	return nil
+	return g.Wait()
 }
 
 // builds a snapshot oci artifact for use with build trusted artifacts
