@@ -339,9 +339,8 @@ func AddStepsTo(sc *godog.ScenarioContext) {
 		state := testenv.FetchState[registryState](ctx)
 		if state.Container != nil {
 			if err := state.Container.Terminate(ctx); err != nil {
-				logger, ctx := log.LoggerFor(ctx)
+				logger, _ := log.LoggerFor(ctx)
 				logger.Warnf("failed to terminate registry container: %v", err)
-				return ctx, nil
 			}
 		}
 
