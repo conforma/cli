@@ -266,10 +266,6 @@ spec:
       - name: trusted-ca
         mountPath: /mnt/trusted-ca
         readOnly: true
-      - name: trusted-ca
-        mountPath: /etc/ssl/certs/ca-custom-bundle.crt
-        subPath: ca-bundle.crt
-        readOnly: true
     env:
       - name: "ORAS_OPTIONS"
         value: "$(params.ORAS_OPTIONS)"
@@ -291,6 +287,9 @@ spec:
       args:
         - use
         - $(params.SOURCE_DATA_ARTIFACT)=$(params.TRUSTED_ARTIFACTS_EXTRACT_DIR)
+      env:
+        - name: CA_FILE
+          value: /mnt/trusted-ca/ca-bundle.crt
       computeResources: {}
       image: quay.io/redhat-appstudio/build-trusted-artifacts:e02102ede09aa07187cba066ad547a54724e5cf4
 
@@ -298,6 +297,13 @@ spec:
       image: quay.io/conforma/cli:latest
       script: |-
         set -euo pipefail
+
+        ca_bundle=/mnt/trusted-ca/ca-bundle.crt
+        system_bundle=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
+        if [ -f "$ca_bundle" ]; then
+            echo "[$(date --utc -Ins)] Using mounted CA bundle: $ca_bundle"
+            cat "$ca_bundle" >> "$system_bundle"
+        fi
 
         if [[ -z "${TUF_MIRROR:-}" ]]; then
             echo 'TUF_MIRROR parameter not provided. Skipping TUF root initialization.'
@@ -333,6 +339,13 @@ spec:
       script: |
         #!/bin/bash
         set -euo pipefail
+
+        ca_bundle=/mnt/trusted-ca/ca-bundle.crt
+        system_bundle=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
+        if [ -f "$ca_bundle" ]; then
+            echo "[$(date --utc -Ins)] Using mounted CA bundle: $ca_bundle"
+            cat "$ca_bundle" >> "$system_bundle"
+        fi
 
         cmd_args=(
           validate
@@ -511,11 +524,6 @@ spec:
           memory: 2Gi
         limits:
           memory: 2Gi
-      volumeMounts:
-        - name: trusted-ca
-          mountPath: /etc/pki/tls/certs/ca-custom-bundle.crt
-          subPath: ca-bundle.crt
-          readOnly: true
 
     - name: report-json
       image: quay.io/conforma/cli:latest

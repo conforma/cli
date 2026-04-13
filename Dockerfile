@@ -83,6 +83,8 @@ COPY --from=build /build/LICENSE /licenses/LICENSE
 # Make it possible to use the "conforma" command instead of "ec" if you prefer
 RUN ln -s /usr/local/bin/ec /usr/local/bin/conforma
 
+RUN chmod -R g+w /etc/pki/ 2>/dev/null || true
+
 # OpenShift preflight check requires a non-root user
 USER 1001
 
