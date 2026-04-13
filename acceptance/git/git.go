@@ -59,6 +59,7 @@ type gitState struct {
 	RepositoriesDir string
 	CertificatePath string
 	LatestCommit    string
+	Container       testcontainers.Container `json:"-"`
 }
 
 func (g gitState) Key() any {
@@ -188,6 +189,8 @@ func startStubGitServer(ctx context.Context) (context.Context, error) {
 		return ctx, err
 	}
 
+	state.Container = git
+
 	port, err := git.MappedPort(ctx, "443/tcp")
 	if err != nil {
 		return ctx, err
@@ -314,7 +317,7 @@ func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step(`^stub git daemon running$`, startStubGitServer)
 	sc.Step(`^a git repository named "([^"]*)" with$`, createGitRepository)
 
-	// removes all git repositories from the filesystem
+	// removes all git repositories from the filesystem and terminates the container
 	sc.After(func(ctx context.Context, finished *godog.Scenario, scenarioErr error) (context.Context, error) {
 		if testenv.Persisted(ctx) {
 			return ctx, nil
@@ -327,6 +330,13 @@ func AddStepsTo(sc *godog.ScenarioContext) {
 
 		if !state.Up() {
 			return ctx, nil
+		}
+
+		if state.Container != nil {
+			if err := state.Container.Terminate(ctx); err != nil {
+				logger, _ := log.LoggerFor(ctx)
+				logger.Warnf("failed to terminate git container: %v", err)
+			}
 		}
 
 		os.RemoveAll(state.RepositoriesDir)

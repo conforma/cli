@@ -50,6 +50,7 @@ const registryStateKey = key(0)
 
 type registryState struct {
 	HostAndPort string
+	Container   testcontainers.Container `json:"-"`
 }
 
 func (g registryState) Key() any {
@@ -116,6 +117,8 @@ func startStubRegistry(ctx context.Context) (context.Context, error) {
 	if err != nil {
 		return ctx, err
 	}
+
+	state.Container = registry
 
 	port, err := registry.MappedPort(ctx, "5000/tcp")
 	if err != nil {
@@ -323,4 +326,25 @@ func Register(ctx context.Context, hostAndPort string) (context.Context, error) 
 func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step(`^stub registry running$`, startStubRegistry)
 	sc.Step(`^registry image "([^"]*)" should contain a layer with$`, assertImageContent)
+
+	sc.After(func(ctx context.Context, finished *godog.Scenario, scenarioErr error) (context.Context, error) {
+		if testenv.Persisted(ctx) {
+			return ctx, nil
+		}
+
+		if !testenv.HasState[registryState](ctx) {
+			return ctx, nil
+		}
+
+		state := testenv.FetchState[registryState](ctx)
+		if state.Container != nil {
+			if err := state.Container.Terminate(ctx); err != nil {
+				logger, ctx := log.LoggerFor(ctx)
+				logger.Warnf("failed to terminate registry container: %v", err)
+				return ctx, nil
+			}
+		}
+
+		return ctx, nil
+	})
 }
