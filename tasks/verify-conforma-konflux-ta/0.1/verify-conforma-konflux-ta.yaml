@@ -291,10 +291,10 @@ spec:
         - name: CA_FILE
           value: /mnt/trusted-ca/ca-bundle.crt
       computeResources: {}
-      image: quay.io/redhat-appstudio/build-trusted-artifacts:e02102ede09aa07187cba066ad547a54724e5cf4
+      image: quay.io/lgallovi-test/build-trusted-artifacts:shq-test2
 
     - name: initialize-tuf
-      image: quay.io/conforma/cli:latest
+      image: quay.io/lgallovi-test/ec-cli:shq-test2
       script: |-
         set -euo pipefail
 
@@ -329,12 +329,12 @@ spec:
           value: $(params.SINGLE_COMPONENT_CUSTOM_RESOURCE_NS)
         - name: SNAPSHOT_PATH
           value: $(params.HOMEDIR)/snapshot.json
-      image: quay.io/conforma/cli:latest
+      image: quay.io/lgallovi-test/ec-cli:shq-test2
       onError: continue # progress even if the step fails so we can see the debug logs
       command: [reduce-snapshot.sh]
 
     - name: validate
-      image: quay.io/conforma/cli:latest
+      image: quay.io/lgallovi-test/ec-cli:shq-test2
       onError: continue # progress even if the step fails so we can see the debug logs
       script: |
         #!/bin/bash
@@ -526,7 +526,7 @@ spec:
           memory: 2Gi
 
     - name: report-json
-      image: quay.io/conforma/cli:latest
+      image: quay.io/lgallovi-test/ec-cli:shq-test2
       onError: continue  # progress even if the step fails so we can see the debug logs
       command: [sh, -c]
       args:
@@ -539,7 +539,7 @@ spec:
         - "jq . $(params.HOMEDIR)/report-json.json | awk '{gsub(/^ +/, \"\"); acc += length; if (acc >= 8000) { printf \"\\n\"; acc=length } printf $0 }'"
 
     - name: summary
-      image: quay.io/conforma/cli:latest
+      image: quay.io/lgallovi-test/ec-cli:shq-test2
       onError: continue  # progress even if the step fails so we can see the debug logs
       command: [jq]
       args:
@@ -547,27 +547,27 @@ spec:
         - "$(results.TEST_OUTPUT.path)"
 
     - name: version
-      image: quay.io/conforma/cli:latest
+      image: quay.io/lgallovi-test/ec-cli:shq-test2
       command: [ec]
       args:
         - version
 
     - name: show-config
-      image: quay.io/conforma/cli:latest
+      image: quay.io/lgallovi-test/ec-cli:shq-test2
       command: [jq]
       args:
         - '{policy: .policy, key: .key, "effective-time": .["effective-time"]}'
         - "$(params.HOMEDIR)/report-json.json"
 
     - name: detailed-report
-      image: quay.io/conforma/cli:latest
+      image: quay.io/lgallovi-test/ec-cli:shq-test2
       onError: continue
       command: ["cat"]
       args:
         - "$(params.HOMEDIR)/text-report.txt"
 
     - name: assert
-      image: quay.io/conforma/cli:latest
+      image: quay.io/lgallovi-test/ec-cli:shq-test2
       command: [jq]
       args:
         - "--argjson"
