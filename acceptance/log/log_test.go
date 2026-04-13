@@ -16,55 +16,116 @@
 
 //go:build unit
 
-// Package log forwards logs to testing.T.Log* methods
+// Package log provides per-scenario file-based logging for acceptance tests
 package log
 
 import (
 	"context"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-
-	"github.com/conforma/cli/acceptance/testenv"
+	"github.com/stretchr/testify/require"
 )
 
-type mockDelegateLogger struct {
-	mock.Mock
+func TestLoggerWritesToFile(t *testing.T) {
+	ctx := context.Background()
+
+	loggerA, _ := LoggerFor(ctx)
+	loggerA.Name("ScenarioA")
+	defer loggerA.Close()
+	defer os.Remove(loggerA.LogFile())
+
+	loggerA.Log("hello from A")
+	loggerA.Logf("formatted %s", "message")
+	loggerA.Info("info msg")
+	loggerA.Warn("warn msg")
+	loggerA.Error("error msg")
+	loggerA.Close()
+
+	content, err := os.ReadFile(loggerA.LogFile())
+	require.NoError(t, err)
+
+	lines := string(content)
+	assert.Contains(t, lines, "hello from A")
+	assert.Contains(t, lines, "formatted message")
+	assert.Contains(t, lines, "[INFO ]")
+	assert.Contains(t, lines, "[WARN ]")
+	assert.Contains(t, lines, "[ERROR]")
 }
 
-func (m *mockDelegateLogger) Log(args ...any) {
-	m.Called(args)
-}
-
-func (m *mockDelegateLogger) Logf(format string, args ...any) {
-	m.Called(format, args)
-}
-
-func TestLogger(t *testing.T) {
-	dl := mockDelegateLogger{}
-	ctx := context.WithValue(context.Background(), testenv.TestingT, &dl)
+func TestLoggerCaching(t *testing.T) {
+	ctx := context.Background()
 
 	loggerA, ctx := LoggerFor(ctx)
-	loggerA.Name("A")
+	defer loggerA.Close()
+	defer os.Remove(loggerA.LogFile())
 
-	assert.Equal(t, loggerA, ctx.Value(loggerKey))
+	// Second call with same context returns the cached logger
+	loggerB, _ := LoggerFor(ctx)
 
-	dl.On("Logf", "(%010d: %s) %s", []any{uint32(1), "A", "hello"})
+	assert.Equal(t, loggerA, loggerB)
+}
 
-	loggerA.Logf("%s", "hello")
+func TestLoggerUniqueness(t *testing.T) {
+	ctxA := context.Background()
+	ctxB := context.Background()
 
-	dl = mockDelegateLogger{}
-	ctx = context.WithValue(context.Background(), testenv.TestingT, &dl)
+	loggerA, _ := LoggerFor(ctxA)
+	defer loggerA.Close()
+	defer os.Remove(loggerA.LogFile())
 
-	loggerB, ctx := LoggerFor(ctx)
-	loggerB.Name("B")
-
-	assert.Equal(t, loggerB, ctx.Value(loggerKey))
-
-	dl.On("Logf", "(%010d: %s) %s", []any{uint32(2), "B", "hey"})
-
-	loggerB.Log("hey")
+	loggerB, _ := LoggerFor(ctxB)
+	defer loggerB.Close()
+	defer os.Remove(loggerB.LogFile())
 
 	assert.NotEqual(t, loggerA.(*logger).id, loggerB.(*logger).id)
+	assert.NotEqual(t, loggerA.LogFile(), loggerB.LogFile())
+}
+
+func TestLoggerIsolation(t *testing.T) {
+	ctxA := context.Background()
+	ctxB := context.Background()
+
+	loggerA, _ := LoggerFor(ctxA)
+	loggerA.Name("A")
+	defer loggerA.Close()
+	defer os.Remove(loggerA.LogFile())
+
+	loggerB, _ := LoggerFor(ctxB)
+	loggerB.Name("B")
+	defer loggerB.Close()
+	defer os.Remove(loggerB.LogFile())
+
+	loggerA.Log("only in A")
+	loggerB.Log("only in B")
+
+	loggerA.Close()
+	loggerB.Close()
+
+	contentA, err := os.ReadFile(loggerA.LogFile())
+	require.NoError(t, err)
+	contentB, err := os.ReadFile(loggerB.LogFile())
+	require.NoError(t, err)
+
+	assert.Contains(t, string(contentA), "only in A")
+	assert.NotContains(t, string(contentA), "only in B")
+	assert.Contains(t, string(contentB), "only in B")
+	assert.NotContains(t, string(contentB), "only in A")
+}
+
+func TestLogFileCreatesTemporaryFile(t *testing.T) {
+	ctx := context.Background()
+
+	l, _ := LoggerFor(ctx)
+	defer l.Close()
+	defer os.Remove(l.LogFile())
+
+	path := l.LogFile()
+	assert.True(t, strings.Contains(path, "scenario-"))
+	assert.True(t, strings.HasSuffix(path, ".log"))
+
+	_, err := os.Stat(path)
+	assert.NoError(t, err)
 }
