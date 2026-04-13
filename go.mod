@@ -1,6 +1,6 @@
 module github.com/enterprise-contract/ec-cli
 
-go 1.25.3
+go 1.25.8
 
 require (
 	cuelang.org/go v0.11.1
