@@ -66,6 +66,7 @@ type failedScenario struct {
 	Name     string
 	Location string
 	Error    error
+	LogFile  string
 }
 
 // scenarioTracker tracks failed scenarios across all test runs
@@ -74,13 +75,14 @@ type scenarioTracker struct {
 	failedScenarios []failedScenario
 }
 
-func (st *scenarioTracker) addFailure(name, location string, err error) {
+func (st *scenarioTracker) addFailure(name, location, logFile string, err error) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	st.failedScenarios = append(st.failedScenarios, failedScenario{
 		Name:     name,
 		Location: location,
 		Error:    err,
+		LogFile:  logFile,
 	})
 }
 
@@ -101,6 +103,9 @@ func (st *scenarioTracker) printSummary(t *testing.T) {
 		fmt.Fprintf(os.Stderr, "   Location: %s\n", fs.Location)
 		if fs.Error != nil {
 			fmt.Fprintf(os.Stderr, "   Error: %v\n", fs.Error)
+		}
+		if fs.LogFile != "" {
+			fmt.Fprintf(os.Stderr, "   Log file: %s\n", fs.LogFile)
 		}
 		if i < len(st.failedScenarios)-1 {
 			fmt.Fprintf(os.Stderr, "\n")
@@ -136,29 +141,22 @@ func initializeScenario(sc *godog.ScenarioContext) {
 	})
 
 	sc.After(func(ctx context.Context, scenario *godog.Scenario, scenarioErr error) (context.Context, error) {
-		// Log scenario end with status - write to /dev/tty to bypass capture
-		if tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
-			// Strip the working directory prefix to show relative paths
-			uri := scenario.Uri
-			if cwd, err := os.Getwd(); err == nil {
-				if rel, err := filepath.Rel(cwd, uri); err == nil {
-					uri = rel
-				}
-			}
+		logger, ctx := log.LoggerFor(ctx)
 
-			if scenarioErr != nil {
-				fmt.Fprintf(tty, "✗ FAILED: %s (%s)\n", scenario.Name, uri)
-			} else {
-				fmt.Fprintf(tty, "✓ PASSED: %s (%s)\n", scenario.Name, uri)
-			}
-			tty.Close()
-		}
+		logFile := logger.LogFile()
+		logger.Close()
 
 		if scenarioErr != nil {
-			tracker.addFailure(scenario.Name, scenario.Uri, scenarioErr)
+			tracker.addFailure(scenario.Name, scenario.Uri, logFile, scenarioErr)
 		}
 
 		_, err := testenv.Persist(ctx)
+
+		if scenarioErr == nil {
+			// Clean up log files for passing scenarios
+			os.Remove(logFile)
+		}
+
 		return ctx, err
 	})
 }
@@ -220,8 +218,7 @@ func TestFeatures(t *testing.T) {
 	tracker.printSummary(t)
 
 	if exitCode != 0 {
-		// Exit directly without t.Fatal to avoid verbose Go test output
-		os.Exit(1)
+		t.Fatalf("acceptance test suite failed with exit code %d", exitCode)
 	}
 }
 
