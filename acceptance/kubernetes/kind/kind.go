@@ -54,6 +54,7 @@ import (
 	"github.com/conforma/cli/acceptance/kubernetes/types"
 	"github.com/conforma/cli/acceptance/kustomize"
 	"github.com/conforma/cli/acceptance/log"
+	"github.com/conforma/cli/acceptance/profile"
 	"github.com/conforma/cli/acceptance/registry"
 )
 
@@ -133,6 +134,8 @@ func Start(givenCtx context.Context) (ctx context.Context, kCluster types.Cluste
 
 	create.Do(func() {
 		logger.Log("Starting Kind cluster")
+		endKindTotal := profile.Begin("kind-cluster-total")
+		defer endKindTotal()
 
 		var configDir string
 		configDir, err = os.MkdirTemp("", "ec-acceptance.*")
@@ -172,6 +175,7 @@ func Start(givenCtx context.Context) (ctx context.Context, kCluster types.Cluste
 			kCluster.registryPort = int32(port) //nolint:gosec // G115 - ports shouldn't be larger than int32
 		}
 
+		endNodeCreate := profile.Begin("kind-node-create")
 		if err = kCluster.provider.Create(kCluster.name,
 			k.CreateWithV1Alpha4Config(&v1alpha4.Cluster{
 				TypeMeta: v1alpha4.TypeMeta{
@@ -197,9 +201,11 @@ func Start(givenCtx context.Context) (ctx context.Context, kCluster types.Cluste
 				},
 			}),
 			k.CreateWithKubeconfigPath(kCluster.kubeconfigPath)); err != nil {
+			endNodeCreate()
 			logger.Errorf("Unable launch the Kind cluster: %v", err)
 			return
 		}
+		endNodeCreate()
 
 		rules := clientcmd.NewDefaultClientConfigLoadingRules()
 		rules.ExplicitPath = kCluster.kubeconfigPath
@@ -231,30 +237,40 @@ func Start(givenCtx context.Context) (ctx context.Context, kCluster types.Cluste
 			kCluster.mapper = restmapper.NewDiscoveryRESTMapper(resources)
 		}
 
+		endApplyConfig := profile.Begin("kind-apply-config")
 		var yaml []byte
 		yaml, err = renderTestConfiguration(&kCluster)
 		if err != nil {
+			endApplyConfig()
 			logger.Errorf("Unable to kustomize test configuration: %v", err)
 			return
 		}
 
 		err = applyConfiguration(ctx, &kCluster, yaml)
 		if err != nil {
+			endApplyConfig()
 			logger.Errorf("Unable apply cluster configuration: %v", err)
 			return
 		}
+		endApplyConfig()
 
+		endBuildCli := profile.Begin("kind-build-cli-image")
 		err = kCluster.buildCliImage(ctx)
 		if err != nil {
+			endBuildCli()
 			logger.Errorf("Unable to build CLI image: %v", err)
 			return
 		}
+		endBuildCli()
 
+		endBuildBundle := profile.Begin("kind-build-task-bundle")
 		err = kCluster.buildTaskBundleImage(ctx)
 		if err != nil {
+			endBuildBundle()
 			logger.Errorf("Unable to build Task image: %v", err)
 			return
 		}
+		endBuildBundle()
 
 		globalCluster = &kCluster
 

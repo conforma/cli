@@ -36,6 +36,7 @@ import (
 	"github.com/wiremock/go-wiremock"
 
 	"github.com/conforma/cli/acceptance/log"
+	"github.com/conforma/cli/acceptance/profile"
 	"github.com/conforma/cli/acceptance/testenv"
 )
 
@@ -216,16 +217,20 @@ func StartWiremock(ctx context.Context) (context.Context, error) {
 	})
 
 	logger, ctx := log.LoggerFor(ctx)
+
+	endContainer := profile.BeginContainer("wiremock")
 	w, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
 		Started:          true,
 		Logger:           logger,
 	})
 	if err != nil {
+		endContainer()
 		return ctx, fmt.Errorf("unable to run GenericContainer: %v", err)
 	}
 
 	port, err := w.MappedPort(ctx, "8080/tcp")
+	endContainer()
 	if err != nil {
 		return ctx, err
 	}

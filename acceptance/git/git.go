@@ -47,6 +47,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/conforma/cli/acceptance/log"
+	"github.com/conforma/cli/acceptance/profile"
 	"github.com/conforma/cli/acceptance/testenv"
 )
 
@@ -179,16 +180,19 @@ func startStubGitServer(ctx context.Context) (context.Context, error) {
 
 	logger, ctx := log.LoggerFor(ctx)
 
+	endContainer := profile.BeginContainer("git")
 	git, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
 		Started:          true,
 		Logger:           logger,
 	})
 	if err != nil {
+		endContainer()
 		return ctx, err
 	}
 
 	port, err := git.MappedPort(ctx, "443/tcp")
+	endContainer()
 	if err != nil {
 		return ctx, err
 	}
