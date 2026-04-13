@@ -1266,7 +1266,7 @@ Error: success criteria not met
           }
         },
         {
-          "msg": "No image signatures found matching the given public key. Verify the correct public key was provided, and a signature was created. Error: no matching signatures: searching log query: \u0026{0 } (*models.Error) is not supported by the TextConsumer, can be resolved by supporting TextUnmarshaler interface",
+          "msg": "No image signatures found matching the given public key. Verify the correct public key was provided, and a signature was created. Error: no matching signatures: signature not found in transparency log",
           "metadata": {
             "code": "builtin.image.signature_check"
           }
@@ -2852,13 +2852,13 @@ ${__________known_PUBLIC_KEY}
       "source": {},
       "violations": [
         {
-          "msg": "No image attestations found matching the given public key. Verify the correct public key was provided, and one or more attestations were created. Error: no matching attestations: searching log query: \u0026{0 } (*models.Error) is not supported by the TextConsumer, can be resolved by supporting TextUnmarshaler interface",
+          "msg": "No image attestations found matching the given public key. Verify the correct public key was provided, and one or more attestations were created. Error: no matching attestations: signature not found in transparency log",
           "metadata": {
             "code": "builtin.attestation.signature_check"
           }
         },
         {
-          "msg": "No image signatures found matching the given public key. Verify the correct public key was provided, and a signature was created. Error: no matching signatures: searching log query: \u0026{0 } (*models.Error) is not supported by the TextConsumer, can be resolved by supporting TextUnmarshaler interface",
+          "msg": "No image signatures found matching the given public key. Verify the correct public key was provided, and a signature was created. Error: no matching signatures: signature not found in transparency log",
           "metadata": {
             "code": "builtin.image.signature_check"
           }
