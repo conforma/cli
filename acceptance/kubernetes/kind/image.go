@@ -20,6 +20,8 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -43,7 +45,23 @@ import (
 // is pushed to `localhost:<registry-port>/cli:latest-<os>-<arch>`. Building the
 // binaries on the host leverages the warm Go build cache, avoiding the
 // redundant Go compilation that the multi-stage production Dockerfile performs.
+//
+// A content hash of the build inputs is computed and compared against a cache
+// marker file. When the hash matches, the build is skipped entirely.
 func (k *kindCluster) buildCliImage(ctx context.Context) error {
+	currentHash, err := computeSourceHash()
+	var cacheFile string
+	if err != nil {
+		// On hash failure, fall through to a full build
+		fmt.Printf("[WARN] Failed to compute source hash, rebuilding: %v\n", err)
+	} else {
+		cacheFile = fmt.Sprintf("/tmp/ec-cli-image-cache-%d.hash", k.registryPort)
+		if cached, err := os.ReadFile(cacheFile); err == nil && string(cached) == currentHash {
+			fmt.Println("[INFO] CLI image cache hit, skipping build")
+			return nil
+		}
+	}
+
 	// Build into a directory not excluded by .dockerignore (which excludes
 	// dist/) and not conflicting with the versioned binary from make build.
 	buildDir := ".acceptance-build"
@@ -110,7 +128,79 @@ func (k *kindCluster) buildCliImage(ctx context.Context) error {
 		return err
 	}
 
+	// Write cache hash only after a successful build
+	if cacheFile != "" {
+		_ = os.WriteFile(cacheFile, []byte(currentHash), 0644) // #nosec G306
+	}
+
 	return nil
+}
+
+// computeSourceHash computes a SHA-256 hash of all build inputs for the CLI
+// image: Go source files, go.mod, go.sum, Dockerfile, build.sh, Makefile, and
+// hack/reduce-snapshot.sh. Returns a hex-encoded digest string.
+func computeSourceHash() (string, error) {
+	h := sha256.New()
+
+	// Hash individual build files
+	buildFiles := []string{
+		"go.mod",
+		"go.sum",
+		"Dockerfile",
+		"build.sh",
+		"Makefile",
+		"hack/reduce-snapshot.sh",
+		"tools/kubectl/go.mod",
+		"tools/kubectl/go.sum",
+		"acceptance/kubernetes/kind/acceptance.Dockerfile",
+	}
+	for _, f := range buildFiles {
+		if err := hashFile(h, f); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return "", fmt.Errorf("hashing %s: %w", f, err)
+		}
+	}
+
+	// Hash all .go source files
+	if err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip vendor, .git, and acceptance test directories
+		if d.IsDir() && (d.Name() == "vendor" || d.Name() == ".git" || d.Name() == "acceptance") {
+			return filepath.SkipDir
+		}
+
+		if !d.IsDir() && strings.HasSuffix(path, ".go") {
+			if err := hashFile(h, path); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return "", fmt.Errorf("walking source tree: %w", err)
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// hashFile adds the contents of a file to the given hash, prefixed by its path
+// for domain separation.
+func hashFile(h io.Writer, path string) error {
+	fmt.Fprintf(h, "file:%s\n", path)
+
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = io.Copy(h, f)
+	return err
 }
 
 // buildTaskBundleImage runs `make task-bundle` for each version of the Task in
