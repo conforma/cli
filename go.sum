@@ -922,8 +922,8 @@ github.com/mitchellh/mapstructure v1.1.2/go.mod h1:FVVH3fgwuzCH5S8UJGiWEs2h04kUh
 github.com/mitchellh/mapstructure v1.4.1/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/mitchellh/mapstructure v1.5.0 h1:jeMsZIYE/09sWLaz43PL7Gy6RuMjD2eJVyuac5Z2hdY=
 github.com/mitchellh/mapstructure v1.5.0/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
-github.com/moby/buildkit v0.28.1 h1:Tq6H6gOMU2JyEQ5rA0pa7Ey3VGNR3qpw90liSIpMQoo=
-github.com/moby/buildkit v0.28.1/go.mod h1:xO6wb9VBXszkIBxaGTLXc1rQORVQFIJRt3GSX7KzCFc=
+github.com/moby/buildkit v0.29.0 h1:wxLEFbCOJntEDjSNNN2YWd8zxltZxT5muDQ0LzpbtpU=
+github.com/moby/buildkit v0.29.0/go.mod h1:Dmv2FeDe34t75QuzeU87rBoZpAAkcpT5zeu4hXzmASc=
 github.com/moby/docker-image-spec v1.3.1 h1:jMKff3w6PgbfSa69GfNg+zN/XLhfXJGnEx3Nl2EsFP0=
 github.com/moby/docker-image-spec v1.3.1/go.mod h1:eKmb5VW8vQEh/BAr2yvVNvuiJuY6UIocYsFu/DxxRpo=
 github.com/moby/go-archive v0.1.0 h1:Kk/5rdW/g+H8NHdJW2gsXyZ7UnzvJNOy6VKJqueWdcQ=
