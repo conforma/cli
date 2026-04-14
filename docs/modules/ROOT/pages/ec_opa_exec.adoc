@@ -21,6 +21,7 @@ After: Decision Logs
 By default, the 'exec' command executes the "default decision" (specified in
 the OPA configuration) against each input file. This can be overridden by
 specifying the --decision argument and pointing at a specific policy decision,
+
 e.g., opa exec --decision /foo/bar/baz ...
 
 [source,shell]
@@ -30,15 +31,15 @@ ec opa exec <path> [<path> [...]] [flags]
 
 == Examples
   Loading input from stdin:
-    documentation exec [<path> [...]] --stdin-input [flags]
+    opa exec [<path> [...]] --stdin-input [flags]
 
 == Options
 
 -b, --bundle:: set bundle file(s) or directory path(s). This flag can be repeated.
 -c, --config-file:: set path of configuration file
 --decision:: set decision to evaluate
---fail:: exits with non-zero exit code on undefined result and errors (Default: false)
---fail-defined:: exits with non-zero exit code on defined result and errors (Default: false)
+--fail:: exits with non-zero exit code on undefined/empty result and errors (Default: false)
+--fail-defined:: exits with non-zero exit code on defined/non-empty result and errors (Default: false)
 --fail-non-empty:: exits with non-zero exit code on non-empty result and errors (Default: false)
 -f, --format:: set output format (Default: json)
 -h, --help:: help for exec (Default: false)
