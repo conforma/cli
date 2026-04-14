@@ -1,6 +1,6 @@
 module github.com/conforma/cli/tools
 
-go 1.25.3
+go 1.25.8
 
 require (
 	github.com/daixiang0/gci v0.13.7
@@ -172,7 +172,7 @@ require (
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dnephin/pflag v1.0.7 // indirect
-	github.com/docker/cli v28.2.2+incompatible // indirect
+	github.com/docker/cli v29.4.0+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker v28.2.2+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
