@@ -14,7 +14,7 @@ Available Commands:
   eval         Evaluate a Rego query
   exec         Execute against input files
   fmt          Format Rego source files
-  inspect      Inspect OPA bundle(s) or Rego files.
+  inspect      Inspect OPA bundle(s)
   parse        Parse Rego source file
   run          Start OPA in interactive or server mode
   sign         Generate an OPA bundle signature
