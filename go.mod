@@ -8,7 +8,7 @@ require (
 	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/Maldris/go-billy-afero v0.0.0-20200815120323-e9d3de59c99a
 	github.com/conforma/go-gather v1.0.2
-	github.com/docker/docker v28.3.3+incompatible
+	github.com/docker/docker v28.5.2+incompatible
 	github.com/enterprise-contract/enterprise-contract-controller/api v0.1.257
 	github.com/evanphx/json-patch v5.9.11+incompatible
 	github.com/gkampitakis/go-snaps v0.5.19
@@ -61,6 +61,10 @@ require (
 
 // use forked version until we can get the fixes merged see https://github.com/conforma/go-containerregistry/blob/main/hack/ec-patches.sh for a list of patches we carry
 replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry v0.20.7-0.20250703195040-6f40a3734728
+
+// Force moby/go-archive to v0.1.0 for compatibility with docker/docker v28.5.2
+// v0.2.0 removed archive.Compression type which docker still uses
+replace github.com/moby/go-archive => github.com/moby/go-archive v0.1.0
 
 require (
 	cel.dev/expr v0.25.1 // indirect
