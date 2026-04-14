@@ -156,6 +156,7 @@ Feature: evaluate enterprise contract
     Given a valid image signature of "acceptance/invalid-image-signature" image signed by the "known" key
     Given a valid attestation of "acceptance/invalid-image-signature" signed by the "known" key
     Given a valid Rekor entry for attestation of "acceptance/invalid-image-signature"
+    Given Rekor has no entries for the signatures
     Given a git repository named "invalid-image-signature" with
       | main.rego | examples/happy_day.rego |
     Given policy configuration named "invalid-image-signature-policy" with specification
@@ -1000,6 +1001,7 @@ Feature: evaluate enterprise contract
     Given an image named "acceptance/rekor-by-default"
     Given a valid image signature of "acceptance/rekor-by-default" image signed by the "known" key
     Given a valid attestation of "acceptance/rekor-by-default" signed by the "known" key
+    Given Rekor has no entries for the signatures
     Given a git repository named "rekor-by-default" with
       | main.rego | examples/happy_day.rego |
     Given policy configuration named "ec-policy" with specification

@@ -768,13 +768,7 @@ Error: success criteria not met
           }
         },
         {
-          "msg": "Pass",
-          "metadata": {
-            "code": "builtin.attestation.syntax_check"
-          }
-        },
-        {
-          "msg": "Pass",
+          "msg": "No image signatures found matching the given public key. Verify the correct public key was provided, and a signature was created. Error: no matching signatures: signature not found in transparency log",
           "metadata": {
             "code": "builtin.image.signature_check"
           }
@@ -1384,6 +1378,57 @@ Error: success criteria not met
   "ec-version": "${EC_VERSION}",
   "effective-time": "${TIMESTAMP}"
 }
+---
+
+[ignore rekor:stderr - 1]
+
+---
+
+[rekor entries required:stdout - 1]
+{
+  "success": false,
+  "components": [
+    {
+      "name": "Unnamed",
+      "containerImage": "${REGISTRY}/acceptance/rekor-by-default@sha256:${REGISTRY_acceptance/rekor-by-default:latest_DIGEST}",
+      "source": {},
+      "violations": [
+        {
+          "msg": "No image attestations found matching the given public key. Verify the correct public key was provided, and one or more attestations were created. Error: no matching attestations: signature not found in transparency log",
+          "metadata": {
+            "code": "builtin.attestation.signature_check"
+          }
+        },
+        {
+          "msg": "No image signatures found matching the given public key. Verify the correct public key was provided, and a signature was created. Error: no matching signatures: signature not found in transparency log",
+          "metadata": {
+            "code": "builtin.image.signature_check"
+          }
+        }
+      ],
+      "success": false
+    }
+  ],
+  "key": "${known_PUBLIC_KEY_JSON}",
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::${GITHOST}/git/rekor-by-default.git?ref=${LATEST_COMMIT}"
+        ]
+      }
+    ],
+    "rekorUrl": "${REKOR}",
+    "publicKey": "${known_PUBLIC_KEY}"
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[rekor entries required:stderr - 1]
+Error: success criteria not met
+
 ---
 
 [OLM manifests:stderr - 1]
