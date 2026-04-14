@@ -23,4 +23,4 @@ set -o nounset
 
 TKN_VERSION="${TKN_VERSION:-$(cd "$(git rev-parse --show-toplevel)" && go list -f '{{.Version}}' -m github.com/tektoncd/pipeline)}"
 
-curl -sSL "https://storage.googleapis.com/tekton-releases/pipeline/previous/${TKN_VERSION}/release.yaml"
+curl -sSL "https://github.com/tektoncd/pipeline/releases/download/${TKN_VERSION}/release.yaml"
