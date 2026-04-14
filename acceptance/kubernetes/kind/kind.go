@@ -31,6 +31,7 @@ import (
 	"sync"
 
 	"github.com/phayes/freeport"
+	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -238,21 +239,36 @@ func Start(givenCtx context.Context) (ctx context.Context, kCluster types.Cluste
 			return
 		}
 
-		err = applyConfiguration(ctx, &kCluster, yaml)
+		err = applyResources(ctx, &kCluster, yaml)
 		if err != nil {
 			logger.Errorf("Unable apply cluster configuration: %v", err)
 			return
 		}
 
-		err = kCluster.buildCliImage(ctx)
+		// Wait for the in-cluster registry (needed by image builds)
+		err = waitForAvailableDeploymentsIn(ctx, &kCluster, "image-registry")
 		if err != nil {
-			logger.Errorf("Unable to build CLI image: %v", err)
+			logger.Errorf("Unable to wait for image registry: %v", err)
 			return
 		}
 
-		err = kCluster.buildTaskBundleImage(ctx)
-		if err != nil {
-			logger.Errorf("Unable to build Task image: %v", err)
+		// Run image builds concurrently with Tekton deployment
+		g, gCtx := errgroup.WithContext(ctx)
+
+		g.Go(func() error {
+			return kCluster.buildCliImage(gCtx)
+		})
+
+		g.Go(func() error {
+			return kCluster.buildTaskBundleImage(gCtx)
+		})
+
+		g.Go(func() error {
+			return waitForAvailableDeploymentsIn(gCtx, &kCluster, "tekton-pipelines")
+		})
+
+		if err = g.Wait(); err != nil {
+			logger.Errorf("Unable to complete cluster setup: %v", err)
 			return
 		}
 
@@ -295,15 +311,16 @@ func renderTestConfiguration(k *kindCluster) (yaml []byte, err error) {
 	return kustomize.Render(path.Join("test"))
 }
 
-// applyConfiguration runs equivalent of kubectl apply for each document in the
+// applyResources runs equivalent of kubectl apply for each document in the
 // definitions YAML
-func applyConfiguration(ctx context.Context, k *kindCluster, definitions []byte) (err error) {
+func applyResources(ctx context.Context, k *kindCluster, definitions []byte) (err error) {
 	reader := util.NewYAMLReader(bufio.NewReader(bytes.NewReader(definitions)))
 	for {
 		var definition []byte
 		definition, err = reader.Read()
 		if err != nil {
 			if err == io.EOF {
+				err = nil
 				break
 			}
 			return
@@ -329,8 +346,6 @@ func applyConfiguration(ctx context.Context, k *kindCluster, definitions []byte)
 			return
 		}
 	}
-
-	err = waitForAvailableDeploymentsIn(ctx, k, "tekton-pipelines", "image-registry")
 
 	return
 }

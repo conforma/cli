@@ -372,7 +372,7 @@ func (k *kindCluster) CreateNamespace(ctx context.Context) (context.Context, err
 		return ctx, err
 	}
 
-	return ctx, applyConfiguration(ctx, k, yaml)
+	return ctx, applyResources(ctx, k, yaml)
 }
 
 // stringParam generates a Tekton Parameter optionally expanding certain variables
