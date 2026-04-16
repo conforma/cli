@@ -157,11 +157,19 @@ func (a *ApplicationSnapshotImage) FetchImageFiles(ctx context.Context) error {
 func (a *ApplicationSnapshotImage) ValidateImageSignature(ctx context.Context) error {
 	opts := a.checkOpts
 	client := oci.NewClient(ctx)
+	useBundles := a.hasBundles(ctx)
 
 	var sigs []cosignOCI.Signature
 	var err error
 
-	if a.hasBundles(ctx) {
+	if useBundles {
+		// For v3 bundles, both image signatures and attestations are stored as
+		// "attestations" in the unified bundle format. So we use VerifyImageAttestations
+		// to extract image signatures from the bundle, even though it seems unintuitive.
+		// This is different from v2 where image signatures and attestations were separate.
+		//
+		// The certificate extraction requires different handling for bundles and
+		// should be addressed in future work to achieve full v2 parity.
 		opts.NewBundleFormat = true
 		opts.ClaimVerifier = cosign.IntotoSubjectClaimVerifier
 		sigs, _, err = client.VerifyImageAttestations(a.reference, &opts)
@@ -174,11 +182,36 @@ func (a *ApplicationSnapshotImage) ValidateImageSignature(ctx context.Context) e
 	}
 
 	for _, s := range sigs {
-		es, err := signature.NewEntitySignature(s)
-		if err != nil {
-			return err
+		if useBundles {
+			// This will appears in the output under "signatures" so filter out
+			// the sigs that are provenance attestations leaving only the sigs
+			// that are image signatures. Note: This does seems confusing and
+			// I'm not 100% sure we're doing the right thing here. Maybe revisit
+			// once we have a better idea about sigstore bundles and how they're
+			// handled by cosign itself.
+			if !isImageSignatureAttestation(s) {
+				log.Debugf("Skipping non-image signature attestation")
+				continue
+			}
+
+			// For bundle image signatures produced by cosign v3, the old
+			// method of accessing the signatures doesn't work. Instead we have
+			// to extract them from the bundle. And the bundle actually has
+			// signatures for both the image itself and the attestation.
+			signatures, err := extractSignaturesFromBundle(s)
+			if err != nil {
+				return fmt.Errorf("cannot extract signatures from bundle: %w", err)
+			}
+			a.signatures = append(a.signatures, signatures...)
+		} else {
+			// For older non-bundle image signatures produced by cosign v2.
+			// Note that filtering isn't needed, since we have only image sigs here.
+			es, err := signature.NewEntitySignature(s)
+			if err != nil {
+				return err
+			}
+			a.signatures = append(a.signatures, es)
 		}
-		a.signatures = append(a.signatures, es)
 	}
 	return nil
 }
@@ -199,6 +232,11 @@ func (a *ApplicationSnapshotImage) ValidateAttestationSignature(ctx context.Cont
 		return err
 	}
 
+	// Todo:
+	// - For the non-bundle code path we actually check the syntax.
+	//   We should do that for bundles as well probably.
+	// - Doing an early return like thi shere seems untidy, refactor
+	//   maybe?
 	if useBundles {
 		return a.parseAttestationsFromBundles(layers)
 	}
@@ -251,8 +289,19 @@ func (a *ApplicationSnapshotImage) ValidateAttestationSignature(ctx context.Cont
 // parseAttestationsFromBundles extracts attestations from Sigstore bundles.
 // Bundle-wrapped layers report an incorrect media type, so we unmarshal the
 // DSSE envelope from the raw payload directly.
+//
+// Note: For v3 bundles, this function filters out image signature attestations
+// (https://sigstore.dev/cosign/sign/v1) since those are handled in ValidateImageSignature.
+// Only provenance and other attestations are added to the attestations array.
 func (a *ApplicationSnapshotImage) parseAttestationsFromBundles(layers []cosignOCI.Signature) error {
 	for _, sig := range layers {
+		// For v3 bundles, filter out image signature attestations - those are handled
+		// in ValidateImageSignature. Only add provenance attestations here.
+		if isImageSignatureAttestation(sig) {
+			log.Debugf("Skipping image signature attestation - handled in ValidateImageSignature")
+			continue
+		}
+
 		payload, err := sig.Payload()
 		if err != nil {
 			log.Debugf("Skipping bundle entry: cannot read payload: %v", err)
@@ -275,8 +324,8 @@ func (a *ApplicationSnapshotImage) parseAttestationsFromBundles(layers []cosignO
 		if err != nil {
 			return fmt.Errorf("unable to parse bundle attestation: %w", err)
 		}
-		t := att.PredicateType()
-		log.Debugf("Found bundle attestation with predicateType: %s", t)
+		log.Debugf("Found bundle attestation with predicateType: %s", att.PredicateType())
+
 		a.attestations = append(a.attestations, att)
 	}
 	return nil
@@ -461,7 +510,7 @@ func (a *ApplicationSnapshotImage) WriteInputFile(ctx context.Context) (string, 
 	log.Debugf("Created dir %s", inputDir)
 	inputJSONPath := path.Join(inputDir, "input.json")
 
-	f, err := fs.OpenFile(inputJSONPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0644)
+	f, err := fs.OpenFile(inputJSONPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o644)
 	if err != nil {
 		log.Debugf("Problem creating file in %s", inputDir)
 		return "", nil, err
@@ -479,4 +528,92 @@ func (a *ApplicationSnapshotImage) WriteInputFile(ctx context.Context) (string, 
 
 	log.Debugf("Done preparing input file:\n%s", inputJSONPath)
 	return inputJSONPath, inputJSON, nil
+}
+
+// extractPredicateType extracts the predicateType field from a JSON
+// payload lazily, i.e. without unmarshalling all the other fields
+func extractPredicateType(payload []byte) (string, error) {
+	var attestation struct {
+		PredicateType string `json:"predicateType"`
+	}
+	if err := json.Unmarshal(payload, &attestation); err != nil {
+		return "", err
+	}
+	return attestation.PredicateType, nil
+}
+
+// hasPredicateType checks if a JSON payload has the specified predicate type.
+func hasPredicateType(payload []byte, expectedType string) bool {
+	predicateType, err := extractPredicateType(payload)
+	if err != nil {
+		log.Debugf("Cannot parse JSON payload: %v", err)
+		return false
+	}
+	return predicateType == expectedType
+}
+
+const cosignSignPredicateType = "https://sigstore.dev/cosign/sign/v1"
+
+// isImageSignatureAttestation checks if a signature from a bundle represents
+// an image signature attestation (vs. a provenance attestation).
+func isImageSignatureAttestation(sig cosignOCI.Signature) bool {
+	payload, err := sig.Payload()
+	if err != nil {
+		log.Debugf("Cannot read signature payload: %v", err)
+		return false
+	}
+
+	// Image signature attestations use the cosign/sign predicate type
+	return hasPredicateType(payload, cosignSignPredicateType)
+}
+
+// extractSignaturesFromBundle extracts signature information from a bundle
+// image signature attestation, using the same pattern as createEntitySignatures.
+//
+// TODO: This currently only extracts the signature value from the DSSE envelope.
+// Certificate information (keyid, certificate, chain, metadata) is not being
+// extracted because it requires different handling for v3 bundles compared to v2.
+// Future work should investigate how to access certificate data from bundle
+// attestations to achieve full parity with v2 signature output. Also, there might
+// be some cosign methods we can use instead of doing it ourselves here.
+func extractSignaturesFromBundle(sig cosignOCI.Signature) ([]signature.EntitySignature, error) {
+	reader, err := sig.Uncompressed()
+	if err != nil {
+		return nil, fmt.Errorf("cannot read signature data: %w", err)
+	}
+	defer reader.Close()
+
+	var attestationPayload cosign.AttestationPayload
+	if err := json.NewDecoder(reader).Decode(&attestationPayload); err != nil {
+		return nil, fmt.Errorf("cannot parse DSSE envelope: %w", err)
+	}
+
+	// Create the base EntitySignature from the oci.Signature (for certificate info)
+	es, err := signature.NewEntitySignature(sig)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create base signature: %w", err)
+	}
+
+	var results []signature.EntitySignature
+	for _, s := range attestationPayload.Signatures {
+		esNew := es
+		// The Signature and KeyID can come from two locations, the oci.Signature or
+		// the cosign.Signature. Prioritize information from oci.Signature, but fallback
+		// to cosign.Signature when needed (same pattern as createEntitySignatures)
+		//
+		// Todo: Actually the above comment might be stale and/or wrong since I belive
+		// it was copied from similar code in internal/attestation/attestation.go. Let's
+		// review this later. As far as I can tell this code always produces an empty
+		// string for the KeyId.
+		//
+		if esNew.Signature == "" {
+			esNew.Signature = s.Sig
+		}
+		if esNew.KeyID == "" {
+			esNew.KeyID = s.KeyID
+		}
+		results = append(results, esNew)
+	}
+
+	return results, nil
 }
