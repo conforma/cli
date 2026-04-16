@@ -175,6 +175,7 @@ func TestSigstoreVerifyImage(t *testing.T) {
 
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
+			ClearCaches()
 			utils.SetTestRekorPublicKey(t)
 			utils.SetTestFulcioRoots(t)
 			utils.SetTestCTLogPublicKey(t)
@@ -206,6 +207,91 @@ func TestSigstoreVerifyImage(t *testing.T) {
 			require.Equal(t, tt.success, result.Get(ast.StringTerm("success")))
 		})
 	}
+}
+
+func TestVerifyImageCache(t *testing.T) {
+	image1 := name.MustParseReference(
+		"registry.local/spam@sha256:4e388ab32b10dc8dbc7e28144f552830adc74787c1e2c0824032078a79f227fb",
+	)
+	image2 := name.MustParseReference(
+		"registry.local/eggs@sha256:5e388ab32b10dc8dbc7e28144f552830adc74787c1e2c0824032078a79f227fb",
+	)
+	opts1 := options{ignoreRekor: true, publicKey: utils.TestPublicKey}
+	opts2 := options{publicKey: utils.TestPublicKey, rekorURL: "https://rekor.local"}
+
+	newFakeContext := func(t *testing.T) (*fake.FakeClient, rego.BuiltinContext) {
+		t.Helper()
+		utils.SetTestRekorPublicKey(t)
+		utils.SetTestFulcioRoots(t)
+		utils.SetTestCTLogPublicKey(t)
+
+		sig, err := static.NewSignature(
+			[]byte(`image`),
+			"signature",
+			static.WithLayerMediaType(types.MediaType(cosignTypes.DssePayloadType)),
+		)
+		require.NoError(t, err)
+
+		c := &fake.FakeClient{}
+		c.On("VerifyImageSignatures", mock.Anything, mock.Anything).Return([]oci.Signature{sig}, false, nil)
+		ctx := o.WithClient(context.Background(), c)
+		return c, rego.BuiltinContext{Context: ctx}
+	}
+
+	t.Run("same ref and opts returns cached result", func(t *testing.T) {
+		ClearCaches()
+		c, bctx := newFakeContext(t)
+
+		r1, err := sigstoreVerifyImage(bctx, ast.StringTerm(image1.String()), opts1.toTerm())
+		require.NoError(t, err)
+
+		r2, err := sigstoreVerifyImage(bctx, ast.StringTerm(image1.String()), opts1.toTerm())
+		require.NoError(t, err)
+
+		require.Equal(t, r1, r2)
+		c.AssertNumberOfCalls(t, "VerifyImageSignatures", 1)
+	})
+
+	t.Run("different ref is a cache miss", func(t *testing.T) {
+		ClearCaches()
+		c, bctx := newFakeContext(t)
+
+		_, err := sigstoreVerifyImage(bctx, ast.StringTerm(image1.String()), opts1.toTerm())
+		require.NoError(t, err)
+
+		_, err = sigstoreVerifyImage(bctx, ast.StringTerm(image2.String()), opts1.toTerm())
+		require.NoError(t, err)
+
+		c.AssertNumberOfCalls(t, "VerifyImageSignatures", 2)
+	})
+
+	t.Run("different opts is a cache miss", func(t *testing.T) {
+		ClearCaches()
+		c, bctx := newFakeContext(t)
+
+		_, err := sigstoreVerifyImage(bctx, ast.StringTerm(image1.String()), opts1.toTerm())
+		require.NoError(t, err)
+
+		_, err = sigstoreVerifyImage(bctx, ast.StringTerm(image1.String()), opts2.toTerm())
+		require.NoError(t, err)
+
+		c.AssertNumberOfCalls(t, "VerifyImageSignatures", 2)
+	})
+
+	t.Run("ClearCaches forces re-verification", func(t *testing.T) {
+		ClearCaches()
+		c, bctx := newFakeContext(t)
+
+		_, err := sigstoreVerifyImage(bctx, ast.StringTerm(image1.String()), opts1.toTerm())
+		require.NoError(t, err)
+		c.AssertNumberOfCalls(t, "VerifyImageSignatures", 1)
+
+		ClearCaches()
+
+		_, err = sigstoreVerifyImage(bctx, ast.StringTerm(image1.String()), opts1.toTerm())
+		require.NoError(t, err)
+		c.AssertNumberOfCalls(t, "VerifyImageSignatures", 2)
+	})
 }
 
 func TestSigstoreVerifyAttestation(t *testing.T) {

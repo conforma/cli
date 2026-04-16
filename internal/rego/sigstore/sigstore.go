@@ -22,9 +22,12 @@ package sigstore
 
 import (
 	"context"
+	"crypto/sha512"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/open-policy-agent/opa/v1/ast"
@@ -35,6 +38,7 @@ import (
 	"github.com/sigstore/cosign/v3/pkg/oci"
 	"github.com/sigstore/sigstore/pkg/tuf"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/conforma/cli/internal/attestation"
 	"github.com/conforma/cli/internal/policy"
@@ -56,6 +60,11 @@ const (
 	publicKeyAttribute                   = "public_key"
 	rekorURLAttribute                    = "rekor_url"
 	rekorPublicKeyAttribute              = "rekor_public_key"
+)
+
+var (
+	verifyImageCache  sync.Map
+	verifyImageFlight singleflight.Group
 )
 
 var ociImageReferenceParameter = types.Named("ref", types.S).Description("OCI image reference")
@@ -111,7 +120,6 @@ func registerSigstoreVerifyImage() {
 
 func sigstoreVerifyImage(bctx rego.BuiltinContext, refTerm *ast.Term, optsTerm *ast.Term) (*ast.Term, error) {
 	logger := log.WithField("function", sigstoreVerifyImageName)
-	ctx := bctx.Context
 
 	uri, err := builtins.StringOperand(refTerm.Value, 0)
 	if err != nil {
@@ -119,6 +127,29 @@ func sigstoreVerifyImage(bctx rego.BuiltinContext, refTerm *ast.Term, optsTerm *
 		return signatureFailedResult(fmt.Errorf("ref parameter: %w", err))
 	}
 	logger = logger.WithField("ref", string(uri))
+
+	// Build cache key from ref + opts hash
+	cacheKey := buildCacheKey(string(uri), optsTerm)
+
+	// Check cache first
+	if cached, ok := verifyImageCache.Load(cacheKey); ok {
+		logger.Debug("using cached image signature verification result")
+		return cached.(*ast.Term), nil
+	}
+
+	// Use singleflight to deduplicate concurrent requests. doVerifyImage never returns a Go
+	// error — failures are embedded in the result term — so the error is intentionally discarded.
+	resultIface, _, _ := verifyImageFlight.Do(cacheKey, func() (interface{}, error) {
+		return doVerifyImage(bctx, logger, uri, optsTerm)
+	})
+
+	result := resultIface.(*ast.Term)
+	verifyImageCache.Store(cacheKey, result)
+	return result, nil
+}
+
+func doVerifyImage(bctx rego.BuiltinContext, logger *log.Entry, uri ast.String, optsTerm *ast.Term) (*ast.Term, error) {
+	ctx := bctx.Context
 
 	ref, err := name.NewDigest(string(uri))
 	if err != nil {
@@ -142,6 +173,12 @@ func sigstoreVerifyImage(bctx rego.BuiltinContext, refTerm *ast.Term, optsTerm *
 
 	logger.WithField("signatures_count", len(signatures)).Debug("image signature verification complete")
 	return signatureResult(signatures, nil)
+}
+
+func buildCacheKey(ref string, optsTerm *ast.Term) string {
+	h := sha512.Sum512([]byte(optsTerm.String()))
+	optsHash := hex.EncodeToString(h[:])
+	return ref + "|" + optsHash
 }
 
 func registerSigstoreVerifyAttestation() {
@@ -388,6 +425,11 @@ func attestationResult(attestations []oci.Signature, err error) (*ast.Term, erro
 		ast.Item(ast.StringTerm("errors"), ast.ArrayTerm(errorTerms...)),
 		ast.Item(ast.StringTerm("attestations"), ast.ArrayTerm(attestationTerms...)),
 	), nil
+}
+
+// ClearCaches clears the verify_image cache. Used for testing.
+func ClearCaches() {
+	verifyImageCache = sync.Map{}
 }
 
 func init() {
