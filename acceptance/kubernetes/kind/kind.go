@@ -312,42 +312,63 @@ func renderTestConfiguration(k *kindCluster) (yaml []byte, err error) {
 }
 
 // applyResources runs equivalent of kubectl apply for each document in the
-// definitions YAML
-func applyResources(ctx context.Context, k *kindCluster, definitions []byte) (err error) {
+// definitions YAML. Cluster-scoped resources (Namespaces, CRDs, ClusterRoles,
+// etc.) are applied sequentially first, then namespaced resources are applied
+// in parallel.
+func applyResources(ctx context.Context, k *kindCluster, definitions []byte) error {
+	type resource struct {
+		obj     unstructured.Unstructured
+		mapping *meta.RESTMapping
+	}
+
+	// Parse all documents
+	var clusterScoped, namespaceScoped []resource
 	reader := util.NewYAMLReader(bufio.NewReader(bytes.NewReader(definitions)))
 	for {
-		var definition []byte
-		definition, err = reader.Read()
+		definition, err := reader.Read()
 		if err != nil {
 			if err == io.EOF {
-				err = nil
 				break
 			}
-			return
+			return err
 		}
 
 		var obj unstructured.Unstructured
-		if err = yaml.Unmarshal(definition, &obj); err != nil {
-			return
+		if err := yaml.Unmarshal(definition, &obj); err != nil {
+			return err
 		}
 
-		var mapping *meta.RESTMapping
-		if mapping, err = k.mapper.RESTMapping(obj.GroupVersionKind().GroupKind()); err != nil {
-			return
-		}
-
-		var c dynamic.ResourceInterface = k.dynamic.Resource(mapping.Resource)
-		if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
-			c = c.(dynamic.NamespaceableResourceInterface).Namespace(obj.GetNamespace())
-		}
-
-		_, err = c.Apply(ctx, obj.GetName(), &obj, metav1.ApplyOptions{FieldManager: "application/apply-patch"})
+		mapping, err := k.mapper.RESTMapping(obj.GroupVersionKind().GroupKind())
 		if err != nil {
-			return
+			return err
+		}
+
+		if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+			namespaceScoped = append(namespaceScoped, resource{obj: obj, mapping: mapping})
+		} else {
+			clusterScoped = append(clusterScoped, resource{obj: obj, mapping: mapping})
 		}
 	}
 
-	return
+	// Apply cluster-scoped resources sequentially (ordering matters for CRDs, Namespaces)
+	for _, r := range clusterScoped {
+		c := k.dynamic.Resource(r.mapping.Resource)
+		if _, err := c.Apply(ctx, r.obj.GetName(), &r.obj, metav1.ApplyOptions{FieldManager: "application/apply-patch"}); err != nil {
+			return err
+		}
+	}
+
+	// Apply namespaced resources in parallel
+	g, gCtx := errgroup.WithContext(ctx)
+	for _, r := range namespaceScoped {
+		g.Go(func() error {
+			c := k.dynamic.Resource(r.mapping.Resource).Namespace(r.obj.GetNamespace())
+			_, err := c.Apply(gCtx, r.obj.GetName(), &r.obj, metav1.ApplyOptions{FieldManager: "application/apply-patch"})
+			return err
+		})
+	}
+
+	return g.Wait()
 }
 
 // waitForAvailableDeploymentsIn makes sure that all deployments in the provided
