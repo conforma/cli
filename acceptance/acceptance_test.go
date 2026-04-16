@@ -37,6 +37,7 @@ import (
 	"github.com/conforma/cli/acceptance/kubernetes"
 	"github.com/conforma/cli/acceptance/log"
 	"github.com/conforma/cli/acceptance/pipeline"
+	"github.com/conforma/cli/acceptance/profile"
 	"github.com/conforma/cli/acceptance/registry"
 	"github.com/conforma/cli/acceptance/rekor"
 	"github.com/conforma/cli/acceptance/tekton"
@@ -131,11 +132,13 @@ func initializeScenario(sc *godog.ScenarioContext) {
 	sc.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {
 		logger, ctx := log.LoggerFor(ctx)
 		logger.Name(sc.Name)
+		ctx = profile.ScenarioStart(ctx)
 
 		return context.WithValue(ctx, testenv.Scenario, sc), nil
 	})
 
 	sc.After(func(ctx context.Context, scenario *godog.Scenario, scenarioErr error) (context.Context, error) {
+		profile.ScenarioEnd(ctx, scenario.Name, scenario.Uri)
 		// Log scenario end with status - write to /dev/tty to bypass capture
 		if tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
 			// Strip the working directory prefix to show relative paths
@@ -196,6 +199,9 @@ func TestFeatures(t *testing.T) {
 
 	ctx := setupContext(t)
 
+	profile.Init()
+	defer profile.Report()
+
 	opts := godog.Options{
 		Format:         "pretty",
 		Paths:          []string{featuresDir},
@@ -221,6 +227,7 @@ func TestFeatures(t *testing.T) {
 
 	if exitCode != 0 {
 		// Exit directly without t.Fatal to avoid verbose Go test output
+		profile.Report()
 		os.Exit(1)
 	}
 }

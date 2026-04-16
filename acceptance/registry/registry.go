@@ -36,6 +36,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/conforma/cli/acceptance/log"
+	"github.com/conforma/cli/acceptance/profile"
 	"github.com/conforma/cli/acceptance/testenv"
 )
 
@@ -108,16 +109,19 @@ func startStubRegistry(ctx context.Context) (context.Context, error) {
 
 	logger, ctx := log.LoggerFor(ctx)
 
+	endContainer := profile.BeginContainer("registry")
 	registry, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
 		Started:          true,
 		Logger:           logger,
 	})
 	if err != nil {
+		endContainer()
 		return ctx, err
 	}
 
 	port, err := registry.MappedPort(ctx, "5000/tcp")
+	endContainer()
 	if err != nil {
 		return ctx, err
 	}

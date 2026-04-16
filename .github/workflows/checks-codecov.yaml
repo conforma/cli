@@ -132,6 +132,19 @@ jobs:
         id: acceptance_test
         run: E2E_INSTRUMENTATION=true make acceptance
 
+      - name: Print profiling report
+        if: always()
+        run: cat /tmp/ec-profile/report.txt 2>/dev/null || echo "No profiling report found"
+
+      - name: Upload profiling data
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: acceptance-profiling
+          path: /tmp/ec-profile/
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Upload acceptance coverage artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
