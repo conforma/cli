@@ -95,6 +95,7 @@ ec opa test <path> [path [...]] [flags]
 -p, --parallel:: the number of tests that can run in parallel, defaulting to the number of CPUs (explicitly set with 0). Benchmarks are always run sequentially.
 -r, --run:: run only test cases matching the regular expression
 -s, --schema:: set schema file path or directory path
+--sort:: sort the JSON formatted test output (Default: none)
 -t, --target:: set the runtime to exercise (Default: rego)
 --threshold:: set coverage threshold and exit with non-zero status if coverage is less than threshold % (Default: 0)
 --timeout:: set test timeout (default 5s, 30s when benchmarking) (Default: 0s)

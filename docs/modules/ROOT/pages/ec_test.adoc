@@ -90,7 +90,7 @@ ec test <path> [path [...]] [flags]
 --no-color:: Disable color when printing (Default: false)
 --no-fail:: Return an exit code of zero even if a policy fails (Default: false)
 -o, --output:: Output format for conftest results - valid options are: [stdout json tap table junit github azuredevops sarif] (Default: stdout)
---parser:: Parser to use to parse the configurations. Valid parsers: [cue dockerfile edn hcl1 hcl2 hocon ignore ini json jsonnet properties spdx textproto toml vcl xml yaml dotenv]
+--parser:: Parser to use to parse the configurations. Valid parsers: [cue dockerfile edn hcl1 hcl2 hocon ignore ini json jsonnet nginx properties spdx textproto toml vcl xml yaml dotenv]
 -p, --policy:: Path to the Rego policy files directory (Default: [policy])
 --proto-file-dirs:: A list of directories containing Protocol Buffer definitions (Default: [])
 --quiet:: Disable successful test output (Default: false)
