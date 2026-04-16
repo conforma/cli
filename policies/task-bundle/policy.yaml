@@ -1,0 +1,28 @@
+# Copyright The Conforma Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+#
+# EnterpriseContractPolicy for validating Tekton task bundles
+# This policy detects task bundles and validates the task definitions within them
+#
+# For POC testing: use with --ignore-rekor and certificate-* flags to bypass signature validation
+#
+description: 'POC policy for validating Tekton task bundle images'
+publicKey: 'k8s://openshift-pipelines/public-key'
+sources:
+  - name: Task Bundle Policies
+    policy:
+      - ./policies/task-bundle
