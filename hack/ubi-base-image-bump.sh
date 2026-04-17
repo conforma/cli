@@ -30,7 +30,7 @@ NEW_DIGEST=$(skopeo inspect --raw docker://$UBI_MINIMAL | sha256sum | awk '{prin
 echo "Found $UBI_MINIMAL:latest@$NEW_DIGEST"
 
 # Update docker files
-DOCKER_FILES=(Dockerfile Dockerfile.dist)
+DOCKER_FILES=(Dockerfile Dockerfile.dist acceptance/kubernetes/kind/acceptance.Dockerfile)
 for d in "${DOCKER_FILES[@]}" ; do
   echo "Updating $d"
   sed -E "s!^FROM $UBI_MINIMAL@sha256:[0-9a-f]{64}\$!FROM $UBI_MINIMAL@sha256:$NEW_DIGEST!" -i $d

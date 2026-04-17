@@ -38,17 +38,74 @@ import (
 	"github.com/conforma/cli/acceptance/testenv"
 )
 
-// buildCliImage runs `make push-image` to build and push the image to the Kind
-// cluster. The image is pushed to
-// `localhost:<registry-port>/cli:latest-<architecture>-<os>`, see push-image
-// Makefile target for details. The registry is running without TLS, so we need
-// `--tls-verify=false` here.
-
+// buildCliImage builds the ec and kubectl binaries locally, then constructs a
+// minimal container image and pushes it to the Kind cluster registry. The image
+// is pushed to `localhost:<registry-port>/cli:latest-<os>-<arch>`. Building the
+// binaries on the host leverages the warm Go build cache, avoiding the
+// redundant Go compilation that the multi-stage production Dockerfile performs.
 func (k *kindCluster) buildCliImage(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "make", "push-image", fmt.Sprintf("IMAGE_REPO=localhost:%d/cli", k.registryPort), "PODMAN_OPTS=--tls-verify=false") /* #nosec */
+	// Build into a directory not excluded by .dockerignore (which excludes
+	// dist/) and not conflicting with the versioned binary from make build.
+	buildDir := ".acceptance-build"
+	if err := os.MkdirAll(buildDir, 0755); err != nil {
+		return fmt.Errorf("creating build directory: %w", err)
+	}
+	defer os.RemoveAll(buildDir)
 
-	if out, err := cmd.CombinedOutput(); err != nil {
-		fmt.Printf("[ERROR] Unable to build and push the CLI image, %q returned an error: %v\nCommand output:\n", cmd, err)
+	// Derive version the same way as the Makefile
+	versionCmd := exec.CommandContext(ctx, "hack/derive-version.sh") // #nosec G204
+	versionOut, err := versionCmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("[WARN] Failed to derive version, building without: %v\n", err)
+		versionOut = nil
+	}
+	version := strings.TrimSpace(string(versionOut))
+
+	// Build ec binary locally
+	ldflags := "-s -w"
+	if version != "" {
+		ldflags += " -X github.com/conforma/cli/internal/version.Version=" + version
+	}
+	ecBinary := filepath.Join(buildDir, "ec")
+	ecBuildCmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "--mod=readonly", fmt.Sprintf("-ldflags=%s", ldflags), "-o", ecBinary) // #nosec G204
+	if out, err := ecBuildCmd.CombinedOutput(); err != nil {
+		fmt.Printf("[ERROR] Failed to build ec binary, %q returned an error: %v\nCommand output:\n", ecBuildCmd, err)
+		fmt.Print(string(out))
+		return err
+	}
+
+	// Build kubectl binary locally
+	kubectlBinary := filepath.Join(buildDir, "kubectl")
+	kubectlBuildCmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "--mod=readonly", "-modfile", "tools/kubectl/go.mod", "-o", kubectlBinary, "k8s.io/kubernetes/cmd/kubectl") // #nosec G204
+	if out, err := kubectlBuildCmd.CombinedOutput(); err != nil {
+		fmt.Printf("[ERROR] Failed to build kubectl binary, %q returned an error: %v\nCommand output:\n", kubectlBuildCmd, err)
+		fmt.Print(string(out))
+		return err
+	}
+
+	// Build the container image using the minimal acceptance Dockerfile
+	imgTag, err := getTag(ctx)
+	if err != nil {
+		return fmt.Errorf("getting image tag: %w", err)
+	}
+	imageRef := fmt.Sprintf("localhost:%d/cli:%s", k.registryPort, imgTag)
+
+	buildImgCmd := exec.CommandContext(ctx, "podman", "build", // #nosec G204
+		"-t", imageRef,
+		"-f", "acceptance/kubernetes/kind/acceptance.Dockerfile",
+		"--build-arg", fmt.Sprintf("EC_BINARY=%s", ecBinary),
+		"--build-arg", fmt.Sprintf("KUBECTL_BINARY=%s", kubectlBinary),
+		".")
+	if out, err := buildImgCmd.CombinedOutput(); err != nil {
+		fmt.Printf("[ERROR] Failed to build CLI image, %q returned an error: %v\nCommand output:\n", buildImgCmd, err)
+		fmt.Print(string(out))
+		return err
+	}
+
+	// Push the image to the Kind registry (no TLS)
+	pushCmd := exec.CommandContext(ctx, "podman", "push", "--tls-verify=false", imageRef) // #nosec G204
+	if out, err := pushCmd.CombinedOutput(); err != nil {
+		fmt.Printf("[ERROR] Failed to push CLI image, %q returned an error: %v\nCommand output:\n", pushCmd, err)
 		fmt.Print(string(out))
 		return err
 	}
