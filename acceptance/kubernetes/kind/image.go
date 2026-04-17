@@ -93,13 +93,20 @@ func (k *kindCluster) buildCliImage(ctx context.Context) error {
 		return err
 	}
 
-	// Build kubectl binary locally
+	// Use pre-built kubectl from PATH if available, otherwise build from source
 	kubectlBinary := filepath.Join(buildDir, "kubectl")
-	kubectlBuildCmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "--mod=readonly", "-modfile", "tools/kubectl/go.mod", "-o", kubectlBinary, "k8s.io/kubernetes/cmd/kubectl") // #nosec G204
-	if out, err := kubectlBuildCmd.CombinedOutput(); err != nil {
-		fmt.Printf("[ERROR] Failed to build kubectl binary, %q returned an error: %v\nCommand output:\n", kubectlBuildCmd, err)
-		fmt.Print(string(out))
-		return err
+	if kubectlPath, err := exec.LookPath("kubectl"); err == nil {
+		fmt.Printf("[INFO] Using pre-built kubectl from %s\n", kubectlPath)
+		if err := copyFile(kubectlPath, kubectlBinary); err != nil {
+			return fmt.Errorf("copying kubectl binary: %w", err)
+		}
+	} else {
+		kubectlBuildCmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "--mod=readonly", "-modfile", "tools/kubectl/go.mod", "-o", kubectlBinary, "k8s.io/kubernetes/cmd/kubectl") // #nosec G204
+		if out, err := kubectlBuildCmd.CombinedOutput(); err != nil {
+			fmt.Printf("[ERROR] Failed to build kubectl binary, %q returned an error: %v\nCommand output:\n", kubectlBuildCmd, err)
+			fmt.Print(string(out))
+			return err
+		}
 	}
 
 	// Build the container image using the minimal acceptance Dockerfile
@@ -382,6 +389,24 @@ func getTag(ctx context.Context) (string, error) {
 	}
 
 	return fmt.Sprintf("latest-%s", strings.Replace(strings.TrimSuffix(string(archOut), "\n"), "/", "-", -1)), nil
+}
+
+// copyFile copies a file from src to dst, preserving the executable permission.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755) // #nosec G302
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
 }
 
 // Tar and gzip a file. Used with trusted artifacts.

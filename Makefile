@@ -340,9 +340,10 @@ TASKS ?= tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml,ta
 ifneq (,$(findstring localhost:,$(TASK_REPO)))
 SKOPEO_ARGS=--src-tls-verify=false --dest-tls-verify=false
 endif
+TKN ?= $(shell command -v tkn 2>/dev/null || echo "go run -modfile tools/go.mod github.com/tektoncd/cli/cmd/tkn")
 .PHONY: task-bundle
 task-bundle: ## Push the Tekton Task bundle to an image repository
-	@go run -modfile tools/go.mod github.com/tektoncd/cli/cmd/tkn bundle push $(TASK_REPO):$(TASK_TAG) $(addprefix -f ,$(TASKS)) --annotate org.opencontainers.image.revision="$(TASK_TAG)"
+	@$(TKN) bundle push $(TASK_REPO):$(TASK_TAG) $(addprefix -f ,$(TASKS)) --annotate org.opencontainers.image.revision="$(TASK_TAG)"
 
 .PHONY: task-bundle-snapshot
 task-bundle-snapshot: task-bundle ## Push task bundle and then tag with "snapshot"
