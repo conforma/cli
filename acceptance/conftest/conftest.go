@@ -91,7 +91,12 @@ func runConftest(ctx context.Context, command, produces string, content *godog.D
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	var cmdErr error
 	defer func() {
+		if cmdErr == nil {
+			return
+		}
+
 		noColors := testenv.NoColorOutput(ctx)
 		if c.SUPPORT_COLOR != !noColors {
 			c.SUPPORT_COLOR = !noColors
@@ -105,8 +110,8 @@ func runConftest(ctx context.Context, command, produces string, content *godog.D
 		fmt.Printf("\n\t%s", strings.ReplaceAll(stderr.String(), "\n", "\n\t"))
 	}()
 
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failure running conftest: %w", err)
+	if cmdErr = cmd.Run(); cmdErr != nil {
+		return fmt.Errorf("failure running conftest: %w", cmdErr)
 	}
 
 	buff, err := os.ReadFile(path.Join(dir, produces))

@@ -560,7 +560,12 @@ func theStandardErrorShouldContain(ctx context.Context, expected *godog.DocStrin
 		return nil
 	}
 
-	return fmt.Errorf("expected error:\n%s\nnot found in standard error:\n%s", expected, stderr)
+	var b bytes.Buffer
+	if diffErr := diff.Text("stderr", "expected", status.stderr, expectedStdErr, &b); diffErr != nil {
+		return fmt.Errorf("expected error:\n%s\nnot found in standard error:\n%s", expected, stderr)
+	}
+
+	return fmt.Errorf("expected and actual stderr differ:\n%s", b.String())
 }
 
 // theStandardOutputShouldMatchBaseline reads the expected text from a file instead of directly
@@ -714,40 +719,44 @@ func EcStatusFrom(ctx context.Context) (*status, error) {
 // logExecution logs the details of the execution and offers hits as how to
 // troubleshoot test failures by using persistent environment
 func logExecution(ctx context.Context) {
-	noColors := testenv.NoColorOutput(ctx)
-	if c.SUPPORT_COLOR != !noColors {
-		c.SUPPORT_COLOR = !noColors
-	}
-
 	s, err := ecStatusFrom(ctx)
 	if err != nil {
 		return // the ec wasn't invoked no status was stored
 	}
 
-	output := &strings.Builder{}
-	outputSegment := func(name string, v any) {
-		output.WriteString("\n\n")
-		output.WriteString(c.Underline(c.Bold(name)))
-		output.WriteString(fmt.Sprintf("\n%v", v))
+	noColors := testenv.NoColorOutput(ctx)
+	if c.SUPPORT_COLOR != !noColors {
+		c.SUPPORT_COLOR = !noColors
 	}
 
-	outputSegment("Command", s.Cmd)
-	outputSegment("State", fmt.Sprintf("Exit code: %d\nPid: %d", s.ProcessState.ExitCode(), s.ProcessState.Pid()))
-	outputSegment("Environment", strings.Join(s.Env, "\n"))
-	var varsStr []string
-	for k, v := range s.vars {
-		varsStr = append(varsStr, fmt.Sprintf("%s=%s", k, v))
-	}
-	outputSegment("Variables", strings.Join(varsStr, "\n"))
-	if s.stdout.Len() == 0 {
-		outputSegment("Stdout", c.Italic("* No standard output"))
-	} else {
-		outputSegment("Stdout", c.Green(s.stdout.String()))
-	}
-	if s.stderr.Len() == 0 {
-		outputSegment("Stdout", c.Italic("* No standard error"))
-	} else {
-		outputSegment("Stderr", c.Red(s.stderr.String()))
+	verbose, _ := ctx.Value(testenv.VerboseOutput).(bool)
+	if verbose {
+		output := &strings.Builder{}
+		outputSegment := func(name string, v any) {
+			output.WriteString("\n\n")
+			output.WriteString(c.Underline(c.Bold(name)))
+			output.WriteString(fmt.Sprintf("\n%v", v))
+		}
+
+		outputSegment("Command", s.Cmd)
+		outputSegment("State", fmt.Sprintf("Exit code: %d\nPid: %d", s.ProcessState.ExitCode(), s.ProcessState.Pid()))
+		outputSegment("Environment", strings.Join(s.Env, "\n"))
+		var varsStr []string
+		for k, v := range s.vars {
+			varsStr = append(varsStr, fmt.Sprintf("%s=%s", k, v))
+		}
+		outputSegment("Variables", strings.Join(varsStr, "\n"))
+		if s.stdout.Len() == 0 {
+			outputSegment("Stdout", c.Italic("* No standard output"))
+		} else {
+			outputSegment("Stdout", c.Green(s.stdout.String()))
+		}
+		if s.stderr.Len() == 0 {
+			outputSegment("Stderr", c.Italic("* No standard error"))
+		} else {
+			outputSegment("Stderr", c.Red(s.stderr.String()))
+		}
+		fmt.Print(output.String())
 	}
 
 	if testenv.Persisted(ctx) {
@@ -758,12 +767,11 @@ func logExecution(ctx context.Context) {
 			}
 		}
 
-		output.WriteString("\n" + c.Bold("NOTE") + ": " + fmt.Sprintf("The test environment is persisted, to recreate the failure run:\n%s %s\n\n", strings.Join(environment, " "), strings.Join(s.Cmd.Args, " ")))
+		fmt.Printf("\n%s: The test environment is persisted, to recreate the failure run:\n%s %s\n\n",
+			c.Bold("NOTE"), strings.Join(environment, " "), strings.Join(s.Cmd.Args, " "))
 	} else {
-		output.WriteString("\n" + c.Bold("HINT") + ": To recreate the failure re-run the test with `-args -persist` to persist the stubbed environment\n\n")
+		fmt.Printf("\n%s: To recreate the failure re-run the test with `-args -persist` to persist the stubbed environment, or `-args -verbose` for detailed execution output\n\n", c.Bold("HINT"))
 	}
-
-	fmt.Print(output.String())
 }
 
 func matchSnapshot(ctx context.Context) error {
@@ -852,7 +860,9 @@ func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step(`^a file named "([^"]*)" containing$`, createGenericFile)
 	sc.Step(`^a track bundle file named "([^"]*)" containing$`, createTrackBundleFile)
 	sc.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
-		logExecution(ctx)
+		if err != nil {
+			logExecution(ctx)
+		}
 
 		return ctx, nil
 	})

@@ -39,6 +39,7 @@ const (
 	PersistStubEnvironment testEnv = iota // key to a bool flag telling if the environment is persisted
 	RestoreStubEnvironment                // key to a bool flag telling if the environment is restored
 	NoColors                              // key to a bool flag telling if the colors should be used in output
+	VerboseOutput                         // key to a bool flag telling if verbose output (stdout/stderr) should be shown on failure
 	TestingT                              // key to the *testing.T instance in Context
 	persistedEnv                          // key to a map of persisted environment states
 	RekorImpl                             // key to a implementation of the Rekor interface, used to prevent import cycles
