@@ -33,10 +33,12 @@ require (
 	github.com/wiremock/go-wiremock v1.11.0
 	github.com/yudai/gojsondiff v1.0.0
 	golang.org/x/exp v0.0.0-20250911091902-df9299821621
+	golang.org/x/sync v0.20.0
 	gopkg.in/go-jose/go-jose.v2 v2.6.3
 	k8s.io/api v0.35.3
 	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.3
+	k8s.io/klog/v2 v2.130.1
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/kind v0.26.0
 	sigs.k8s.io/kustomize/api v0.20.1
@@ -245,7 +247,6 @@ require (
 	golang.org/x/mod v0.33.0 // indirect
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/term v0.41.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
@@ -264,7 +265,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.34.3 // indirect
 	k8s.io/cli-runtime v0.34.2 // indirect
-	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
 	knative.dev/pkg v0.0.0-20250415155312-ed3e2158b883 // indirect

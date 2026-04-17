@@ -20,6 +20,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -28,6 +29,7 @@ import (
 
 	"github.com/cucumber/godog"
 	"github.com/gkampitakis/go-snaps/snaps"
+	"k8s.io/klog/v2"
 
 	"github.com/conforma/cli/acceptance/cli"
 	"github.com/conforma/cli/acceptance/conftest"
@@ -55,11 +57,16 @@ var restore = flag.Bool("restore", false, "restore last persisted environment")
 
 var noColors = flag.Bool("no-colors", false, "disable colored output")
 
+var verbose = flag.Bool("verbose", false, "show stdout/stderr in failure output")
+
 // specify a subset of scenarios to run filtering by given tags
 var tags = flag.String("tags", "", "select scenarios to run based on tags")
 
 // random seed to use
 var seed = flag.Int64("seed", -1, "random seed to use for the tests")
+
+// godog output formatter (pretty, progress, cucumber, junit, events)
+var format = flag.String("format", "", "godog output formatter (default: progress, or set EC_ACCEPTANCE_FORMAT)")
 
 // failedScenario tracks information about a failed scenario
 type failedScenario struct {
@@ -86,7 +93,7 @@ func (st *scenarioTracker) addFailure(name, location, logFile string, err error)
 	})
 }
 
-func (st *scenarioTracker) printSummary(t *testing.T) {
+func (st *scenarioTracker) printSummary() {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
@@ -101,9 +108,6 @@ func (st *scenarioTracker) printSummary(t *testing.T) {
 	for i, fs := range st.failedScenarios {
 		fmt.Fprintf(os.Stderr, "%d. %s\n", i+1, fs.Name)
 		fmt.Fprintf(os.Stderr, "   Location: %s\n", fs.Location)
-		if fs.Error != nil {
-			fmt.Fprintf(os.Stderr, "   Error: %v\n", fs.Error)
-		}
 		if fs.LogFile != "" {
 			fmt.Fprintf(os.Stderr, "   Log file: %s\n", fs.LogFile)
 		}
@@ -174,6 +178,7 @@ func setupContext(t *testing.T) context.Context {
 	ctx = context.WithValue(ctx, testenv.PersistStubEnvironment, *persist)
 	ctx = context.WithValue(ctx, testenv.RestoreStubEnvironment, *restore)
 	ctx = context.WithValue(ctx, testenv.NoColors, *noColors)
+	ctx = context.WithValue(ctx, testenv.VerboseOutput, *verbose)
 
 	return ctx
 }
@@ -194,8 +199,16 @@ func TestFeatures(t *testing.T) {
 
 	ctx := setupContext(t)
 
+	godogFormat := "progress:/dev/null"
+	if f := os.Getenv("EC_ACCEPTANCE_FORMAT"); f != "" {
+		godogFormat = f
+	}
+	if *format != "" {
+		godogFormat = *format
+	}
+
 	opts := godog.Options{
-		Format:         "pretty",
+		Format:         godogFormat,
 		Paths:          []string{featuresDir},
 		Randomize:      *seed,
 		Concurrency:    runtime.NumCPU(),
@@ -214,16 +227,22 @@ func TestFeatures(t *testing.T) {
 
 	exitCode := suite.Run()
 
-	// Print summary of failed scenarios
-	tracker.printSummary(t)
-
 	if exitCode != 0 {
 		t.Fatalf("acceptance test suite failed with exit code %d", exitCode)
 	}
 }
 
 func TestMain(t *testing.M) {
+	// Suppress k8s client-side throttling warnings that pollute test output.
+	// LogToStderr(false) is required because klog defaults to writing directly
+	// to stderr, ignoring any writer set via SetOutput.
+	klog.LogToStderr(false)
+	klog.SetOutput(io.Discard)
+
 	v := t.Run()
+
+	// Print summaries after all go test output so they appear last
+	tracker.printSummary()
 
 	// After all tests have run `go-snaps` can check for not used snapshots
 	if _, err := snaps.Clean(t); err != nil {
