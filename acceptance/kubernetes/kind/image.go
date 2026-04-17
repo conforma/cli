@@ -20,6 +20,8 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -30,30 +32,185 @@ import (
 
 	imagespecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"golang.org/x/sync/errgroup"
+	corev1 "k8s.io/api/core/v1"
 	"oras.land/oras-go/v2"
 	orasFile "oras.land/oras-go/v2/content/file"
 	"oras.land/oras-go/v2/registry/remote"
 	"sigs.k8s.io/yaml"
 
+	"github.com/conforma/cli/acceptance/log"
 	"github.com/conforma/cli/acceptance/testenv"
 )
 
-// buildCliImage runs `make push-image` to build and push the image to the Kind
-// cluster. The image is pushed to
-// `localhost:<registry-port>/cli:latest-<architecture>-<os>`, see push-image
-// Makefile target for details. The registry is running without TLS, so we need
-// `--tls-verify=false` here.
-
+// buildCliImage builds the ec and kubectl binaries locally, then constructs a
+// minimal container image and pushes it to the Kind cluster registry. The image
+// is pushed to `localhost:<registry-port>/cli:latest-<os>-<arch>`. Building the
+// binaries on the host leverages the warm Go build cache, avoiding the
+// redundant Go compilation that the multi-stage production Dockerfile performs.
+//
+// A content hash of the build inputs is computed and compared against a cache
+// marker file. When the hash matches, the build is skipped entirely.
 func (k *kindCluster) buildCliImage(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "make", "push-image", fmt.Sprintf("IMAGE_REPO=localhost:%d/cli", k.registryPort), "PODMAN_OPTS=--tls-verify=false") /* #nosec */
+	currentHash, err := computeSourceHash()
+	var cacheFile string
+	if err != nil {
+		// On hash failure, fall through to a full build
+		fmt.Printf("[WARN] Failed to compute source hash, rebuilding: %v\n", err)
+	} else {
+		cacheFile = fmt.Sprintf("/tmp/ec-cli-image-cache-%d.hash", k.registryPort)
+		if cached, err := os.ReadFile(cacheFile); err == nil && string(cached) == currentHash {
+			fmt.Println("[INFO] CLI image cache hit, skipping build")
+			return nil
+		}
+	}
 
-	if out, err := cmd.CombinedOutput(); err != nil {
-		fmt.Printf("[ERROR] Unable to build and push the CLI image, %q returned an error: %v\nCommand output:\n", cmd, err)
+	// Build into a directory not excluded by .dockerignore (which excludes
+	// dist/) and not conflicting with the versioned binary from make build.
+	buildDir := ".acceptance-build"
+	if err := os.MkdirAll(buildDir, 0755); err != nil {
+		return fmt.Errorf("creating build directory: %w", err)
+	}
+	defer os.RemoveAll(buildDir)
+
+	// Derive version the same way as the Makefile
+	versionCmd := exec.CommandContext(ctx, "hack/derive-version.sh") // #nosec G204
+	versionOut, err := versionCmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("[WARN] Failed to derive version, building without: %v\n", err)
+		versionOut = nil
+	}
+	version := strings.TrimSpace(string(versionOut))
+
+	// Build ec binary locally
+	ldflags := "-s -w"
+	if version != "" {
+		ldflags += " -X github.com/conforma/cli/internal/version.Version=" + version
+	}
+	ecBinary := filepath.Join(buildDir, "ec")
+	ecBuildCmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "--mod=readonly", fmt.Sprintf("-ldflags=%s", ldflags), "-o", ecBinary) // #nosec G204
+	if out, err := ecBuildCmd.CombinedOutput(); err != nil {
+		fmt.Printf("[ERROR] Failed to build ec binary, %q returned an error: %v\nCommand output:\n", ecBuildCmd, err)
 		fmt.Print(string(out))
 		return err
 	}
 
+	// Use pre-built kubectl from PATH if available, otherwise build from source
+	kubectlBinary := filepath.Join(buildDir, "kubectl")
+	if kubectlPath, err := exec.LookPath("kubectl"); err == nil {
+		fmt.Printf("[INFO] Using pre-built kubectl from %s\n", kubectlPath)
+		if err := copyFile(kubectlPath, kubectlBinary); err != nil {
+			return fmt.Errorf("copying kubectl binary: %w", err)
+		}
+	} else {
+		kubectlBuildCmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "--mod=readonly", "-modfile", "tools/kubectl/go.mod", "-o", kubectlBinary, "k8s.io/kubernetes/cmd/kubectl") // #nosec G204
+		if out, err := kubectlBuildCmd.CombinedOutput(); err != nil {
+			fmt.Printf("[ERROR] Failed to build kubectl binary, %q returned an error: %v\nCommand output:\n", kubectlBuildCmd, err)
+			fmt.Print(string(out))
+			return err
+		}
+	}
+
+	// Build the container image using the minimal acceptance Dockerfile
+	imgTag, err := getTag(ctx)
+	if err != nil {
+		return fmt.Errorf("getting image tag: %w", err)
+	}
+	imageRef := fmt.Sprintf("localhost:%d/cli:%s", k.registryPort, imgTag)
+
+	buildImgCmd := exec.CommandContext(ctx, "podman", "build", // #nosec G204
+		"-t", imageRef,
+		"-f", "acceptance/kubernetes/kind/acceptance.Dockerfile",
+		"--build-arg", fmt.Sprintf("EC_BINARY=%s", ecBinary),
+		"--build-arg", fmt.Sprintf("KUBECTL_BINARY=%s", kubectlBinary),
+		".")
+	if out, err := buildImgCmd.CombinedOutput(); err != nil {
+		fmt.Printf("[ERROR] Failed to build CLI image, %q returned an error: %v\nCommand output:\n", buildImgCmd, err)
+		fmt.Print(string(out))
+		return err
+	}
+
+	// Push the image to the Kind registry (no TLS)
+	pushCmd := exec.CommandContext(ctx, "podman", "push", "--tls-verify=false", imageRef) // #nosec G204
+	if out, err := pushCmd.CombinedOutput(); err != nil {
+		fmt.Printf("[ERROR] Failed to push CLI image, %q returned an error: %v\nCommand output:\n", pushCmd, err)
+		fmt.Print(string(out))
+		return err
+	}
+
+	// Write cache hash only after a successful build
+	if cacheFile != "" {
+		_ = os.WriteFile(cacheFile, []byte(currentHash), 0644) // #nosec G306
+	}
+
 	return nil
+}
+
+// computeSourceHash computes a SHA-256 hash of all build inputs for the CLI
+// image: Go source files, go.mod, go.sum, Dockerfile, build.sh, Makefile, and
+// hack/reduce-snapshot.sh. Returns a hex-encoded digest string.
+func computeSourceHash() (string, error) {
+	h := sha256.New()
+
+	// Hash individual build files
+	buildFiles := []string{
+		"go.mod",
+		"go.sum",
+		"Dockerfile",
+		"build.sh",
+		"Makefile",
+		"hack/reduce-snapshot.sh",
+		"tools/kubectl/go.mod",
+		"tools/kubectl/go.sum",
+		"acceptance/kubernetes/kind/acceptance.Dockerfile",
+	}
+	for _, f := range buildFiles {
+		if err := hashFile(h, f); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return "", fmt.Errorf("hashing %s: %w", f, err)
+		}
+	}
+
+	// Hash all .go source files
+	if err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip vendor, .git, and acceptance test directories
+		if d.IsDir() && (d.Name() == "vendor" || d.Name() == ".git" || d.Name() == "acceptance") {
+			return filepath.SkipDir
+		}
+
+		if !d.IsDir() && strings.HasSuffix(path, ".go") {
+			if err := hashFile(h, path); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return "", fmt.Errorf("walking source tree: %w", err)
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// hashFile adds the contents of a file to the given hash, prefixed by its path
+// for domain separation.
+func hashFile(h io.Writer, path string) error {
+	fmt.Fprintf(h, "file:%s\n", path)
+
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = io.Copy(h, f)
+	return err
 }
 
 // buildTaskBundleImage runs `make task-bundle` for each version of the Task in
@@ -117,7 +274,12 @@ func (k *kindCluster) buildTaskBundleImage(ctx context.Context) error {
 			for i, step := range steps {
 				if strings.Contains(step.Image, "/cli:") {
 					steps[i].Image = img
+					steps[i].ImagePullPolicy = corev1.PullIfNotPresent
 				}
+				// Strip resource requests to avoid scheduling waterfall in acceptance tests.
+				// Each TaskRun pod requests 2600m CPU, limiting concurrent pods on the Kind
+				// node and causing scheduling delays up to 5 minutes.
+				steps[i].ComputeResources = corev1.ResourceRequirements{}
 			}
 
 			out, err := yaml.Marshal(taskDefinition)
@@ -139,17 +301,21 @@ func (k *kindCluster) buildTaskBundleImage(ctx context.Context) error {
 		}
 	}
 
+	g, gCtx := errgroup.WithContext(ctx)
 	for version, tasks := range taskBundles {
-		tasksPath := strings.Join(tasks, ",")
-		cmd := exec.CommandContext(ctx, "make", "task-bundle", fmt.Sprintf("TASK_REPO=localhost:%d/ec-task-bundle", k.registryPort), fmt.Sprintf("TASKS=%s", tasksPath), fmt.Sprintf("TASK_TAG=%s", version)) /* #nosec */
-		if out, err := cmd.CombinedOutput(); err != nil {
-			fmt.Printf("[ERROR] Unable to build and push the Task bundle image, %q returned an error: %v\nCommand output:\n", cmd, err)
-			fmt.Print(string(out))
-			return err
-		}
+		g.Go(func() error {
+			tasksPath := strings.Join(tasks, ",")
+			cmd := exec.CommandContext(gCtx, "make", "task-bundle", fmt.Sprintf("TASK_REPO=localhost:%d/ec-task-bundle", k.registryPort), fmt.Sprintf("TASKS=%s", tasksPath), fmt.Sprintf("TASK_TAG=%s", version)) /* #nosec */
+			if out, err := cmd.CombinedOutput(); err != nil {
+				fmt.Printf("[ERROR] Unable to build and push the Task bundle image, %q returned an error: %v\nCommand output:\n", cmd, err)
+				fmt.Print(string(out))
+				return err
+			}
+			return nil
+		})
 	}
 
-	return nil
+	return g.Wait()
 }
 
 // builds a snapshot oci artifact for use with build trusted artifacts
@@ -185,7 +351,8 @@ func (k *kindCluster) BuildSnapshotArtifact(ctx context.Context, content string)
 		if t != nil {
 			t.snapshotDigest = fileDescriptor.Digest.String()
 		}
-		fmt.Printf("file descriptor for %s: %v\n", name, fileDescriptor)
+		logger, _ := log.LoggerFor(ctx)
+		logger.Logf("file descriptor for %s: %v", name, fileDescriptor)
 	}
 
 	artifactType := "application/vnd.test.artifact"
@@ -196,7 +363,8 @@ func (k *kindCluster) BuildSnapshotArtifact(ctx context.Context, content string)
 	if err != nil {
 		return ctx, fmt.Errorf("failed creating manifestDescriptor: %w", err)
 	}
-	fmt.Println("manifest descriptor:", manifestDescriptor)
+	logger, _ := log.LoggerFor(ctx)
+	logger.Log("manifest descriptor:", manifestDescriptor)
 
 	tag := "latest"
 	if err = fs.Tag(ctx, manifestDescriptor, tag); err != nil {
@@ -208,7 +376,7 @@ func (k *kindCluster) BuildSnapshotArtifact(ctx context.Context, content string)
 	if err != nil {
 		return ctx, fmt.Errorf("failed to create repo: %w", err)
 	}
-	fmt.Println("artifactRepo:", artifactRepo)
+	logger.Log("artifactRepo:", artifactRepo)
 
 	// the registry is insecure
 	repo.PlainHTTP = true
@@ -217,7 +385,7 @@ func (k *kindCluster) BuildSnapshotArtifact(ctx context.Context, content string)
 	if err != nil {
 		return ctx, fmt.Errorf("failed to copy %s: %w", filePath, err)
 	}
-	fmt.Println("snapshotDigest:", orasDesc.Digest)
+	logger.Log("snapshotDigest:", orasDesc.Digest)
 
 	return ctx, nil
 }
@@ -230,6 +398,24 @@ func getTag(ctx context.Context) (string, error) {
 	}
 
 	return fmt.Sprintf("latest-%s", strings.Replace(strings.TrimSuffix(string(archOut), "\n"), "/", "-", -1)), nil
+}
+
+// copyFile copies a file from src to dst, preserving the executable permission.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755) // #nosec G302
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
 }
 
 // Tar and gzip a file. Used with trusted artifacts.

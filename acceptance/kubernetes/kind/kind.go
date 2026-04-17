@@ -31,6 +31,7 @@ import (
 	"sync"
 
 	"github.com/phayes/freeport"
+	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -238,21 +239,43 @@ func Start(givenCtx context.Context) (ctx context.Context, kCluster types.Cluste
 			return
 		}
 
-		err = applyConfiguration(ctx, &kCluster, yaml)
+		err = applyResources(ctx, &kCluster, yaml)
 		if err != nil {
 			logger.Errorf("Unable apply cluster configuration: %v", err)
 			return
 		}
 
-		err = kCluster.buildCliImage(ctx)
-		if err != nil {
-			logger.Errorf("Unable to build CLI image: %v", err)
+		// Set up ConfigMap RBAC early so all scenarios have it
+		// regardless of execution order
+		if err = kCluster.ensureConfigMapRBAC(ctx); err != nil {
+			logger.Errorf("Unable to create ConfigMap RBAC: %v", err)
 			return
 		}
 
-		err = kCluster.buildTaskBundleImage(ctx)
+		// Wait for the in-cluster registry (needed by image builds)
+		err = waitForAvailableDeploymentsIn(ctx, &kCluster, "image-registry")
 		if err != nil {
-			logger.Errorf("Unable to build Task image: %v", err)
+			logger.Errorf("Unable to wait for image registry: %v", err)
+			return
+		}
+
+		// Run image builds concurrently with Tekton deployment
+		g, gCtx := errgroup.WithContext(ctx)
+
+		g.Go(func() error {
+			return kCluster.buildCliImage(gCtx)
+		})
+
+		g.Go(func() error {
+			return kCluster.buildTaskBundleImage(gCtx)
+		})
+
+		g.Go(func() error {
+			return waitForAvailableDeploymentsIn(gCtx, &kCluster, "tekton-pipelines")
+		})
+
+		if err = g.Wait(); err != nil {
+			logger.Errorf("Unable to complete cluster setup: %v", err)
 			return
 		}
 
@@ -295,44 +318,64 @@ func renderTestConfiguration(k *kindCluster) (yaml []byte, err error) {
 	return kustomize.Render(path.Join("test"))
 }
 
-// applyConfiguration runs equivalent of kubectl apply for each document in the
-// definitions YAML
-func applyConfiguration(ctx context.Context, k *kindCluster, definitions []byte) (err error) {
+// applyResources runs equivalent of kubectl apply for each document in the
+// definitions YAML. Cluster-scoped resources (Namespaces, CRDs, ClusterRoles,
+// etc.) are applied sequentially first, then namespaced resources are applied
+// in parallel.
+func applyResources(ctx context.Context, k *kindCluster, definitions []byte) error {
+	type resource struct {
+		obj     unstructured.Unstructured
+		mapping *meta.RESTMapping
+	}
+
+	// Parse all documents
+	var clusterScoped, namespaceScoped []resource
 	reader := util.NewYAMLReader(bufio.NewReader(bytes.NewReader(definitions)))
 	for {
-		var definition []byte
-		definition, err = reader.Read()
+		definition, err := reader.Read()
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
-			return
+			return err
 		}
 
 		var obj unstructured.Unstructured
-		if err = yaml.Unmarshal(definition, &obj); err != nil {
-			return
+		if err := yaml.Unmarshal(definition, &obj); err != nil {
+			return err
 		}
 
-		var mapping *meta.RESTMapping
-		if mapping, err = k.mapper.RESTMapping(obj.GroupVersionKind().GroupKind()); err != nil {
-			return
-		}
-
-		var c dynamic.ResourceInterface = k.dynamic.Resource(mapping.Resource)
-		if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
-			c = c.(dynamic.NamespaceableResourceInterface).Namespace(obj.GetNamespace())
-		}
-
-		_, err = c.Apply(ctx, obj.GetName(), &obj, metav1.ApplyOptions{FieldManager: "application/apply-patch"})
+		mapping, err := k.mapper.RESTMapping(obj.GroupVersionKind().GroupKind())
 		if err != nil {
-			return
+			return err
+		}
+
+		if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+			namespaceScoped = append(namespaceScoped, resource{obj: obj, mapping: mapping})
+		} else {
+			clusterScoped = append(clusterScoped, resource{obj: obj, mapping: mapping})
 		}
 	}
 
-	err = waitForAvailableDeploymentsIn(ctx, k, "tekton-pipelines", "image-registry")
+	// Apply cluster-scoped resources sequentially (ordering matters for CRDs, Namespaces)
+	for _, r := range clusterScoped {
+		c := k.dynamic.Resource(r.mapping.Resource)
+		if _, err := c.Apply(ctx, r.obj.GetName(), &r.obj, metav1.ApplyOptions{FieldManager: "application/apply-patch"}); err != nil {
+			return err
+		}
+	}
 
-	return
+	// Apply namespaced resources in parallel
+	g, gCtx := errgroup.WithContext(ctx)
+	for _, r := range namespaceScoped {
+		g.Go(func() error {
+			c := k.dynamic.Resource(r.mapping.Resource).Namespace(r.obj.GetNamespace())
+			_, err := c.Apply(gCtx, r.obj.GetName(), &r.obj, metav1.ApplyOptions{FieldManager: "application/apply-patch"})
+			return err
+		})
+	}
+
+	return g.Wait()
 }
 
 // waitForAvailableDeploymentsIn makes sure that all deployments in the provided

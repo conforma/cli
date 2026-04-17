@@ -109,17 +109,34 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Restore Cache
-        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      - name: Cache Go build and module artifacts
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
-          key: main
-          path: '**'
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-acceptance-${{ runner.os }}-${{ hashFiles('go.sum', 'tools/go.sum', 'tools/kubectl/go.sum') }}
+          restore-keys: |
+            go-acceptance-${{ runner.os }}-
 
       - name: Setup Go environment
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
           cache: false
+
+      - name: Install tkn CLI
+        run: |
+          TKN_VERSION=$(grep 'tektoncd/cli' tools/go.mod | awk '{print $2}' | sed 's/^v//')
+          curl -fsSL "https://github.com/tektoncd/cli/releases/download/v${TKN_VERSION}/tkn_${TKN_VERSION}_Linux_x86_64.tar.gz" \
+            | sudo tar xz -C /usr/local/bin tkn
+
+      - name: Install kubectl
+        run: |
+          KUBECTL_VERSION=$(grep 'k8s.io/kubernetes' tools/kubectl/go.mod | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+')
+          sudo curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
+            -o /usr/local/bin/kubectl
+          sudo chmod +x /usr/local/bin/kubectl
 
       - name: Update podman
         run: |

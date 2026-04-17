@@ -101,7 +101,7 @@ Error: success criteria not met
 ---
 
 [multiple data source top level key clash:stderr - 1]
-Error: error validating file input.json: evaluating policy: load: load documents: 1 error occurred during loading: ${TEMP}/ec-work-${RANDOM}/dat${RANDOM}/${RANDOM}/data.yaml: merge error
+Error: error validating file ${TMPDIR}/input.json: evaluating policy: load: load documents: 1 error occurred during loading: ${TEMP}/ec-work-${RANDOM}/dat${RANDOM}/${RANDOM}/data.yaml: merge error
 
 ---
 
@@ -118,7 +118,7 @@ Error: error validating file pipeline_definition.yaml: evaluating policy: no reg
 ec-version: ${EC_VERSION}
 effective-time: "${TIMESTAMP}"
 filepaths:
-- filepath: input.json
+- filepath: ${TMPDIR}/input.json
   success: true
   success-count: 0
   successes: null

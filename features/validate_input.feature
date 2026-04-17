@@ -119,7 +119,7 @@ Feature: validate input
   # In this situation a merge happens and we get second
   # level keys from both sources.
   Scenario: multiple data source top level key map merging
-    Given a file named "policy.yaml" containing
+    Given a file named "${TMPDIR}/policy.yaml" containing
       """
       sources:
         - data:
@@ -128,11 +128,11 @@ Feature: validate input
           policy:
             - "file::acceptance/examples/data-merges/policy"
       """
-    Given a file named "input.json" containing
+    Given a file named "${TMPDIR}/input.json" containing
       """
       {}
       """
-    When ec command is run with "validate input --file input.json --policy policy.yaml -o yaml"
+    When ec command is run with "validate input --file ${TMPDIR}/input.json --policy ${TMPDIR}/policy.yaml -o yaml"
     Then the exit status should be 0
     Then the output should match the snapshot
 
@@ -140,7 +140,7 @@ Feature: validate input
   # two different data sources, but its value is not a map.
   # In this situation ec throws a "merge error" error.
   Scenario: multiple data source top level key clash
-    Given a file named "policy.yaml" containing
+    Given a file named "${TMPDIR}/policy.yaml" containing
       """
       sources:
         - data:
@@ -149,10 +149,10 @@ Feature: validate input
           policy:
             - "file::acceptance/examples/data-merges/policy"
       """
-    Given a file named "input.json" containing
+    Given a file named "${TMPDIR}/input.json" containing
       """
       {}
       """
-    When ec command is run with "validate input --file input.json --policy policy.yaml -o yaml"
+    When ec command is run with "validate input --file ${TMPDIR}/input.json --policy ${TMPDIR}/policy.yaml -o yaml"
     Then the exit status should be 1
     Then the output should match the snapshot

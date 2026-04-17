@@ -121,7 +121,9 @@ ACCEPTANCE_TIMEOUT:=20m
 .PHONY: acceptance
 
 acceptance: ## Run all acceptance tests
-	@ACCEPTANCE_WORKDIR="$$(mktemp -d)"; \
+	@SECONDS=0; \
+	echo "[`date '+%H:%M:%S'`] Starting acceptance tests"; \
+	ACCEPTANCE_WORKDIR="$$(mktemp -d)"; \
 	cleanup() { \
 		cp "$${ACCEPTANCE_WORKDIR}"/features/__snapshots__/* "$(ROOT_DIR)"/features/__snapshots__/; \
 	}; \
@@ -129,9 +131,13 @@ acceptance: ## Run all acceptance tests
 	trap cleanup EXIT; \
 	cp -R . "$$ACCEPTANCE_WORKDIR"; \
 	cd "$$ACCEPTANCE_WORKDIR" && \
-	$(MAKE) build && \
+	$(MAKE) build E2E_INSTRUMENTATION=true && \
+	echo "[`date '+%H:%M:%S'`] Build done, running tests"; \
 	export GOCOVERDIR="$${ACCEPTANCE_WORKDIR}/coverage"; \
-	cd acceptance && go test -timeout $(ACCEPTANCE_TIMEOUT) ./... ; go tool covdata textfmt -i=$${GOCOVERDIR} -o="$(ROOT_DIR)/coverage-acceptance.out"
+	cd acceptance && go test -timeout $(ACCEPTANCE_TIMEOUT) ./... && test_passed=1 || test_passed=0; \
+	echo "[`date '+%H:%M:%S'`] Tests finished in $$((SECONDS/60))m$$((SECONDS%60))s"; \
+	go tool covdata textfmt -i=$${GOCOVERDIR} -o="$(ROOT_DIR)/coverage-acceptance.out" || true; \
+	[ "$$test_passed" = "1" ]
 
 # Add @focus above the feature you're hacking on to use this
 # (Mainly for use with the feature-% target below)
@@ -340,9 +346,10 @@ TASKS ?= tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml,ta
 ifneq (,$(findstring localhost:,$(TASK_REPO)))
 SKOPEO_ARGS=--src-tls-verify=false --dest-tls-verify=false
 endif
+TKN ?= $(shell command -v tkn 2>/dev/null || echo "go run -modfile tools/go.mod github.com/tektoncd/cli/cmd/tkn")
 .PHONY: task-bundle
 task-bundle: ## Push the Tekton Task bundle to an image repository
-	@go run -modfile tools/go.mod github.com/tektoncd/cli/cmd/tkn bundle push $(TASK_REPO):$(TASK_TAG) $(addprefix -f ,$(TASKS)) --annotate org.opencontainers.image.revision="$(TASK_TAG)"
+	@$(TKN) bundle push $(TASK_REPO):$(TASK_TAG) $(addprefix -f ,$(TASKS)) --annotate org.opencontainers.image.revision="$(TASK_TAG)"
 
 .PHONY: task-bundle-snapshot
 task-bundle-snapshot: task-bundle ## Push task bundle and then tag with "snapshot"

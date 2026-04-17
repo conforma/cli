@@ -85,7 +85,8 @@ type unmatchedRequest struct {
 }
 
 type wiremockState struct {
-	URL string
+	URL       string
+	Container testcontainers.Container `json:"-"`
 }
 
 func (g wiremockState) Key() any {
@@ -225,6 +226,8 @@ func StartWiremock(ctx context.Context) (context.Context, error) {
 		return ctx, fmt.Errorf("unable to run GenericContainer: %v", err)
 	}
 
+	state.Container = w
+
 	port, err := w.MappedPort(ctx, "8080/tcp")
 	if err != nil {
 		return ctx, err
@@ -279,34 +282,37 @@ func IsRunning(ctx context.Context) bool {
 	return state.Up()
 }
 
-// AddStepsTo makes sure that nay unmatched requests, i.e. requests that are not
-// stubbed get reported at the end of a scenario run
-// TODO: reset stub state after the scenario (given not persisted flag is set)
+// AddStepsTo makes sure that any unmatched requests, i.e. requests that are not
+// stubbed get reported at the end of a scenario run, and terminates the container
+// after the scenario completes
 func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.After(func(ctx context.Context, finished *godog.Scenario, scenarioErr error) (context.Context, error) {
-		if !IsRunning(ctx) {
+		if IsRunning(ctx) {
+			if w, err := wiremockFrom(ctx); err == nil {
+				if unmatched, err := w.UnmatchedRequests(); err == nil && len(unmatched) > 0 {
+					logger, _ := log.LoggerFor(ctx)
+					logger.Log("Found unmatched WireMock requests:")
+					for i, u := range unmatched {
+						logger.Logf("[%d]: %s", i, u)
+					}
+				}
+			}
+		}
+
+		if testenv.Persisted(ctx) {
 			return ctx, nil
 		}
 
-		w, err := wiremockFrom(ctx)
-		if err != nil {
-			// wiremock wasn't launched, we don't need to proceed
-			return ctx, err
-		}
-
-		unmatched, err := w.UnmatchedRequests()
-		if err != nil {
-			return ctx, err
-		}
-
-		if len(unmatched) == 0 {
+		if !testenv.HasState[wiremockState](ctx) {
 			return ctx, nil
 		}
 
-		logger, ctx := log.LoggerFor(ctx)
-		logger.Log("Found unmatched WireMock requests:")
-		for i, u := range unmatched {
-			logger.Logf("[%d]: %s", i, u)
+		state := testenv.FetchState[wiremockState](ctx)
+		if state.Container != nil {
+			if err := state.Container.Terminate(ctx); err != nil {
+				logger, _ := log.LoggerFor(ctx)
+				logger.Warnf("failed to terminate wiremock container: %v", err)
+			}
 		}
 
 		return ctx, nil
