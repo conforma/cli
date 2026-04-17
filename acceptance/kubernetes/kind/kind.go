@@ -245,6 +245,13 @@ func Start(givenCtx context.Context) (ctx context.Context, kCluster types.Cluste
 			return
 		}
 
+		// Set up ConfigMap RBAC early so all scenarios have it
+		// regardless of execution order
+		if err = kCluster.ensureConfigMapRBAC(ctx); err != nil {
+			logger.Errorf("Unable to create ConfigMap RBAC: %v", err)
+			return
+		}
+
 		// Wait for the in-cluster registry (needed by image builds)
 		err = waitForAvailableDeploymentsIn(ctx, &kCluster, "image-registry")
 		if err != nil {
