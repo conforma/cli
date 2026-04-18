@@ -3,7 +3,7 @@ module github.com/conforma/cli/acceptance
 go 1.25.8
 
 require (
-	cuelang.org/go v0.15.1
+	cuelang.org/go v0.16.1
 	github.com/cucumber/godog v0.15.1
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/doiit/picocolors v1.0.1
@@ -12,14 +12,14 @@ require (
 	github.com/gkampitakis/go-snaps v0.5.19
 	github.com/go-git/go-billy/v5 v5.8.0
 	github.com/go-git/go-git/v5 v5.17.1
-	github.com/go-openapi/strfmt v0.25.0
+	github.com/go-openapi/strfmt v0.26.1
 	github.com/google/go-containerregistry v0.21.0
 	github.com/in-toto/in-toto-golang v0.10.0
-	github.com/konflux-ci/application-api v0.0.0-20240812090716-e7eb2ecfb409
+	github.com/konflux-ci/application-api 5154ad273e17
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/otiai10/copy v1.14.1
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
-	github.com/pkg/diff v0.0.0-20210226163009-20ebb0f2a09e
+	github.com/pkg/diff 4e6772a4315c
 	github.com/pkg/errors v0.9.1
 	github.com/secure-systems-lab/go-securesystemslib v0.10.0
 	github.com/sigstore/cosign/v2 v2.6.2
@@ -28,24 +28,24 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tektoncd/cli v0.44.0
 	github.com/tektoncd/pipeline v1.9.2
-	github.com/testcontainers/testcontainers-go v0.34.1
+	github.com/testcontainers/testcontainers-go v0.42.0
 	github.com/transparency-dev/merkle v0.0.2
-	github.com/wiremock/go-wiremock v1.11.0
+	github.com/wiremock/go-wiremock v1.15.0
 	github.com/yudai/gojsondiff v1.0.0
-	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
+	golang.org/x/exp 746e56fc9e2f
 	gopkg.in/go-jose/go-jose.v2 v2.6.3
-	k8s.io/api v0.34.4
-	k8s.io/apimachinery v0.34.4
-	k8s.io/client-go v0.34.4
+	k8s.io/api v0.35.4
+	k8s.io/apimachinery v0.35.4
+	k8s.io/client-go v0.35.4
 	oras.land/oras-go/v2 v2.6.0
-	sigs.k8s.io/kind v0.26.0
-	sigs.k8s.io/kustomize/api v0.20.1
-	sigs.k8s.io/kustomize/kyaml v0.20.1
+	sigs.k8s.io/kind v0.31.0
+	sigs.k8s.io/kustomize/api v0.21.1
+	sigs.k8s.io/kustomize/kyaml v0.21.1
 	sigs.k8s.io/yaml v1.6.0
 )
 
 // Maybe less important in acceptance, but it seems sensible to use the fork here too
-replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry v0.20.7-0.20250703195040-6f40a3734728
+replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry 3459088e4bae
 
 require (
 	cel.dev/expr v0.25.1 // indirect
