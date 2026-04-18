@@ -12,7 +12,7 @@ require (
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	gotest.tools/gotestsum v1.12.3
 	helm.sh/helm/v3 v3.18.6
-	k8s.io/kubernetes v1.34.3
+	k8s.io/kubernetes v1.34.7
 	sigs.k8s.io/kustomize/kustomize/v5 v5.7.1
 )
 
@@ -385,7 +385,7 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/buildkit v0.29.0 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
-	github.com/moby/spdystream v0.5.0 // indirect
+	github.com/moby/spdystream v0.5.1 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
