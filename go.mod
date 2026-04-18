@@ -12,7 +12,7 @@ require (
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/evanphx/json-patch v5.9.11+incompatible
 	github.com/gkampitakis/go-snaps v0.5.19
-	github.com/go-git/go-git/v5 v5.17.1
+	github.com/go-git/go-git/v5 v5.18.0
 	github.com/go-logr/logr v1.4.3
 	github.com/go-openapi/strfmt v0.26.1
 	github.com/google/go-cmp v0.7.0
