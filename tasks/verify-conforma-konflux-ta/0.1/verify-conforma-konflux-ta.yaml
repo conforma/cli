@@ -264,11 +264,10 @@ spec:
       - mountPath: /var/workdir
         name: workdir
       - name: trusted-ca
-        mountPath: /mnt/trusted-ca
+        mountPath: /etc/ssl/certs
         readOnly: true
       - name: trusted-ca
-        mountPath: /etc/ssl/certs/ca-custom-bundle.crt
-        subPath: ca-bundle.crt
+        mountPath: /mnt/trusted-ca
         readOnly: true
     env:
       - name: "ORAS_OPTIONS"
@@ -512,11 +511,6 @@ spec:
           memory: 2Gi
         limits:
           memory: 2Gi
-      volumeMounts:
-        - name: trusted-ca
-          mountPath: /etc/pki/tls/certs/ca-custom-bundle.crt
-          subPath: ca-bundle.crt
-          readOnly: true
 
     - name: report-json
       image: quay.io/conforma/cli:latest
