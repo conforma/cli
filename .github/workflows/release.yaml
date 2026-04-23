@@ -110,7 +110,7 @@ jobs:
         run: make dist
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
 
       - name: Registry login (quay.io/conforma)
         run: podman login -u ${{ secrets.BUNDLE_PUSH_USER_CONFORMA }} -p ${{ secrets.BUNDLE_PUSH_PASS_CONFORMA }} quay.io
@@ -168,15 +168,15 @@ jobs:
         run: hack/stats.sh
 
       - name: Configure statistics pages
-        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
 
       - name: Upload statistics
-        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: stats
 
       - name: Deploy statistics
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5
 
       - name: Delete snapshot release and tag
         id: add_tags
@@ -200,7 +200,7 @@ jobs:
           git push -f --tags
 
       - name: Rolling release
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
         with:
           make_latest: true
           name: Rolling release
@@ -210,7 +210,7 @@ jobs:
           files: dist/*
 
       - name: Versioned release
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
         with:
           make_latest: false
           name: ${{ steps.add_tags.outputs.tag_name }}
