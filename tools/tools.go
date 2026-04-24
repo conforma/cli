@@ -19,7 +19,7 @@ package tools
 
 import (
 	_ "github.com/daixiang0/gci"
-	_ "github.com/golangci/golangci-lint/cmd/golangci-lint"
+	_ "github.com/golangci/golangci-lint/v2/cmd/golangci-lint"
 	_ "github.com/google/addlicense"
 	_ "github.com/open-policy-agent/conftest"
 	_ "github.com/tektoncd/chains/pkg/chains"

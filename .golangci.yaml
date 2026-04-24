@@ -13,24 +13,48 @@
 # limitations under the License.
 
 ---
+version: "2"
+
 run:
   build-tags:
     - acceptance
     - generative
     - integration
     - unit
+
 linters:
+  enable:
+    - gosec
+    - misspell
+    - staticcheck
+  settings:
+    gosec:
+      excludes:
+        - G122
+        - G702
+        - G703
+    staticcheck:
+      checks:
+        - "all"
+        - "-QF*"
+        - "-ST*"
+  exclusions:
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+
+formatters:
   enable:
     - gci
     - goimports
-    - gosec
-    - misspell
-linters-settings:
-  gci:
-    sections:
-      - standard
-      - default
-      - prefix(github.com/conforma/cli)
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/conforma/cli)
 
 issues:
-  exclude-rules: []
+  exclude-generated: lax
