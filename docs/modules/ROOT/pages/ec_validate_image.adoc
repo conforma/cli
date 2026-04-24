@@ -149,6 +149,9 @@ mark (?) sign, for example: --output text=output.txt?show-successes=false
   * file (policy.yaml)
   * git reference (github.com/user/repo//default?ref=main), or
   * inline JSON ('{sources: {...}, identity: {...}}')")
+--policy-overlay:: Policy overlay files to merge with the base policy. Can be specified multiple times.
+Overlays are applied in order. Maps are deeply merged, arrays are concatenated.
+Supports the same formats as --policy (files, git references, inline JSON/YAML). (Default: [])
 -k, --public-key:: path to the public key. Overrides publicKey from EnterpriseContractPolicy
 -r, --rekor-url:: Rekor URL. Overrides rekorURL from EnterpriseContractPolicy
 --skip-image-sig-check:: Skip image signature validation checks. (Default: false)
