@@ -374,9 +374,16 @@ spec:
             )
           fi
 
-          # Force --ignore-rekor to false since we need rekor
           cmd_args+=(
+            # Force --ignore-rekor to false since we need rekor
             --ignore-rekor=false
+
+            # Conforma expects that the attestation and the image are signed in the
+            # same way. But actually for Tekton Chains doing keyless signing that's
+            # not the cases. As a workaround, skip the image sig check and only do the
+            # attestation sig check. This means we're expecting the --certificate-*
+            # params provided to be applicable for verifying the attestation signature.
+            --skip-image-sig-check=true
           )
         else
           # Assume traditional signing secret verification
