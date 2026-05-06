@@ -39,7 +39,6 @@ import (
 	"github.com/conforma/cli/internal/applicationsnapshot"
 	"github.com/conforma/cli/internal/evaluator"
 	"github.com/conforma/cli/internal/image"
-	"github.com/conforma/cli/internal/memprofile"
 	"github.com/conforma/cli/internal/output"
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/policy/source"
@@ -305,8 +304,6 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				defer task.End()
 			}
 
-			memprofile.Snapshot("validate-image:start")
-
 			appComponents := data.spec.Components
 			evaluators := []evaluator.Evaluator{}
 
@@ -338,8 +335,6 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				evaluators = append(evaluators, c)
 				defer c.Destroy()
 			}
-
-			memprofile.Snapshot("validate-image:evaluators-created")
 
 			showSuccesses, _ := cmd.Flags().GetBool("show-successes")
 			showWarnings, _ := cmd.Flags().GetBool("show-warnings")
@@ -417,13 +412,8 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 			var allResults []validate_utils.Result
 			for i := 0; i < numComponents; i++ {
 				allResults = append(allResults, <-results)
-				if memprofile.Enabled() && (i+1)%10 == 0 {
-					memprofile.Snapshot(fmt.Sprintf("validate-image:component %d/%d done", i+1, numComponents))
-				}
 			}
 			close(results)
-
-			memprofile.Snapshot("validate-image:all-components-done")
 
 			components, manyPolicyInput, err := validate_utils.CollectComponentResults(
 				allResults,
@@ -454,14 +444,10 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				NoColor:    data.noColor,
 				ForceColor: data.forceColor,
 			}
-			memprofile.Snapshot("validate-image:before-report")
-
 			report, err := validate_utils.WriteReport(reportData, outputOpts, cmd)
 			if err != nil {
 				return err
 			}
-
-			memprofile.Snapshot("validate-image:report-written")
 
 			if data.vsaEnabled {
 				// Validate and get output directory

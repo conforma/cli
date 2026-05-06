@@ -42,7 +42,6 @@ import (
 	"github.com/spf13/afero"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	"github.com/conforma/cli/internal/memprofile"
 	"github.com/conforma/cli/internal/opa"
 	"github.com/conforma/cli/internal/opa/rule"
 	"github.com/conforma/cli/internal/policy"
@@ -399,7 +398,6 @@ func (c *conftestEvaluator) downloadAndInspectPolicies(ctx context.Context) erro
 	c.nonAnnotated = nonAnnotatedRules{}
 	c.dataSourceDirs = []string{}
 
-	memprofile.Snapshot("evaluator:download-policies")
 	for _, s := range c.policySources {
 		dir, err := s.GetPolicy(ctx, c.workDir, false)
 		if err != nil {
@@ -851,7 +849,6 @@ func (c *conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarge
 		// Instead, we evaluate all namespaces and filter results afterward
 	}
 
-	memprofile.Snapshot("evaluator:opa-run")
 	var runResults []Outcome
 	var err error
 	if r, ok := ctx.Value(runnerKey).(testRunner); r != nil && ok {
@@ -863,7 +860,6 @@ func (c *conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarge
 	if err != nil {
 		return nil, err
 	}
-	memprofile.Snapshot("evaluator:opa-run-done")
 
 	effectiveTime := c.policy.EffectiveTime()
 	ctx = context.WithValue(ctx, effectiveTimeKey, effectiveTime)
