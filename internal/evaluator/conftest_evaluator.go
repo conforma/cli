@@ -33,13 +33,10 @@ import (
 	"time"
 
 	ecc "github.com/conforma/crds/api/v1alpha1"
-	"github.com/open-policy-agent/conftest/output"
 	conftestParser "github.com/open-policy-agent/conftest/parser"
 	conftest "github.com/open-policy-agent/conftest/policy"
-	"github.com/open-policy-agent/conftest/runner"
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/rego"
-	"github.com/open-policy-agent/opa/v1/storage"
 	"github.com/open-policy-agent/opa/v1/topdown/print"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
@@ -228,88 +225,6 @@ type conftestEvaluator struct {
 	initOnce *sync.Once
 	initErr  error
 	initCtx  context.Context
-}
-
-type conftestRunner struct {
-	runner.TestRunner
-}
-
-func (r conftestRunner) Run(ctx context.Context, fileList []string) (result []Outcome, err error) {
-	r.Trace = tracing.FromContext(ctx).Enabled(tracing.Opa)
-
-	var conftestResult []output.CheckResult
-	conftestResult, err = r.TestRunner.Run(ctx, fileList)
-	if err != nil {
-		return
-	}
-
-	for _, res := range conftestResult {
-		if log.IsLevelEnabled(log.TraceLevel) {
-			for _, q := range res.Queries {
-				for _, t := range q.Traces {
-					log.Tracef("[%s] %s", q.Query, t)
-				}
-			}
-		}
-		if log.IsLevelEnabled(log.DebugLevel) {
-			for _, q := range res.Queries {
-				for _, o := range q.Outputs {
-					log.Debugf("[%s] %s", q.Query, o)
-				}
-			}
-		}
-
-		result = append(result, Outcome{
-			FileName:  res.FileName,
-			Namespace: res.Namespace,
-			// Conftest doesn't give us a list of successes, just a count. Here we turn that count
-			// into a placeholder slice of that size to make processing easier later on.
-			Successes:  make([]Result, res.Successes),
-			Skipped:    toRules(res.Skipped),
-			Warnings:   toRules(res.Warnings),
-			Failures:   toRules(res.Failures),
-			Exceptions: toRules(res.Exceptions),
-		})
-	}
-
-	// we can't reference the engine from the test runner or from the results so
-	// we need to recreate it, this needs to remain the same as in
-	// runner.TestRunner's Run function
-	var engine *conftest.Engine
-	capabilities, err := conftest.LoadCapabilities(r.Capabilities)
-	if err != nil {
-		return
-	}
-	compilerOptions := conftest.CompilerOptions{
-		Strict:       r.Strict,
-		RegoVersion:  r.RegoVersion,
-		Capabilities: capabilities,
-	}
-	engine, err = conftest.LoadWithData(r.Policy, r.Data, compilerOptions)
-	if err != nil {
-		return
-	}
-
-	store := engine.Store()
-
-	var txn storage.Transaction
-	txn, err = store.NewTransaction(ctx)
-	if err != nil {
-		return
-	}
-
-	ids := []string{} // everything
-
-	d, err := store.Read(ctx, txn, ids)
-	if err != nil {
-		return
-	}
-
-	if _, ok := d.(map[string]any); !ok {
-		err = fmt.Errorf("could not retrieve data from the policy engine: Data is: %v", d)
-	}
-
-	return
 }
 
 // NewConftestEvaluator returns initialized conftestEvaluator implementing
@@ -1057,24 +972,6 @@ func (c conftestEvaluator) prepareDataDirs(ctx context.Context, dataSourceDirs [
 	}
 
 	return dataDirs, nil
-}
-
-func toRules(results []output.Result) []Result {
-	var eResults []Result
-	for _, r := range results {
-		// Newer conftest adds this key to the metadata. A typical value might
-		// be "data.main.deny". Currently we don't use it so let's remove it
-		// rather than change a bunch of snapshot files and test assertions.
-		delete(r.Metadata, metadataQuery)
-
-		eResults = append(eResults, Result{
-			Message:  r.Message,
-			Metadata: r.Metadata,
-			Outputs:  r.Outputs,
-		})
-	}
-
-	return eResults
 }
 
 // computeSuccesses generates success results, these are not provided in the
