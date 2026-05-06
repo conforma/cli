@@ -214,7 +214,7 @@ deny contains result if {
 	defer evaluator.Destroy()
 
 	// Debug: Check exclude criteria
-	conftestEval := evaluator.(conftestEvaluator)
+	conftestEval := evaluator.(*conftestEvaluator)
 	t.Logf("Exclude componentItems: %+v", conftestEval.exclude.componentItems)
 	t.Logf("Exclude defaultItems: %+v", conftestEval.exclude.defaultItems)
 	t.Logf("Exclude digestItems: %+v", conftestEval.exclude.digestItems)

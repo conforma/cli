@@ -17,6 +17,7 @@
 package evaluator
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -33,11 +34,13 @@ import (
 
 	ecc "github.com/conforma/crds/api/v1alpha1"
 	"github.com/open-policy-agent/conftest/output"
+	conftestParser "github.com/open-policy-agent/conftest/parser"
 	conftest "github.com/open-policy-agent/conftest/policy"
 	"github.com/open-policy-agent/conftest/runner"
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/rego"
 	"github.com/open-policy-agent/opa/v1/storage"
+	"github.com/open-policy-agent/opa/v1/topdown/print"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -221,6 +224,7 @@ type conftestEvaluator struct {
 
 	// Pre-compiled OPA engine (set once on first evaluate, read-only during Evaluate)
 	engine   *conftest.Engine
+	trace    bool
 	initOnce *sync.Once
 	initErr  error
 	initCtx  context.Context
@@ -509,11 +513,12 @@ func (c *conftestEvaluator) compileEngine(ctx context.Context) error {
 
 	engine, err := conftest.LoadWithData([]string{c.policyDir}, dataDirs, opts)
 	if err != nil {
-		return fmt.Errorf("compile policies: %w", err)
+		return fmt.Errorf("load: %w", err)
 	}
 
 	engine.EnableInterQueryCache()
-	if tracing.FromContext(ctx).Enabled(tracing.Opa) {
+	c.trace = tracing.FromContext(ctx).Enabled(tracing.Opa)
+	if c.trace {
 		engine.EnableTracing()
 	}
 
@@ -587,62 +592,56 @@ func (c *conftestEvaluator) evaluateWithEngine(ctx context.Context, target Evalu
 	var results []Outcome
 	for _, ns := range namespacesToUse {
 		for filePath, config := range configs {
-			outcome, err := c.queryNamespace(ctx, filePath, config, ns)
-			if err != nil {
-				return nil, err
+			if subconfigs, ok := config.([]any); ok {
+				outcome := Outcome{FileName: filePath, Namespace: ns}
+				for _, subconfig := range subconfigs {
+					sub, err := c.queryNamespace(ctx, filePath, subconfig, ns)
+					if err != nil {
+						return nil, err
+					}
+					outcome.Successes = append(outcome.Successes, sub.Successes...)
+					outcome.Failures = append(outcome.Failures, sub.Failures...)
+					outcome.Warnings = append(outcome.Warnings, sub.Warnings...)
+					outcome.Exceptions = append(outcome.Exceptions, sub.Exceptions...)
+				}
+				results = append(results, outcome)
+			} else {
+				outcome, err := c.queryNamespace(ctx, filePath, config, ns)
+				if err != nil {
+					return nil, err
+				}
+				results = append(results, outcome)
 			}
-			results = append(results, outcome)
 		}
 	}
 	return results, nil
 }
 
-// parseInputFiles reads and parses JSON input files from the given paths.
-// Each path may be a file or directory; directories are walked for JSON files.
+// parseInputFiles reads and parses input files from the given paths,
+// supporting JSON, YAML, and other formats via conftest's parser.
+// Directories are expanded to their contained files first.
 func parseInputFiles(inputs []string) (map[string]any, error) {
-	configs := make(map[string]any)
-	for _, inputPath := range inputs {
-		info, err := os.Stat(inputPath)
+	var files []string
+	for _, input := range inputs {
+		info, err := os.Stat(input)
 		if err != nil {
 			return nil, err
 		}
 		if info.IsDir() {
-			entries, err := os.ReadDir(inputPath)
+			entries, err := os.ReadDir(input)
 			if err != nil {
 				return nil, err
 			}
 			for _, entry := range entries {
-				if entry.IsDir() {
-					continue
+				if !entry.IsDir() {
+					files = append(files, filepath.Join(input, entry.Name()))
 				}
-				filePath := filepath.Join(inputPath, entry.Name())
-				config, err := parseJSONFile(filePath)
-				if err != nil {
-					return nil, err
-				}
-				configs[filePath] = config
 			}
 		} else {
-			config, err := parseJSONFile(inputPath)
-			if err != nil {
-				return nil, err
-			}
-			configs[inputPath] = config
+			files = append(files, input)
 		}
 	}
-	return configs, nil
-}
-
-func parseJSONFile(path string) (any, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var result any
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
-	}
-	return result, nil
+	return conftestParser.ParseConfigurations(files)
 }
 
 // queryNamespace evaluates all deny/warn rules in a single OPA namespace
@@ -731,16 +730,36 @@ func (c conftestEvaluator) queryNamespace(ctx context.Context, fileName string, 
 // compiler and store. Safe for concurrent use since it only reads from the
 // compiler and store (no writes).
 func (c conftestEvaluator) evalOPAQuery(ctx context.Context, input any, query string) ([]Result, error) {
-	regoInstance := rego.New(
+	ph := opaPrintHook{s: &[]string{}}
+	options := []func(r *rego.Rego){
 		rego.Input(input),
 		rego.Query(query),
 		rego.Compiler(c.engine.Compiler()),
 		rego.Store(c.engine.Store()),
-	)
+		rego.Trace(c.trace),
+		rego.PrintHook(ph),
+	}
+
+	regoInstance := rego.New(options...)
 
 	resultSet, err := regoInstance.Eval(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("evaluating policy: %w", err)
+	}
+
+	if c.trace && log.IsLevelEnabled(log.TraceLevel) {
+		buf := new(bytes.Buffer)
+		rego.PrintTrace(buf, regoInstance)
+		for _, line := range strings.Split(buf.String(), "\n") {
+			if len(line) > 0 {
+				log.Tracef("[%s] %s", query, line)
+			}
+		}
+	}
+	if log.IsLevelEnabled(log.DebugLevel) {
+		for _, o := range *ph.s {
+			log.Debugf("[%s] %s", query, o)
+		}
 	}
 
 	var results []Result
@@ -776,6 +795,15 @@ func (c conftestEvaluator) evalOPAQuery(ctx context.Context, input any, query st
 	}
 
 	return results, nil
+}
+
+type opaPrintHook struct {
+	s *[]string
+}
+
+func (ph opaPrintHook) Print(pctx print.Context, msg string) error {
+	*ph.s = append(*ph.s, fmt.Sprintf("%v: %s", pctx.Location, msg))
+	return nil
 }
 
 // Destroy removes the working directory
