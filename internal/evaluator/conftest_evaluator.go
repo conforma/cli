@@ -39,6 +39,7 @@ import (
 	"github.com/spf13/afero"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	"github.com/conforma/cli/internal/memprofile"
 	"github.com/conforma/cli/internal/opa"
 	"github.com/conforma/cli/internal/opa/rule"
 	"github.com/conforma/cli/internal/policy"
@@ -209,6 +210,12 @@ type conftestEvaluator struct {
 	namespace      []string
 	source         ecc.Source
 	policyResolver PolicyResolver // Unified policy resolver for both pre and post-evaluation filtering
+
+	// Pre-computed policy data (set once in constructor, read-only during Evaluate)
+	rules          policyRules
+	nonAnnotated   nonAnnotatedRules
+	allRules       policyRules
+	dataSourceDirs []string
 }
 
 type conftestRunner struct {
@@ -362,6 +369,10 @@ func NewConftestEvaluatorWithNamespaceAndFilterType(
 		return nil, err
 	}
 
+	if err := c.downloadAndInspectPolicies(ctx); err != nil {
+		return nil, err
+	}
+
 	log.Debug("Conftest test runner created")
 	return c, nil
 }
@@ -370,6 +381,97 @@ func NewConftestEvaluatorWithNamespaceAndFilterType(
 func NewConftestEvaluatorWithNamespace(ctx context.Context, policySources []source.PolicySource, p ConfigProvider, source ecc.Source, namespace []string) (Evaluator, error) {
 	// Use default filter type (include-exclude) for backward compatibility
 	return NewConftestEvaluatorWithNamespaceAndFilterType(ctx, policySources, p, source, namespace, "include-exclude")
+}
+
+// downloadAndInspectPolicies downloads all policy sources, inspects their annotations,
+// and populates c.rules, c.nonAnnotated, c.allRules, and c.dataSourceDirs.
+// Called once from the constructor; the results are read-only during Evaluate.
+func (c *conftestEvaluator) downloadAndInspectPolicies(ctx context.Context) error {
+	c.rules = policyRules{}
+	c.nonAnnotated = nonAnnotatedRules{}
+	c.dataSourceDirs = []string{}
+
+	memprofile.Snapshot("evaluator:download-policies")
+	for _, s := range c.policySources {
+		dir, err := s.GetPolicy(ctx, c.workDir, false)
+		if err != nil {
+			log.Debugf("Unable to download source from %s!", s.PolicyUrl())
+			return err
+		}
+		if s.Subdir() == "data" {
+			c.dataSourceDirs = append(c.dataSourceDirs, dir)
+		}
+		annotations := []*ast.AnnotationsRef{}
+		fs := utils.FS(ctx)
+		if s.Subdir() == "policy" {
+			annotations, err = opa.InspectDir(fs, dir)
+			if err != nil {
+				errMsg := err
+				if err.Error() == "no rego files found in policy subdirectory" {
+					policyURL, err := url.Parse(s.PolicyUrl())
+					if err != nil {
+						return errMsg
+					}
+					pos := strings.LastIndex(policyURL.Path, ".")
+					if pos == -1 {
+						if (policyURL.Host == "github.com" || policyURL.Host == "gitlab.com") && (policyURL.Scheme == "https" || policyURL.Scheme == "http") {
+							log.Debug("Git Hub or GitLab, http transport, and no file extension, this could be a problem.")
+							errMsg = fmt.Errorf("%s.\nYou've specified a %s URL with an %s:// scheme.\nDid you mean: %s instead?", errMsg, policyURL.Hostname(), policyURL.Scheme, fmt.Sprint(policyURL.Host+policyURL.RequestURI()))
+						}
+					}
+				}
+				return errMsg
+			}
+		}
+
+		for _, a := range annotations {
+			if a.Annotations != nil {
+				if err := c.rules.collect(a); err != nil {
+					return err
+				}
+			} else {
+				ruleRef := a.GetRule()
+				if ruleRef != nil {
+					packageName := ""
+					if len(a.Path) > 1 {
+						if len(a.Path) >= 2 {
+							packageName = strings.ReplaceAll(a.Path[1].String(), `"`, "")
+						}
+					}
+
+					code := extractCodeFromRuleBody(ruleRef)
+
+					if code == "" {
+						shortName := ruleRef.Head.Name.String()
+						code = fmt.Sprintf("%s.%s", packageName, shortName)
+					}
+
+					log.Debugf("Non-annotated rule: packageName=%s, code=%s", packageName, code)
+
+					c.nonAnnotated[code] = true
+				}
+			}
+		}
+	}
+
+	c.allRules = make(policyRules)
+	for code, r := range c.rules {
+		c.allRules[code] = r
+	}
+	for code := range c.nonAnnotated {
+		parts := strings.Split(code, ".")
+		if len(parts) >= 2 {
+			packageName := parts[len(parts)-2]
+			shortName := parts[len(parts)-1]
+			c.allRules[code] = rule.Info{
+				Code:      code,
+				Package:   packageName,
+				ShortName: shortName,
+			}
+		}
+	}
+
+	return nil
 }
 
 // Destroy removes the working directory
@@ -419,124 +521,12 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		defer region.End()
 	}
 
-	// hold all rule annotations from all policy sources
-	// NOTE: emphasis on _all rules from all sources_; meaning that if two rules
-	// exist with the same code in two separate sources the collected rule
-	// information is not deterministic
-	rules := policyRules{}
-	// Track non-annotated rules separately for filtering purposes only
-	nonAnnotatedRules := nonAnnotatedRules{}
-	// Track data source directories for prepareDataDirs
-	dataSourceDirs := []string{}
-	// Download all sources
-	for _, s := range c.policySources {
-		dir, err := s.GetPolicy(ctx, c.workDir, false)
-		if err != nil {
-			log.Debugf("Unable to download source from %s!", s.PolicyUrl())
-			// TODO do we want to download other policies instead of erroring out?
-			return nil, err
-		}
-		// Track data source directories - these are the actual directories returned by GetPolicy
-		// which may be symlinks, so we need to use them directly rather than walking
-		if s.Subdir() == "data" {
-			dataSourceDirs = append(dataSourceDirs, dir)
-		}
-		annotations := []*ast.AnnotationsRef{}
-		fs := utils.FS(ctx)
-		// We only want to inspect the directory of policy subdirs, not config or data subdirs.
-		if s.Subdir() == "policy" {
-			annotations, err = opa.InspectDir(fs, dir)
-			if err != nil {
-				errMsg := err
-				if err.Error() == "no rego files found in policy subdirectory" {
-					// Let's try to give some more robust messaging to the user.
-					policyURL, err := url.Parse(s.PolicyUrl())
-					if err != nil {
-						return nil, errMsg
-					}
-					// Do we have a prefix at the end of the URL path?
-					// If not, this means we aren't trying to access a specific file.
-					// TODO: Determine if we want to check for a .git suffix as well?
-					pos := strings.LastIndex(policyURL.Path, ".")
-					if pos == -1 {
-						// Are we accessing a GitHub or GitLab URL? If so, are we beginning with 'https' or 'http'?
-						if (policyURL.Host == "github.com" || policyURL.Host == "gitlab.com") && (policyURL.Scheme == "https" || policyURL.Scheme == "http") {
-							log.Debug("Git Hub or GitLab, http transport, and no file extension, this could be a problem.")
-							errMsg = fmt.Errorf("%s.\nYou've specified a %s URL with an %s:// scheme.\nDid you mean: %s instead?", errMsg, policyURL.Hostname(), policyURL.Scheme, fmt.Sprint(policyURL.Host+policyURL.RequestURI()))
-						}
-					}
-				}
-				return nil, errMsg
-			}
-		}
-
-		// Collect ALL rules for filtering purposes - both with and without annotations
-		// This ensures that rules without metadata (like fail_with_data.rego) are properly included
-		for _, a := range annotations {
-			if a.Annotations != nil {
-				// Rules with annotations - collect full metadata
-				if err := rules.collect(a); err != nil {
-					return nil, err
-				}
-			} else {
-				// Rules without annotations - track for filtering only, not for success computation
-				ruleRef := a.GetRule()
-				if ruleRef != nil {
-					// Extract package name from the rule path
-					packageName := ""
-					if len(a.Path) > 1 {
-						// Path format is typically ["data", "package", "rule"]
-						// We want the package part (index 1)
-						if len(a.Path) >= 2 {
-							packageName = strings.ReplaceAll(a.Path[1].String(), `"`, "")
-						}
-					}
-
-					// Try to extract code from rule body first, fallback to rule name
-					code := extractCodeFromRuleBody(ruleRef)
-
-					// If no code found in body, use rule name
-					if code == "" {
-						shortName := ruleRef.Head.Name.String()
-						code = fmt.Sprintf("%s.%s", packageName, shortName)
-					}
-
-					// Debug: Print non-annotated rule processing
-					log.Debugf("Non-annotated rule: packageName=%s, code=%s", packageName, code)
-
-					// Track for filtering but don't add to rules map for success computation
-					nonAnnotatedRules[code] = true
-				}
-			}
-		}
-	}
-
-	// Prepare all rules for policy resolution (both annotated and non-annotated)
-	// Combine annotated and non-annotated rules for filtering
-	allRules := make(policyRules)
-	for code, rule := range rules {
-		allRules[code] = rule
-	}
-	// Add non-annotated rules as minimal rule.Info for filtering
-	for code := range nonAnnotatedRules {
-		parts := strings.Split(code, ".")
-		if len(parts) >= 2 {
-			packageName := parts[len(parts)-2]
-			shortName := parts[len(parts)-1]
-			allRules[code] = rule.Info{
-				Code:      code,
-				Package:   packageName,
-				ShortName: shortName,
-			}
-		}
-	}
-
 	var filteredNamespaces []string
 	if c.policyResolver != nil {
 		// IMPLEMENTATION: Option A - Unified Policy Resolution
 		// Use the same PolicyResolver for both pre-evaluation and post-evaluation filtering
 		// This ensures consistent logic and eliminates duplication
-		policyResolution := c.policyResolver.ResolvePolicy(allRules, target.Target)
+		policyResolution := c.policyResolver.ResolvePolicy(c.allRules, target.Target)
 
 		// Extract included package names for conftest evaluation
 		for pkg := range policyResolution.IncludedPackages {
@@ -576,7 +566,7 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		log.Debugf("Namespaces to use: %v, allNamespaces: %v", namespacesToUse, allNamespaces)
 
 		// Prepare the list of data dirs
-		dataDirs, err := c.prepareDataDirs(ctx, dataSourceDirs)
+		dataDirs, err := c.prepareDataDirs(ctx, c.dataSourceDirs)
 		if err != nil {
 			return nil, err
 		}
@@ -598,11 +588,13 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 	log.Debugf("runner: %#v", r)
 	log.Debugf("inputs: %#v", target.Inputs)
 
+	memprofile.Snapshot("evaluator:opa-run")
 	runResults, err := r.Run(ctx, target.Inputs)
 	if err != nil {
 		// TODO do we want to evaluate further policies instead of erroring out?
 		return nil, err
 	}
+	memprofile.Snapshot("evaluator:opa-run-done")
 
 	effectiveTime := c.policy.EffectiveTime()
 	ctx = context.WithValue(ctx, effectiveTimeKey, effectiveTime)
@@ -641,12 +633,12 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 
 		// Add metadata to all results
 		for j := range allResults {
-			addRuleMetadata(ctx, &allResults[j], rules)
+			addRuleMetadata(ctx, &allResults[j], c.rules)
 		}
 
 		// Filter results using the unified filter
 		filteredResults, updatedMissingIncludes := unifiedFilter.FilterResults(
-			allResults, allRules, target.Target, target.ComponentName, missingIncludes, effectiveTime)
+			allResults, c.allRules, target.Target, target.ComponentName, missingIncludes, effectiveTime)
 
 		// Update missing includes
 		missingIncludes = updatedMissingIncludes
@@ -661,7 +653,7 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		result.Skipped = skipped
 
 		// Replace the placeholder successes slice with the actual successes.
-		result.Successes = c.computeSuccesses(result, rules, target.Target, target.ComponentName, missingIncludes, unifiedFilter)
+		result.Successes = c.computeSuccesses(result, c.rules, target.Target, target.ComponentName, missingIncludes, unifiedFilter)
 
 		totalRules += len(result.Warnings) + len(result.Failures) + len(result.Successes)
 
