@@ -25,6 +25,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime/trace"
 	"strings"
 	"time"
@@ -34,6 +35,7 @@ import (
 	conftest "github.com/open-policy-agent/conftest/policy"
 	"github.com/open-policy-agent/conftest/runner"
 	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/rego"
 	"github.com/open-policy-agent/opa/v1/storage"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
@@ -216,6 +218,9 @@ type conftestEvaluator struct {
 	nonAnnotated   nonAnnotatedRules
 	allRules       policyRules
 	dataSourceDirs []string
+
+	// Pre-compiled OPA engine (set once in constructor, read-only during Evaluate)
+	engine *conftest.Engine
 }
 
 type conftestRunner struct {
@@ -373,6 +378,10 @@ func NewConftestEvaluatorWithNamespaceAndFilterType(
 		return nil, err
 	}
 
+	if err := c.compileEngine(ctx); err != nil {
+		return nil, err
+	}
+
 	log.Debug("Conftest test runner created")
 	return c, nil
 }
@@ -474,6 +483,280 @@ func (c *conftestEvaluator) downloadAndInspectPolicies(ctx context.Context) erro
 	return nil
 }
 
+// compileEngine pre-compiles all policies and data into a conftest Engine.
+// The resulting engine's Compiler and Store are used read-only during Evaluate,
+// making concurrent evaluation safe without the store mutations that
+// engine.Check/addFileInfo would cause.
+func (c *conftestEvaluator) compileEngine(ctx context.Context) error {
+	// conftest.LoadWithData reads from the real OS filesystem.
+	// In tests using in-memory FS, the policy/data files won't exist on disk,
+	// so skip compilation — those tests inject mock runners via context.
+	if _, err := os.Stat(c.CapabilitiesPath()); err != nil {
+		return nil
+	}
+
+	dataDirs, err := c.prepareDataDirs(ctx, c.dataSourceDirs)
+	if err != nil {
+		return err
+	}
+
+	capabilities, err := conftest.LoadCapabilities(c.CapabilitiesPath())
+	if err != nil {
+		return fmt.Errorf("load capabilities: %w", err)
+	}
+
+	opts := conftest.CompilerOptions{
+		RegoVersion:  "v1",
+		Capabilities: capabilities,
+	}
+
+	engine, err := conftest.LoadWithData([]string{c.policyDir}, dataDirs, opts)
+	if err != nil {
+		return fmt.Errorf("compile policies: %w", err)
+	}
+
+	engine.EnableInterQueryCache()
+	if tracing.FromContext(ctx).Enabled(tracing.Opa) {
+		engine.EnableTracing()
+	}
+
+	c.engine = engine
+	return nil
+}
+
+var (
+	opaFailureRegex = regexp.MustCompile("^(deny|violation)(_[a-zA-Z0-9]+)*$")
+	opaWarningRegex = regexp.MustCompile("^warn(_[a-zA-Z0-9]+)*$")
+)
+
+func isOPAFailureRule(name string) bool { return opaFailureRegex.MatchString(name) }
+func isOPAWarningRule(name string) bool { return opaWarningRegex.MatchString(name) }
+
+func stripOPARulePrefix(name string) string {
+	if name == "violation" || name == "deny" || name == "warn" {
+		return ""
+	}
+	name = strings.TrimPrefix(name, "violation_")
+	name = strings.TrimPrefix(name, "deny_")
+	name = strings.TrimPrefix(name, "warn_")
+	return name
+}
+
+// evaluateWithEngine runs policy evaluation using the pre-compiled engine
+// instead of creating a new conftest runner per call.
+func (c conftestEvaluator) evaluateWithEngine(ctx context.Context, target EvaluationTarget, filteredNamespaces []string) ([]Outcome, error) {
+	if c.engine == nil {
+		return nil, fmt.Errorf("OPA engine not compiled; ensure policies are on the real filesystem")
+	}
+
+	namespacesToUse := c.namespace
+	if len(filteredNamespaces) > 0 {
+		namespacesToUse = filteredNamespaces
+	} else if len(namespacesToUse) == 0 {
+		namespacesToUse = c.engine.Namespaces()
+	}
+
+	log.Debugf("Engine namespaces to use: %v", namespacesToUse)
+
+	configs, err := parseInputFiles(target.Inputs)
+	if err != nil {
+		return nil, fmt.Errorf("parse inputs: %w", err)
+	}
+
+	var results []Outcome
+	for _, ns := range namespacesToUse {
+		for filePath, config := range configs {
+			outcome, err := c.queryNamespace(ctx, filePath, config, ns)
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, outcome)
+		}
+	}
+	return results, nil
+}
+
+// parseInputFiles reads and parses JSON input files from the given paths.
+// Each path may be a file or directory; directories are walked for JSON files.
+func parseInputFiles(inputs []string) (map[string]any, error) {
+	configs := make(map[string]any)
+	for _, inputPath := range inputs {
+		info, err := os.Stat(inputPath)
+		if err != nil {
+			return nil, err
+		}
+		if info.IsDir() {
+			entries, err := os.ReadDir(inputPath)
+			if err != nil {
+				return nil, err
+			}
+			for _, entry := range entries {
+				if entry.IsDir() {
+					continue
+				}
+				filePath := filepath.Join(inputPath, entry.Name())
+				config, err := parseJSONFile(filePath)
+				if err != nil {
+					return nil, err
+				}
+				configs[filePath] = config
+			}
+		} else {
+			config, err := parseJSONFile(inputPath)
+			if err != nil {
+				return nil, err
+			}
+			configs[inputPath] = config
+		}
+	}
+	return configs, nil
+}
+
+func parseJSONFile(path string) (any, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var result any
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return result, nil
+}
+
+// queryNamespace evaluates all deny/warn rules in a single OPA namespace
+// against the given input. This replicates conftest's engine.check() logic
+// but without the store-mutating addFileInfo() call.
+func (c conftestEvaluator) queryNamespace(ctx context.Context, fileName string, input any, namespace string) (Outcome, error) {
+	outcome := Outcome{
+		FileName:  fileName,
+		Namespace: namespace,
+	}
+
+	var ruleNames []string
+	var ruleCount int
+	for _, module := range c.engine.Modules() {
+		ns := strings.Replace(module.Package.Path.String(), "data.", "", 1)
+		if ns != namespace {
+			continue
+		}
+		for _, r := range module.Rules {
+			name := r.Head.Name.String()
+			if !isOPAFailureRule(name) && !isOPAWarningRule(name) {
+				continue
+			}
+			ruleCount++
+			found := false
+			for _, existing := range ruleNames {
+				if strings.EqualFold(existing, name) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				ruleNames = append(ruleNames, name)
+			}
+		}
+	}
+
+	var successes int
+	for _, ruleName := range ruleNames {
+		exceptionQuery := fmt.Sprintf("data.%s.exception[_][_] == %q", namespace, stripOPARulePrefix(ruleName))
+		exceptionResults, err := c.evalOPAQuery(ctx, input, exceptionQuery)
+		if err != nil {
+			return Outcome{}, fmt.Errorf("query exception: %w", err)
+		}
+
+		var exceptions []Result
+		for _, er := range exceptionResults {
+			if er.Message == "" && len(er.Metadata) == 0 {
+				exceptions = append(exceptions, Result{Message: exceptionQuery})
+			}
+		}
+
+		ruleQuery := fmt.Sprintf("data.%s.%s", namespace, ruleName)
+		ruleResults, err := c.evalOPAQuery(ctx, input, ruleQuery)
+		if err != nil {
+			return Outcome{}, fmt.Errorf("query rule: %w", err)
+		}
+
+		for _, rr := range ruleResults {
+			if len(exceptions) > 0 {
+				continue
+			}
+			if rr.Message == "" && len(rr.Metadata) == 0 {
+				successes++
+				continue
+			}
+			if isOPAFailureRule(ruleName) {
+				outcome.Failures = append(outcome.Failures, rr)
+			} else {
+				outcome.Warnings = append(outcome.Warnings, rr)
+			}
+		}
+		outcome.Exceptions = append(outcome.Exceptions, exceptions...)
+	}
+
+	resultCount := len(outcome.Failures) + len(outcome.Warnings) + len(outcome.Exceptions) + successes
+	if resultCount < ruleCount {
+		successes += ruleCount - resultCount
+	}
+	outcome.Successes = make([]Result, successes)
+
+	return outcome, nil
+}
+
+// evalOPAQuery executes a single OPA query against the pre-compiled engine's
+// compiler and store. Safe for concurrent use since it only reads from the
+// compiler and store (no writes).
+func (c conftestEvaluator) evalOPAQuery(ctx context.Context, input any, query string) ([]Result, error) {
+	regoInstance := rego.New(
+		rego.Input(input),
+		rego.Query(query),
+		rego.Compiler(c.engine.Compiler()),
+		rego.Store(c.engine.Store()),
+	)
+
+	resultSet, err := regoInstance.Eval(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("evaluating policy: %w", err)
+	}
+
+	var results []Result
+	for _, result := range resultSet {
+		for _, expression := range result.Expressions {
+			expressionValues, ok := expression.Value.([]any)
+			if !ok || len(expressionValues) == 0 {
+				results = append(results, Result{})
+				continue
+			}
+			for _, v := range expressionValues {
+				switch val := v.(type) {
+				case string:
+					results = append(results, Result{
+						Message:  val,
+						Metadata: map[string]any{},
+					})
+				case map[string]any:
+					msg, _ := val["msg"].(string)
+					metadata := make(map[string]any)
+					for k, v := range val {
+						if k != "msg" {
+							metadata[k] = v
+						}
+					}
+					results = append(results, Result{
+						Message:  msg,
+						Metadata: metadata,
+					})
+				}
+			}
+		}
+	}
+
+	return results, nil
+}
+
 // Destroy removes the working directory
 func (c conftestEvaluator) Destroy() {
 	if os.Getenv("EC_DEBUG") == "" {
@@ -545,53 +828,16 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		// Instead, we evaluate all namespaces and filter results afterward
 	}
 
-	r, ok := ctx.Value(runnerKey).(testRunner)
-	if r == nil || !ok {
-
-		// Determine which namespaces to use
-		namespacesToUse := c.namespace
-		allNamespaces := false
-
-		// If we have filtered namespaces from the filtering system, use those
-		if len(filteredNamespaces) > 0 {
-			namespacesToUse = filteredNamespaces
-
-		} else if len(namespacesToUse) == 0 {
-			// For new filtering with empty namespaces, also evaluate all namespaces
-			// This ensures backward compatibility with tests that don't specify namespaces
-			allNamespaces = true
-		}
-
-		// log the namespaces to use
-		log.Debugf("Namespaces to use: %v, allNamespaces: %v", namespacesToUse, allNamespaces)
-
-		// Prepare the list of data dirs
-		dataDirs, err := c.prepareDataDirs(ctx, c.dataSourceDirs)
-		if err != nil {
-			return nil, err
-		}
-
-		r = &conftestRunner{
-			runner.TestRunner{
-				Data:          dataDirs,
-				Policy:        []string{c.policyDir},
-				Namespace:     namespacesToUse,
-				AllNamespaces: allNamespaces, // Use all namespaces for legacy filtering
-				NoFail:        true,
-				Output:        c.outputFormat,
-				Capabilities:  c.CapabilitiesPath(),
-				RegoVersion:   "v1",
-			},
-		}
-	}
-
-	log.Debugf("runner: %#v", r)
-	log.Debugf("inputs: %#v", target.Inputs)
-
 	memprofile.Snapshot("evaluator:opa-run")
-	runResults, err := r.Run(ctx, target.Inputs)
+	var runResults []Outcome
+	var err error
+	if r, ok := ctx.Value(runnerKey).(testRunner); r != nil && ok {
+		log.Debugf("inputs: %#v", target.Inputs)
+		runResults, err = r.Run(ctx, target.Inputs)
+	} else {
+		runResults, err = c.evaluateWithEngine(ctx, target, filteredNamespaces)
+	}
 	if err != nil {
-		// TODO do we want to evaluate further policies instead of erroring out?
 		return nil, err
 	}
 	memprofile.Snapshot("evaluator:opa-run-done")
