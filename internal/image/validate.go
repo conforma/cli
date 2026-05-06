@@ -30,6 +30,7 @@ import (
 	"github.com/conforma/cli/internal/attestation"
 	"github.com/conforma/cli/internal/evaluation_target/application_snapshot_image"
 	"github.com/conforma/cli/internal/evaluator"
+	"github.com/conforma/cli/internal/memprofile"
 	"github.com/conforma/cli/internal/output"
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/validate/vsa"
@@ -53,6 +54,7 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 		return nil, err
 	}
 
+	memprofile.Snapshot("image:access-check")
 	out.SetImageAccessibleCheckFromError(a.ValidateImageAccess(ctx))
 	if !out.ImageAccessibleCheck.Passed {
 		return out, nil
@@ -64,16 +66,20 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 		out.ImageURL = resolved
 	}
 
+	memprofile.Snapshot("image:fetch-configs")
 	if err := a.FetchImageConfig(ctx); err != nil {
 		log.Debugf("Unable to fetch image config: %s", err)
 	}
 	if err := a.FetchParentImageConfig(ctx); err != nil {
 		log.Debugf("Unable to fetch parent's image config: %s", err)
 	}
+
+	memprofile.Snapshot("image:fetch-files")
 	if err := a.FetchImageFiles(ctx); err != nil {
 		log.Debugf("Unable to fetch image manifests: %s", err)
 	}
 
+	memprofile.Snapshot("image:signature-check")
 	// Handle image signature validation
 	if p.SkipImageSigCheck() {
 		log.Debug("Image signature check skipped")
@@ -81,6 +87,7 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 		out.SetImageSignatureCheckFromError(a.ValidateImageSignature(ctx))
 	}
 
+	memprofile.Snapshot("image:attestation-signature")
 	out.SetAttestationSignatureCheckFromError(a.ValidateAttestationSignature(ctx))
 	if !out.AttestationSignatureCheck.Passed {
 		return out, nil
@@ -112,18 +119,19 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 		return out, nil
 	}
 
-	inputPath, inputJSON, err := a.WriteInputFile(ctx)
+	memprofile.Snapshot("image:build-input")
+	inputMap, inputJSON, err := a.BuildInput(ctx)
 	if err != nil {
-		log.Debug("Problem writing input files!")
+		log.Debug("Problem building input!")
 		return nil, err
 	}
 
+	memprofile.Snapshot("image:policy-eval")
 	var allResults []evaluator.Outcome
 
 	for _, e := range evaluators {
-		// Todo maybe: Handle each one concurrently
 		target := evaluator.EvaluationTarget{
-			Inputs:        []string{inputPath},
+			ParsedInput:   inputMap,
 			ComponentName: comp.Name,
 		}
 		if ref := a.ImageReference(ctx); ref == "" {
@@ -142,6 +150,7 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 		allResults = append(allResults, results...)
 	}
 
+	memprofile.Snapshot("image:policy-eval-done")
 	out.PolicyInput = inputJSON
 
 	log.Debug("Conftest policy check complete")
