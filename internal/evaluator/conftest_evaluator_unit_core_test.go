@@ -423,12 +423,17 @@ func TestUnconformingRule(t *testing.T) {
 	p, err := policy.NewInertPolicy(ctx, "")
 	require.NoError(t, err)
 
-	_, err = NewConftestEvaluatorWithNamespace(ctx, []source.PolicySource{
+	ev, err := NewConftestEvaluatorWithNamespace(ctx, []source.PolicySource{
 		&source.PolicyUrl{
 			Url:  rules,
 			Kind: source.PolicyKind,
 		},
 	}, p, ecc.Source{}, []string{})
+	require.NoError(t, err)
+
+	_, err = ev.Evaluate(ctx, EvaluationTarget{
+		Inputs: []string{path.Join(dir, "inputs", "data.json")},
+	})
 	require.Error(t, err)
 	assert.EqualError(t, err, `the rule "deny = true if { true }" returns an unsupported value, at no_msg.rego:5`)
 }

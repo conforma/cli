@@ -20,6 +20,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
+	gohttp "net/http"
+	_ "net/http/pprof"
 	"os"
 	"runtime/pprof"
 	"runtime/trace"
@@ -34,6 +37,7 @@ import (
 	"github.com/conforma/cli/internal/http"
 	"github.com/conforma/cli/internal/kubernetes"
 	"github.com/conforma/cli/internal/logging"
+	"github.com/conforma/cli/internal/memprofile"
 	"github.com/conforma/cli/internal/tracing"
 )
 
@@ -147,7 +151,18 @@ func NewRootCmd() *cobra.Command {
 				}
 			}
 
+			if memprofile.Enabled() {
+				listener, err := net.Listen("tcp", "localhost:0")
+				if err == nil {
+					go gohttp.Serve(listener, nil)
+					cmd.PrintErrf("[memprofile] pprof server at http://%s/debug/pprof/\n", listener.Addr())
+				}
+				memprofile.Snapshot("init")
+			}
+
 			OnExit = sync.OnceFunc(func() {
+				memprofile.Report()
+
 				if enabledTraces.Enabled(tracing.Memory) {
 					// dump memory profile
 					if memprofile, err := os.CreateTemp("", "memprofile.*"); err != nil {

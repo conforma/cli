@@ -1362,7 +1362,7 @@ func TestConftestEvaluator_FilterType_ECPolicy(t *testing.T) {
 	assert.NotNil(t, evaluator, "evaluator should not be nil")
 
 	t.Logf("Evaluator type: %T", evaluator)
-	conftestEval, ok := evaluator.(conftestEvaluator)
+	conftestEval, ok := evaluator.(*conftestEvaluator)
 	t.Logf("Type assertion result: ok=%v, conftestEval=%v", ok, conftestEval)
 	assert.True(t, ok, "evaluator should be conftestEvaluator")
 
@@ -1388,7 +1388,7 @@ func TestConftestEvaluator_FilterType_IncludeExclude(t *testing.T) {
 	evaluator, err := NewConftestEvaluatorWithFilterType(ctx, policySources, configProvider, sourceConfig, "include-exclude")
 	assert.NoError(t, err)
 
-	conftestEval, ok := evaluator.(conftestEvaluator)
+	conftestEval, ok := evaluator.(*conftestEvaluator)
 	assert.True(t, ok, "evaluator should be conftestEvaluator")
 
 	// Should use IncludeExcludePolicyResolver which ignores pipeline intentions
@@ -1413,7 +1413,7 @@ func TestConftestEvaluator_FilterType_Default(t *testing.T) {
 	evaluator, err := NewConftestEvaluatorWithFilterType(ctx, policySources, configProvider, sourceConfig, "unknown-type")
 	assert.NoError(t, err)
 
-	conftestEval, ok := evaluator.(conftestEvaluator)
+	conftestEval, ok := evaluator.(*conftestEvaluator)
 	assert.True(t, ok, "evaluator should be conftestEvaluator")
 
 	// Should default to IncludeExcludePolicyResolver

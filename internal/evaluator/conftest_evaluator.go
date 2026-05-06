@@ -28,6 +28,7 @@ import (
 	"regexp"
 	"runtime/trace"
 	"strings"
+	"sync"
 	"time"
 
 	ecc "github.com/conforma/crds/api/v1alpha1"
@@ -219,8 +220,11 @@ type conftestEvaluator struct {
 	allRules       policyRules
 	dataSourceDirs []string
 
-	// Pre-compiled OPA engine (set once in constructor, read-only during Evaluate)
-	engine *conftest.Engine
+	// Pre-compiled OPA engine (set once on first evaluate, read-only during Evaluate)
+	engine   *conftest.Engine
+	initOnce *sync.Once
+	initErr  error
+	initCtx  context.Context
 }
 
 type conftestRunner struct {
@@ -374,16 +378,11 @@ func NewConftestEvaluatorWithNamespaceAndFilterType(
 		return nil, err
 	}
 
-	if err := c.downloadAndInspectPolicies(ctx); err != nil {
-		return nil, err
-	}
-
-	if err := c.compileEngine(ctx); err != nil {
-		return nil, err
-	}
+	c.initOnce = &sync.Once{}
+	c.initCtx = ctx
 
 	log.Debug("Conftest test runner created")
-	return c, nil
+	return &c, nil
 }
 
 // set the policy namespace
@@ -544,7 +543,25 @@ func stripOPARulePrefix(name string) string {
 
 // evaluateWithEngine runs policy evaluation using the pre-compiled engine
 // instead of creating a new conftest runner per call.
-func (c conftestEvaluator) evaluateWithEngine(ctx context.Context, target EvaluationTarget, filteredNamespaces []string) ([]Outcome, error) {
+// ensureInitialized downloads policies and compiles the OPA engine on first call.
+func (c *conftestEvaluator) ensureInitialized() error {
+	c.initOnce.Do(func() {
+		ctx := c.initCtx
+		if err := c.downloadAndInspectPolicies(ctx); err != nil {
+			c.initErr = err
+			return
+		}
+		if err := c.compileEngine(ctx); err != nil {
+			c.initErr = err
+		}
+	})
+	return c.initErr
+}
+
+func (c *conftestEvaluator) evaluateWithEngine(ctx context.Context, target EvaluationTarget, filteredNamespaces []string) ([]Outcome, error) {
+	if err := c.ensureInitialized(); err != nil {
+		return nil, err
+	}
 	if c.engine == nil {
 		return nil, fmt.Errorf("OPA engine not compiled; ensure policies are on the real filesystem")
 	}
@@ -764,13 +781,13 @@ func (c conftestEvaluator) evalOPAQuery(ctx context.Context, input any, query st
 }
 
 // Destroy removes the working directory
-func (c conftestEvaluator) Destroy() {
+func (c *conftestEvaluator) Destroy() {
 	if os.Getenv("EC_DEBUG") == "" {
 		_ = c.fs.RemoveAll(c.workDir)
 	}
 }
 
-func (c conftestEvaluator) CapabilitiesPath() string {
+func (c *conftestEvaluator) CapabilitiesPath() string {
 	return path.Join(c.workDir, "capabilities.json")
 }
 
@@ -802,7 +819,7 @@ func (r *policyRules) collect(a *ast.AnnotationsRef) error {
 	return nil
 }
 
-func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget) ([]Outcome, error) {
+func (c *conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget) ([]Outcome, error) {
 	var results []Outcome
 
 	if trace.IsEnabled() {
