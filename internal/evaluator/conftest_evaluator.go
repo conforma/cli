@@ -558,9 +558,15 @@ func (c conftestEvaluator) evaluateWithEngine(ctx context.Context, target Evalua
 
 	log.Debugf("Engine namespaces to use: %v", namespacesToUse)
 
-	configs, err := parseInputFiles(target.Inputs)
-	if err != nil {
-		return nil, fmt.Errorf("parse inputs: %w", err)
+	var configs map[string]any
+	if target.ParsedInput != nil {
+		configs = map[string]any{"": target.ParsedInput}
+	} else {
+		var err error
+		configs, err = parseInputFiles(target.Inputs)
+		if err != nil {
+			return nil, fmt.Errorf("parse inputs: %w", err)
+		}
 	}
 
 	var results []Outcome

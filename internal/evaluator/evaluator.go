@@ -24,6 +24,7 @@ type EvaluationTarget struct {
 	Inputs        []string
 	Target        string
 	ComponentName string
+	ParsedInput   map[string]any
 }
 
 type Evaluator interface {
