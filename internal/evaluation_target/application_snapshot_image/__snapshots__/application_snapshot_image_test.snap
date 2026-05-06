@@ -11,7 +11,7 @@
 }
 ---
 
-[TestWriteInputFile/single_attestations - 1]
+[TestBuildInput/single_attestations - 1]
 {
  "attestations": [
   {
@@ -55,7 +55,7 @@
 }
 ---
 
-[TestWriteInputFile/multiple_attestations - 1]
+[TestBuildInput/multiple_attestations - 1]
 {
  "attestations": [
   {
@@ -115,7 +115,7 @@
 }
 ---
 
-[TestWriteInputFile/image_signatures - 1]
+[TestBuildInput/image_signatures - 1]
 {
  "attestations": [
   {
@@ -173,7 +173,7 @@
 }
 ---
 
-[TestWriteInputFile/image_config - 1]
+[TestBuildInput/image_config - 1]
 {
  "attestations": null,
  "image": {
@@ -205,7 +205,7 @@
 }
 ---
 
-[TestWriteInputFile/parent_image_config - 1]
+[TestBuildInput/parent_image_config - 1]
 {
  "attestations": null,
  "image": {
@@ -240,7 +240,7 @@
 }
 ---
 
-[TestWriteInputFile/attestation_with_signature - 1]
+[TestBuildInput/attestation_with_signature - 1]
 {
  "attestations": [
   {
@@ -300,51 +300,7 @@
 }
 ---
 
-[TestWriteInputFileMultipleAttestations - 1]
-{
- "attestations": [
-  {
-   "statement": {
-    "_type": "https://in-toto.io/Statement/v0.1",
-    "predicate": {
-     "buildType": "https://tekton.dev/attestations/chains/pipelinerun@v2",
-     "builder": {
-      "id": ""
-     },
-     "invocation": {
-      "configSource": {}
-     }
-    },
-    "predicateType": "https://slsa.dev/provenance/v0.2",
-    "subject": null
-   }
-  }
- ],
- "image": {
-  "ref": "registry.io/repository/image:tag",
-  "source": {}
- },
- "policy_spec": {},
- "snapshot": {
-  "application": "",
-  "artifacts": {},
-  "components": [
-   {
-    "containerImage": "registry.io/repository/image:tag",
-    "name": "",
-    "source": {}
-   },
-   {
-    "containerImage": "registry.io/other-repository/image2:tag",
-    "name": "",
-    "source": {}
-   }
-  ]
- }
-}
----
-
-[TestWriteInputFile/component_with_source - 1]
+[TestBuildInput/component_with_source - 1]
 {
  "attestations": null,
  "image": {
@@ -376,7 +332,7 @@
 }
 ---
 
-[TestWriteInputFile/component_name_in_input - 1]
+[TestBuildInput/component_name_in_input - 1]
 {
  "attestations": null,
  "component_name": "my-component",
@@ -404,7 +360,7 @@
 }
 ---
 
-[TestWriteInputFile/policy_spec_with_volatile_config - 1]
+[TestBuildInput/policy_spec_with_volatile_config - 1]
 {
  "attestations": null,
  "component_name": "test-component",
@@ -434,6 +390,50 @@
    }
   ]
  },
+ "snapshot": {
+  "application": "",
+  "artifacts": {},
+  "components": [
+   {
+    "containerImage": "registry.io/repository/image:tag",
+    "name": "",
+    "source": {}
+   },
+   {
+    "containerImage": "registry.io/other-repository/image2:tag",
+    "name": "",
+    "source": {}
+   }
+  ]
+ }
+}
+---
+
+[TestBuildInputMultipleAttestations - 1]
+{
+ "attestations": [
+  {
+   "statement": {
+    "_type": "https://in-toto.io/Statement/v0.1",
+    "predicate": {
+     "buildType": "https://tekton.dev/attestations/chains/pipelinerun@v2",
+     "builder": {
+      "id": ""
+     },
+     "invocation": {
+      "configSource": {}
+     }
+    },
+    "predicateType": "https://slsa.dev/provenance/v0.2",
+    "subject": null
+   }
+  }
+ ],
+ "image": {
+  "ref": "registry.io/repository/image:tag",
+  "source": {}
+ },
+ "policy_spec": {},
  "snapshot": {
   "application": "",
   "artifacts": {},

@@ -173,7 +173,6 @@ type testRunner interface {
 const (
 	effectiveOnFormat   = "2006-01-02T15:04:05Z"
 	effectiveOnTimeout  = -90 * 24 * time.Hour // keep effective_on metadata up to 90 days
-	metadataQuery       = "query"
 	metadataCode        = "code"
 	metadataCollections = "collections"
 	metadataDependsOn   = "depends_on"
@@ -224,7 +223,6 @@ type conftestEvaluator struct {
 	trace    bool
 	initOnce *sync.Once
 	initErr  error
-	initCtx  context.Context
 }
 
 // NewConftestEvaluator returns initialized conftestEvaluator implementing
@@ -297,7 +295,6 @@ func NewConftestEvaluatorWithNamespaceAndFilterType(
 	}
 
 	c.initOnce = &sync.Once{}
-	c.initCtx = ctx
 
 	log.Debug("Conftest test runner created")
 	return &c, nil
@@ -404,13 +401,6 @@ func (c *conftestEvaluator) downloadAndInspectPolicies(ctx context.Context) erro
 // making concurrent evaluation safe without the store mutations that
 // engine.Check/addFileInfo would cause.
 func (c *conftestEvaluator) compileEngine(ctx context.Context) error {
-	// conftest.LoadWithData reads from the real OS filesystem.
-	// In tests using in-memory FS, the policy/data files won't exist on disk,
-	// so skip compilation — those tests inject mock runners via context.
-	if _, err := os.Stat(c.CapabilitiesPath()); err != nil {
-		return nil
-	}
-
 	dataDirs, err := c.prepareDataDirs(ctx, c.dataSourceDirs)
 	if err != nil {
 		return err
@@ -459,12 +449,10 @@ func stripOPARulePrefix(name string) string {
 	return name
 }
 
-// evaluateWithEngine runs policy evaluation using the pre-compiled engine
-// instead of creating a new conftest runner per call.
 // ensureInitialized downloads policies and compiles the OPA engine on first call.
-func (c *conftestEvaluator) ensureInitialized() error {
+// The context from the first caller is used for the one-time initialization.
+func (c *conftestEvaluator) ensureInitialized(ctx context.Context) error {
 	c.initOnce.Do(func() {
-		ctx := c.initCtx
 		if err := c.downloadAndInspectPolicies(ctx); err != nil {
 			c.initErr = err
 			return
@@ -477,7 +465,7 @@ func (c *conftestEvaluator) ensureInitialized() error {
 }
 
 func (c *conftestEvaluator) evaluateWithEngine(ctx context.Context, target EvaluationTarget, filteredNamespaces []string) ([]Outcome, error) {
-	if err := c.ensureInitialized(); err != nil {
+	if err := c.ensureInitialized(ctx); err != nil {
 		return nil, err
 	}
 	if c.engine == nil {
@@ -562,7 +550,7 @@ func parseInputFiles(inputs []string) (map[string]any, error) {
 // queryNamespace evaluates all deny/warn rules in a single OPA namespace
 // against the given input. This replicates conftest's engine.check() logic
 // but without the store-mutating addFileInfo() call.
-func (c conftestEvaluator) queryNamespace(ctx context.Context, fileName string, input any, namespace string) (Outcome, error) {
+func (c *conftestEvaluator) queryNamespace(ctx context.Context, fileName string, input any, namespace string) (Outcome, error) {
 	outcome := Outcome{
 		FileName:  fileName,
 		Namespace: namespace,
@@ -644,7 +632,7 @@ func (c conftestEvaluator) queryNamespace(ctx context.Context, fileName string, 
 // evalOPAQuery executes a single OPA query against the pre-compiled engine's
 // compiler and store. Safe for concurrent use since it only reads from the
 // compiler and store (no writes).
-func (c conftestEvaluator) evalOPAQuery(ctx context.Context, input any, query string) ([]Result, error) {
+func (c *conftestEvaluator) evalOPAQuery(ctx context.Context, input any, query string) ([]Result, error) {
 	ph := opaPrintHook{s: &[]string{}}
 	options := []func(r *rego.Rego){
 		rego.Input(input),
@@ -895,7 +883,7 @@ func (c *conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarge
 // dataSourceDirs contains the directories returned by GetPolicy for data sources.
 // These directories may be symlinks (from cached downloads), but we walk them directly
 // which ensures we find the files regardless of whether they're symlinks or not.
-func (c conftestEvaluator) prepareDataDirs(ctx context.Context, dataSourceDirs []string) ([]string, error) {
+func (c *conftestEvaluator) prepareDataDirs(ctx context.Context, dataSourceDirs []string) ([]string, error) {
 	// The reason we do this is to avoid having the names of the subdirs under c.dataDir
 	// converted to keys in the data structure. We want the top level keys in the data files
 	// to be at the top level of the data structure visible to the rego rules.
@@ -977,7 +965,7 @@ func (c conftestEvaluator) prepareDataDirs(ctx context.Context, dataSourceDirs [
 // computeSuccesses generates success results, these are not provided in the
 // Conftest results, so we reconstruct these from the parsed rules, any rule
 // that hasn't been touched by adding metadata must have succeeded
-func (c conftestEvaluator) computeSuccesses(
+func (c *conftestEvaluator) computeSuccesses(
 	result Outcome,
 	rules policyRules,
 	imageRef string,
@@ -1303,7 +1291,7 @@ func isResultEffective(failure Result, now time.Time) bool {
 // isResultIncluded returns whether or not the result should be included or
 // discarded based on the policy configuration.
 // 'missingIncludes' is a list of include directives that gets pruned if the result is matched
-func (c conftestEvaluator) isResultIncluded(result Result, imageRef string, componentName string, missingIncludes map[string]bool) bool {
+func (c *conftestEvaluator) isResultIncluded(result Result, imageRef string, componentName string, missingIncludes map[string]bool) bool {
 	ruleMatchers := LegacyMakeMatchers(result)
 	includeScore := LegacyScoreMatches(ruleMatchers, c.include.get(imageRef, componentName), missingIncludes)
 	excludeScore := LegacyScoreMatches(ruleMatchers, c.exclude.get(imageRef, componentName), map[string]bool{})

@@ -46,7 +46,6 @@ import (
 	"github.com/sigstore/cosign/v3/pkg/oci/static"
 	cosignTypes "github.com/sigstore/cosign/v3/pkg/types"
 	"github.com/sigstore/sigstore/pkg/signature/payload"
-	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -122,7 +121,7 @@ func createSimpleAttestation(statement *in_toto.ProvenanceStatementSLSA02, o ...
 	return a
 }
 
-func TestWriteInputFile(t *testing.T) {
+func TestBuildInput(t *testing.T) {
 	cases := []struct {
 		name     string
 		snapshot ApplicationSnapshotImage
@@ -260,8 +259,7 @@ func TestWriteInputFile(t *testing.T) {
 
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			fs := afero.NewMemMapFs()
-			ctx := utils.WithFS(context.Background(), fs)
+			ctx := context.Background()
 			tt.snapshot.snapshot = app.SnapshotSpec{
 				Components: []app.SnapshotComponent{
 					{
@@ -272,25 +270,16 @@ func TestWriteInputFile(t *testing.T) {
 					},
 				},
 			}
-			inputPath, inputJSON, err := tt.snapshot.WriteInputFile(ctx)
+			inputMap, inputJSON, err := tt.snapshot.BuildInput(ctx)
 
 			assert.NoError(t, err)
-			assert.NotEmpty(t, inputPath)
-			assert.Regexp(t, `/ecp_input.\d+/input.json`, inputPath)
-			fileExists, err := afero.Exists(fs, inputPath)
-			assert.NoError(t, err)
-			assert.True(t, fileExists)
-
-			bytes, err := afero.ReadFile(fs, inputPath)
-			assert.NoError(t, err)
-			snaps.MatchJSON(t, bytes)
-
-			assert.JSONEq(t, string(inputJSON), string(bytes))
+			assert.NotNil(t, inputMap)
+			snaps.MatchJSON(t, inputJSON)
 		})
 	}
 }
 
-func TestWriteInputFileMultipleAttestations(t *testing.T) {
+func TestBuildInputMultipleAttestations(t *testing.T) {
 	att := createSimpleAttestation(nil)
 	snapshot := app.SnapshotSpec{
 		Components: []app.SnapshotComponent{
@@ -308,22 +297,12 @@ func TestWriteInputFileMultipleAttestations(t *testing.T) {
 		snapshot:     snapshot,
 	}
 
-	fs := afero.NewMemMapFs()
-	ctx := utils.WithFS(context.Background(), fs)
-	inputPath, inputJSON, err := a.WriteInputFile(ctx)
+	ctx := context.Background()
+	inputMap, inputJSON, err := a.BuildInput(ctx)
 
 	assert.NoError(t, err)
-	assert.NotEmpty(t, inputPath)
-	assert.Regexp(t, `/ecp_input.\d+/input.json`, inputPath)
-	fileExists, err := afero.Exists(fs, inputPath)
-	assert.NoError(t, err)
-	assert.True(t, fileExists)
-
-	bytes, err := afero.ReadFile(fs, inputPath)
-	assert.NoError(t, err)
-	snaps.MatchJSON(t, bytes)
-
-	assert.JSONEq(t, string(inputJSON), string(bytes))
+	assert.NotNil(t, inputMap)
+	snaps.MatchJSON(t, inputJSON)
 }
 
 func TestNewApplicationSnapshotImage(t *testing.T) {

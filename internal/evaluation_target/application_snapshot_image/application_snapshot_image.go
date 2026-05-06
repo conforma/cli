@@ -22,8 +22,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path"
 	"runtime/trace"
 
 	ecc "github.com/conforma/crds/api/v1alpha1"
@@ -34,7 +32,6 @@ import (
 	cosignOCI "github.com/sigstore/cosign/v3/pkg/oci"
 	ociremote "github.com/sigstore/cosign/v3/pkg/oci/remote"
 	log "github.com/sirupsen/logrus"
-	"github.com/spf13/afero"
 
 	"github.com/conforma/cli/internal/attestation"
 	"github.com/conforma/cli/internal/evaluator"
@@ -42,7 +39,6 @@ import (
 	"github.com/conforma/cli/internal/fetchers/oci/files"
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/signature"
-	"github.com/conforma/cli/internal/utils"
 	"github.com/conforma/cli/internal/utils/oci"
 	"github.com/conforma/cli/pkg/schema"
 )
@@ -417,68 +413,6 @@ type Input struct {
 	AppSnapshot   app.SnapshotSpec                 `json:"snapshot"`
 	ComponentName string                           `json:"component_name,omitempty"`
 	PolicySpec    ecc.EnterpriseContractPolicySpec `json:"policy_spec,omitempty"`
-}
-
-// WriteInputFile writes the JSON from the attestations to input.json in a random temp dir
-func (a *ApplicationSnapshotImage) WriteInputFile(ctx context.Context) (string, []byte, error) {
-	log.Debugf("Attempting to write %d attestations to input file", len(a.attestations))
-
-	var attestations []attestationData
-	for _, a := range a.attestations {
-		attestations = append(attestations, attestationData{
-			Statement:  a.Statement(),
-			Signatures: a.Signatures(),
-		})
-	}
-
-	input := Input{
-		Attestations: attestations,
-		Image: image{
-			Ref:        a.reference.String(),
-			Signatures: a.signatures,
-			Config:     a.configJSON,
-			Files:      a.files,
-			Source:     a.component.Source,
-		},
-		AppSnapshot:   a.snapshot,
-		ComponentName: a.component.Name,
-		PolicySpec:    a.policySpec,
-	}
-
-	if a.parentRef != nil {
-		input.Image.Parent = image{
-			Ref:    a.parentRef.String(),
-			Config: a.parentConfigJSON,
-		}
-	}
-
-	fs := utils.FS(ctx)
-	inputDir, err := afero.TempDir(fs, "", "ecp_input.")
-	if err != nil {
-		log.Debug("Problem making temp dir!")
-		return "", nil, err
-	}
-	log.Debugf("Created dir %s", inputDir)
-	inputJSONPath := path.Join(inputDir, "input.json")
-
-	f, err := fs.OpenFile(inputJSONPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0644)
-	if err != nil {
-		log.Debugf("Problem creating file in %s", inputDir)
-		return "", nil, err
-	}
-	defer f.Close()
-
-	inputJSON, err := json.Marshal(input)
-	if err != nil {
-		return "", nil, fmt.Errorf("input to JSON: %w", err)
-	}
-
-	if _, err := f.Write(inputJSON); err != nil {
-		return "", nil, fmt.Errorf("write input to file: %w", err)
-	}
-
-	log.Debugf("Done preparing input file:\n%s", inputJSONPath)
-	return inputJSONPath, inputJSON, nil
 }
 
 // BuildInput constructs the OPA input as a Go map and JSON bytes without disk I/O.
