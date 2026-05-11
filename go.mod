@@ -15,7 +15,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-containerregistry v0.20.2
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
-	github.com/in-toto/in-toto-golang v0.9.0
+	github.com/in-toto/in-toto-golang v0.11.0
 	github.com/jstemmer/go-junit-report/v2 v2.1.0
 	github.com/konflux-ci/application-api v0.0.0-20240812090716-e7eb2ecfb409
 	github.com/leanovate/gopter v0.2.11
@@ -26,13 +26,13 @@ require (
 	github.com/package-url/packageurl-go v0.1.3
 	github.com/qri-io/jsonpointer v0.1.1
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
-	github.com/secure-systems-lab/go-securesystemslib v0.9.0
+	github.com/secure-systems-lab/go-securesystemslib v0.10.0
 	github.com/sigstore/cosign/v2 v2.4.1
 	github.com/sigstore/sigstore v1.8.15
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/afero v1.11.0
-	github.com/spf13/cobra v1.9.1
-	github.com/spf13/pflag v1.0.6
+	github.com/spf13/cobra v1.10.2
+	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.11.1
 	github.com/stuart-warren/yamlfmt v0.2.0
@@ -217,6 +217,7 @@ require (
 	github.com/hashicorp/go-version v1.7.0 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-5 // indirect
 	github.com/hashicorp/hcl/v2 v2.22.0 // indirect
+	github.com/in-toto/attestation v1.1.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/jedisct1/go-minisign v0.0.0-20230811132847-661be99b8267 // indirect
@@ -336,9 +337,9 @@ require (
 	google.golang.org/api v0.217.0 // indirect
 	google.golang.org/genproto v0.0.0-20241118233622-e639e219e697 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251222181119-0a764e51fe1b // indirect
 	google.golang.org/grpc v1.79.3 // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
