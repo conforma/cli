@@ -1,0 +1,20 @@
+{
+  "id" : "e9674f4f-3b7b-3c26-b12a-4042f05e736f",
+  "request" : {
+    "url" : "/targets/a91e4d1d6f9f54fb1c97c907ef303e86327edde9c1376fa7bf274a9e8e6f2bb3299aca0d6fc385bb2b2b1357f9b159173913f27d081a2becfdfa2ffbf7ddf8c3.fulcio_v1.crt.pem",
+    "method" : "GET"
+  },
+  "response" : {
+    "status" : 200,
+    "bodyFileName" : "body-targets-a91e4d1d6f9f54fb1c97c907ef303e86327edde9c1376fa7bf274a9e8e6f2bb3299aca0d6fc385bb2b2b1357f9b159173913f27d081a2becfdfa2ffbf7ddf8c3.fulcio_v1.crt-imNXZ.pem",
+    "headers" : {
+      "date" : "Wed, 06 May 2026 15:34:25 GMT",
+      "server" : "envoy",
+      "last-modified" : "Wed, 06 May 2026 15:34:09 GMT",
+      "x-envoy-upstream-service-time" : "0",
+      "content-type" : "application/pem-certificate-chain",
+      "accept-ranges" : "bytes"
+    }
+  },
+  "uuid" : "e9674f4f-3b7b-3c26-b12a-4042f05e736f"
+}
