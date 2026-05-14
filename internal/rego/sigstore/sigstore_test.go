@@ -235,6 +235,7 @@ func TestVerifyImageCache(t *testing.T) {
 		require.NoError(t, err)
 
 		c := &fake.FakeClient{}
+		c.On("HasBundles", mock.Anything, mock.Anything).Return(false, nil)
 		c.On("VerifyImageSignatures", mock.Anything, mock.Anything).Return([]oci.Signature{sig}, false, nil)
 		ctx := o.WithClient(context.Background(), c)
 		return c, rego.BuiltinContext{Context: ctx}
