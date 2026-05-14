@@ -19,12 +19,16 @@ package tuf
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/cucumber/godog"
 	"github.com/otiai10/copy"
+	sigstoretuf "github.com/sigstore/sigstore-go/pkg/tuf"
 	"github.com/sigstore/sigstore/pkg/tuf"
 
 	"github.com/conforma/cli/acceptance/log"
@@ -94,9 +98,38 @@ func initializeRoot(ctx context.Context) (context.Context, error) {
 		return ctx, err
 	}
 
+	mirror, err := Stub(ctx)
+	if err != nil {
+		return ctx, err
+	}
+	if err := setupNewTUFClientCache(newTUFRoot, mirror); err != nil {
+		return ctx, fmt.Errorf("setting up sigstore-go TUF cache: %w", err)
+	}
+
 	state := testenv.FetchState[state](ctx)
 	state.initialized = true
 	return ctx, nil
+}
+
+// setupNewTUFClientCache writes the files that cosign v3's TrustedRoot()
+// expects via sigstore-go's TUF client: remote.json with the mirror URL and
+// root.json at <cache>/<url-path>/root.json.
+func setupNewTUFClientCache(cacheDir, mirror string) error {
+	remote := map[string]string{"mirror": mirror}
+	remoteBytes, err := json.Marshal(remote)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(cacheDir, "remote.json"), remoteBytes, 0o600); err != nil {
+		return err
+	}
+
+	urlPath := sigstoretuf.URLToPath(mirror)
+	rootDir := filepath.Join(cacheDir, urlPath)
+	if err := os.MkdirAll(rootDir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(rootDir, "root.json"), rootJSON, 0o600)
 }
 
 // Stub returns the `http://host:port` of the stubbed TUF.
