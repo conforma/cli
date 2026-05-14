@@ -1,0 +1,20 @@
+{
+  "id" : "5893ddd7-1e43-3371-af8f-ca514f4667df",
+  "request" : {
+    "url" : "/targets/fd58537b91062475a34d1caf43bb8e8fb6fba5b35cab28bd4fbb0ce7f42f770ef72511d76e656bb733b42409d51c5bd933df7abbfd852cd7aa8344b7d6afc867.tsa_leaf.crt.pem",
+    "method" : "GET"
+  },
+  "response" : {
+    "status" : 200,
+    "bodyFileName" : "body-targets-fd58537b91062475a34d1caf43bb8e8fb6fba5b35cab28bd4fbb0ce7f42f770ef72511d76e656bb733b42409d51c5bd933df7abbfd852cd7aa8344b7d6afc867.tsa_leaf.crt.-kpdsu.pem",
+    "headers" : {
+      "date" : "Wed, 06 May 2026 15:34:25 GMT",
+      "server" : "envoy",
+      "last-modified" : "Wed, 06 May 2026 15:34:09 GMT",
+      "x-envoy-upstream-service-time" : "1",
+      "content-type" : "application/pem-certificate-chain",
+      "accept-ranges" : "bytes"
+    }
+  },
+  "uuid" : "5893ddd7-1e43-3371-af8f-ca514f4667df"
+}
