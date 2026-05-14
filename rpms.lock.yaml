@@ -35,13 +35,13 @@ arches:
     name: gzip
     evr: 1.12-1.el9
     sourcerpm: gzip-1.12-1.el9.src.rpm
-  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/j/jq-1.6-19.el9_7.0.2.aarch64.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/j/jq-1.6-19.el9_8.2.aarch64.rpm
     repoid: ubi-9-for-aarch64-baseos-rpms
-    size: 191129
-    checksum: sha256:8b48c0648debd490cac3ff6c7ad446a3c87e109e8793bd17d195e19904a7c24d
+    size: 191195
+    checksum: sha256:633aaf3e87b19d4a591bd9f47cd81fde8ec49629d3f58932addfc8a134b7949d
     name: jq
-    evr: 1.6-19.el9_7.0.2
-    sourcerpm: jq-1.6-19.el9_7.0.2.src.rpm
+    evr: 1.6-19.el9_8.2
+    sourcerpm: jq-1.6-19.el9_8.2.src.rpm
   source: []
   module_metadata: []
 - arch: ppc64le
@@ -60,13 +60,13 @@ arches:
     name: gzip
     evr: 1.12-1.el9
     sourcerpm: gzip-1.12-1.el9.src.rpm
-  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/ppc64le/baseos/os/Packages/j/jq-1.6-19.el9_7.0.2.ppc64le.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/ppc64le/baseos/os/Packages/j/jq-1.6-19.el9_8.2.ppc64le.rpm
     repoid: ubi-9-for-ppc64le-baseos-rpms
-    size: 210471
-    checksum: sha256:4c8edf2a8d254b43c936bd712dec6ef0285200634b1f700f2e728bc27cfdd16f
+    size: 210467
+    checksum: sha256:bd22f9b12aaae090e7d6d6a94eae6cd2a0de75b1f983696066b5c8691075012e
     name: jq
-    evr: 1.6-19.el9_7.0.2
-    sourcerpm: jq-1.6-19.el9_7.0.2.src.rpm
+    evr: 1.6-19.el9_8.2
+    sourcerpm: jq-1.6-19.el9_8.2.src.rpm
   source: []
   module_metadata: []
 - arch: s390x
@@ -85,13 +85,13 @@ arches:
     name: gzip
     evr: 1.12-1.el9
     sourcerpm: gzip-1.12-1.el9.src.rpm
-  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/s390x/baseos/os/Packages/j/jq-1.6-19.el9_7.0.2.s390x.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/s390x/baseos/os/Packages/j/jq-1.6-19.el9_8.2.s390x.rpm
     repoid: ubi-9-for-s390x-baseos-rpms
-    size: 206799
-    checksum: sha256:3bee62cdc4891f5e474431d539bccb8cc3f3c3a2687815988496d1ddd24869a4
+    size: 206781
+    checksum: sha256:0d4d0ea445c687665a70906d2ed4c5e959fc8cd82f7e961d19317881ce26851e
     name: jq
-    evr: 1.6-19.el9_7.0.2
-    sourcerpm: jq-1.6-19.el9_7.0.2.src.rpm
+    evr: 1.6-19.el9_8.2
+    sourcerpm: jq-1.6-19.el9_8.2.src.rpm
   source: []
   module_metadata: []
 - arch: x86_64
@@ -110,12 +110,12 @@ arches:
     name: gzip
     evr: 1.12-1.el9
     sourcerpm: gzip-1.12-1.el9.src.rpm
-  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/j/jq-1.6-19.el9_7.0.2.x86_64.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/j/jq-1.6-19.el9_8.2.x86_64.rpm
     repoid: ubi-9-for-x86_64-baseos-rpms
-    size: 197456
-    checksum: sha256:c6516f674a43c89c2a54bcffa7b8e1d65c553042d6aed94ccc08c443ed1efdfa
+    size: 197453
+    checksum: sha256:9793a39a4746a09ba89c3d9ccc70150ac6c878286deee26d7e3aabede4666417
     name: jq
-    evr: 1.6-19.el9_7.0.2
-    sourcerpm: jq-1.6-19.el9_7.0.2.src.rpm
+    evr: 1.6-19.el9_8.2
+    sourcerpm: jq-1.6-19.el9_8.2.src.rpm
   source: []
   module_metadata: []
