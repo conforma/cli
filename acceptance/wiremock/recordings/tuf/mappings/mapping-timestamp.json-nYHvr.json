@@ -1,0 +1,20 @@
+{
+  "id" : "b6a6ce62-e6b4-3b66-9c29-517ac0a17575",
+  "request" : {
+    "url" : "/timestamp.json",
+    "method" : "GET"
+  },
+  "response" : {
+    "status" : 200,
+    "bodyFileName" : "body-timestamp.json-nYHvr.json",
+    "headers" : {
+      "date" : "Wed, 06 May 2026 15:34:25 GMT",
+      "server" : "envoy",
+      "last-modified" : "Wed, 06 May 2026 15:34:09 GMT",
+      "x-envoy-upstream-service-time" : "1",
+      "content-type" : "application/json",
+      "accept-ranges" : "bytes"
+    }
+  },
+  "uuid" : "b6a6ce62-e6b4-3b66-9c29-517ac0a17575"
+}

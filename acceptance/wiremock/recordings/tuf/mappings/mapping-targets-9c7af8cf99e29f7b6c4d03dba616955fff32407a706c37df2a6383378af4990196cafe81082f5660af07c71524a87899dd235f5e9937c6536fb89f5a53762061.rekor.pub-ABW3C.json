@@ -1,0 +1,20 @@
+{
+  "id" : "469eb43b-557c-32b8-989b-5f54940fdff6",
+  "request" : {
+    "url" : "/targets/9c7af8cf99e29f7b6c4d03dba616955fff32407a706c37df2a6383378af4990196cafe81082f5660af07c71524a87899dd235f5e9937c6536fb89f5a53762061.rekor.pub",
+    "method" : "GET"
+  },
+  "response" : {
+    "status" : 200,
+    "bodyFileName" : "body-targets-9c7af8cf99e29f7b6c4d03dba616955fff32407a706c37df2a6383378af4990196cafe81082f5660af07c71524a87899dd235f5e9937c6536fb89f5a53762061.rekor.pub-ABW3C.pub",
+    "headers" : {
+      "date" : "Wed, 06 May 2026 15:34:25 GMT",
+      "server" : "envoy",
+      "last-modified" : "Wed, 06 May 2026 15:34:09 GMT",
+      "x-envoy-upstream-service-time" : "0",
+      "content-type" : "application/vnd.exstream-package",
+      "accept-ranges" : "bytes"
+    }
+  },
+  "uuid" : "469eb43b-557c-32b8-989b-5f54940fdff6"
+}
