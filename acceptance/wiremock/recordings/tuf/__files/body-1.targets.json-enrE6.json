@@ -3,12 +3,12 @@
   "_type": "targets",
   "spec_version": "1.0",
   "version": 1,
-  "expires": "2026-05-03T21:04:40Z",
+  "expires": "2036-05-06T15:34:09Z",
   "targets": {
    "ctfe.pub": {
     "length": 178,
     "hashes": {
-     "sha512": "c36342ad2dbe32e499149cbdf8d4f9ad2162403495f48f1ea89bbcf9138c1123d7ad0570ba87b5b3de50a732ecb4742a080f4ce4574f7e7739a00e1eef546d18"
+     "sha512": "644f10e579535deb79861c3f27be6b675b991d433c0cdc0730677f5427636f2d334dd649ce0a79cb6455ee1f840db02e54bd1a4ccaccaa9c8a94d50ae348da5e"
     },
     "custom": {
      "sigstore": {
@@ -21,7 +21,7 @@
    "fulcio_v1.crt.pem": {
     "length": 826,
     "hashes": {
-     "sha512": "150af49f08e52a117ae01f8e30c6a9917c6ee971bd2fb2da60467adb66269c45d0c4d671684e91df7c6dcff2e86a65948386186332b4c385522255d5b2cad1dc"
+     "sha512": "a91e4d1d6f9f54fb1c97c907ef303e86327edde9c1376fa7bf274a9e8e6f2bb3299aca0d6fc385bb2b2b1357f9b159173913f27d081a2becfdfa2ffbf7ddf8c3"
     },
     "custom": {
      "sigstore": {
@@ -34,7 +34,7 @@
    "rekor.pub": {
     "length": 178,
     "hashes": {
-     "sha512": "ca21dc965dfa3ea59e2358b6cf15ad331cbd626a295e83feeae176d6f8dbba09a29686a13299d07cbdf8ffb5729ddc2ac1cf989daf8e714fe6e9be33f4c4ec7e"
+     "sha512": "9c7af8cf99e29f7b6c4d03dba616955fff32407a706c37df2a6383378af4990196cafe81082f5660af07c71524a87899dd235f5e9937c6536fb89f5a53762061"
     },
     "custom": {
      "sigstore": {
@@ -47,13 +47,13 @@
    "trusted_root.json": {
     "length": 3762,
     "hashes": {
-     "sha512": "3ef849f6ca683c5263bef43082c65f3ce80d8d3996ffdca65c9ecd5fd7c781ffa0b81a174e89621be821381c007b9dbeed152e43d5ba9066bb4f0a0579a55cab"
+     "sha512": "9d1e7ee58f7a504b2860c7669711fc4c08f6ecffd18a9af05fe3affc84d043e8249e02546bea81c9f26f403154b42740081058f5f4e718b00c2d44d2948cc18d"
     }
    },
    "tsa_intermediate_0.crt.pem": {
     "length": 691,
     "hashes": {
-     "sha512": "954abc4e4a9769b1d24a43bfb43aae152fae5e521bac47f59ff4e7fd70ba5859f6d3022fb68b18205148c3ad0e7b6d3798a860026b6456275df2c635f3d7ff9f"
+     "sha512": "1c069c4eaa3be41f980ca4abee94cedb8fc70d4469a1cd77a472040828911556f507d7f2543e1f76e259f57aa2a84c51a6dc1f00523a5670a8c1ef7e98f25c78"
     },
     "custom": {
      "sigstore": {
@@ -66,7 +66,7 @@
    "tsa_leaf.crt.pem": {
     "length": 683,
     "hashes": {
-     "sha512": "4e6dbecfadd039adaa1de4cfea94c8cb6f6fea27ff4505a4e950c5498b1c3e49ec4c9824ae1c5268f76c23980aa32b0318c660eb89419984087a121335356268"
+     "sha512": "fd58537b91062475a34d1caf43bb8e8fb6fba5b35cab28bd4fbb0ce7f42f770ef72511d76e656bb733b42409d51c5bd933df7abbfd852cd7aa8344b7d6afc867"
     },
     "custom": {
      "sigstore": {
@@ -79,7 +79,7 @@
    "tsa_root.crt.pem": {
     "length": 606,
     "hashes": {
-     "sha512": "00734240bff619474f1b52e68b205dd12768017038c34bb6645cbebe8068baec3de03f7c7b350212a9977fc6345ec35157ae838d35e8257b006e655c6bdc7a84"
+     "sha512": "8beb15a5bff24c82e94166fce4915b6a26b499ae67672408ee23f22536f1bd824518c8622eb11d89ce52772c6f79f0652d7685d80a9fa35b492a8fa503a030dc"
     },
     "custom": {
      "sigstore": {
@@ -93,8 +93,8 @@
  },
  "signatures": [
   {
-   "keyid": "75650b73fdaf52a346c03b4c642739d9429043ad0ccdb5c2ff7f73deb3f679cb",
-   "sig": "13259551c239167184f45fc69d7d0ca1eb8a6d873d43253b3dc8327749f9eabc947e122a56afb9a2431eb88a56d168b79acc1d30101ccaa0486427fccda19f0b"
+   "keyid": "56067cc52611d7b198250a2f84f8930efd1dabc7cec3ac363b2ddb1a7f498f43",
+   "sig": "8748954b8f59cc41c1be2ddc6f04bd796171436fa310c084d6bbc9f6930f205a265e90efb1443b9b4c0f0e9558c5bee0053fa71988ebd78159aa69371f1dea02"
   }
  ]
 }
