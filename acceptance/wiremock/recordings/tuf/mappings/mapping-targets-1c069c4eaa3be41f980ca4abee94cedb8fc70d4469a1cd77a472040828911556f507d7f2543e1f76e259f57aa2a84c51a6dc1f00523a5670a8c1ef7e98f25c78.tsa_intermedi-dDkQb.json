@@ -1,0 +1,20 @@
+{
+  "id" : "4c69e9b5-f9bc-31b6-88d7-a2b1efc9dcc0",
+  "request" : {
+    "url" : "/targets/1c069c4eaa3be41f980ca4abee94cedb8fc70d4469a1cd77a472040828911556f507d7f2543e1f76e259f57aa2a84c51a6dc1f00523a5670a8c1ef7e98f25c78.tsa_intermediate_0.crt.pem",
+    "method" : "GET"
+  },
+  "response" : {
+    "status" : 200,
+    "bodyFileName" : "body-targets-1c069c4eaa3be41f980ca4abee94cedb8fc70d4469a1cd77a472040828911556f507d7f2543e1f76e259f57aa2a84c51a6dc1f00523a5670a8c1ef7e98f25c78.tsa_intermedi-dDkQb.pem",
+    "headers" : {
+      "date" : "Wed, 06 May 2026 15:34:25 GMT",
+      "server" : "envoy",
+      "last-modified" : "Wed, 06 May 2026 15:34:09 GMT",
+      "x-envoy-upstream-service-time" : "1",
+      "content-type" : "application/pem-certificate-chain",
+      "accept-ranges" : "bytes"
+    }
+  },
+  "uuid" : "4c69e9b5-f9bc-31b6-88d7-a2b1efc9dcc0"
+}
