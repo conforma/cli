@@ -35,13 +35,13 @@ arches:
     name: gzip
     evr: 1.12-1.el9
     sourcerpm: gzip-1.12-1.el9.src.rpm
-  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/j/jq-1.6-19.el9.aarch64.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/j/jq-1.6-19.el9_7.0.2.aarch64.rpm
     repoid: ubi-9-for-aarch64-baseos-rpms
-    size: 185334
-    checksum: sha256:a70a2f81df88595008fb897ee875af42150e11d1420b6e4989d40628816d4731
+    size: 191129
+    checksum: sha256:8b48c0648debd490cac3ff6c7ad446a3c87e109e8793bd17d195e19904a7c24d
     name: jq
-    evr: 1.6-19.el9
-    sourcerpm: jq-1.6-19.el9.src.rpm
+    evr: 1.6-19.el9_7.0.2
+    sourcerpm: jq-1.6-19.el9_7.0.2.src.rpm
   source: []
   module_metadata: []
 - arch: ppc64le
@@ -60,13 +60,13 @@ arches:
     name: gzip
     evr: 1.12-1.el9
     sourcerpm: gzip-1.12-1.el9.src.rpm
-  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/ppc64le/baseos/os/Packages/j/jq-1.6-19.el9.ppc64le.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/ppc64le/baseos/os/Packages/j/jq-1.6-19.el9_7.0.2.ppc64le.rpm
     repoid: ubi-9-for-ppc64le-baseos-rpms
-    size: 204601
-    checksum: sha256:c38289578cc683b9416a895745218ab23eea5b537d26710f0b63117a1bc012d6
+    size: 210471
+    checksum: sha256:4c8edf2a8d254b43c936bd712dec6ef0285200634b1f700f2e728bc27cfdd16f
     name: jq
-    evr: 1.6-19.el9
-    sourcerpm: jq-1.6-19.el9.src.rpm
+    evr: 1.6-19.el9_7.0.2
+    sourcerpm: jq-1.6-19.el9_7.0.2.src.rpm
   source: []
   module_metadata: []
 - arch: x86_64
@@ -85,12 +85,12 @@ arches:
     name: gzip
     evr: 1.12-1.el9
     sourcerpm: gzip-1.12-1.el9.src.rpm
-  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/j/jq-1.6-19.el9.x86_64.rpm
+  - url: https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/j/jq-1.6-19.el9_7.0.2.x86_64.rpm
     repoid: ubi-9-for-x86_64-baseos-rpms
-    size: 191662
-    checksum: sha256:6b4d82714813d7b4a3200bf2856a3c1493d186e9caa916d7a700ec25e4996462
+    size: 197456
+    checksum: sha256:c6516f674a43c89c2a54bcffa7b8e1d65c553042d6aed94ccc08c443ed1efdfa
     name: jq
-    evr: 1.6-19.el9
-    sourcerpm: jq-1.6-19.el9.src.rpm
+    evr: 1.6-19.el9_7.0.2
+    sourcerpm: jq-1.6-19.el9_7.0.2.src.rpm
   source: []
   module_metadata: []
