@@ -1,6 +1,6 @@
 module github.com/conforma/cli
 
-go 1.25.8
+go 1.25.9
 
 require (
 	cuelang.org/go v0.16.0
