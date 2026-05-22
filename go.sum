@@ -1228,8 +1228,8 @@ github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d h1:vfofYNRScrDd
 github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d/go.mod h1:RRCYJbIwD5jmqPI9XoAFR0OcDxqUctll6zUj/+B4S48=
 github.com/tchap/go-patricia/v2 v2.3.3 h1:xfNEsODumaEcCcY3gI0hYPZ/PcpVv5ju6RMAhgwZDDc=
 github.com/tchap/go-patricia/v2 v2.3.3/go.mod h1:VZRHKAb53DLaG+nA9EaYYiaEx6YztwDlLElMsnSHD4k=
-github.com/tektoncd/pipeline v1.9.2 h1:uKEt6CGLmkeKLdKIZnel0gn8lfQ1P7+398yystdBuHU=
-github.com/tektoncd/pipeline v1.9.2/go.mod h1:PTlIZ4Mhr8HZDx404O7spJtafiynetTMedCsXStjtHk=
+github.com/tektoncd/pipeline v1.9.3 h1:7Z+V2VX5wjz9LoNa16E1RbgH9mpYy5B1KnAMm3H0czc=
+github.com/tektoncd/pipeline v1.9.3/go.mod h1:pEruzPp4JM8JK8Nnnih46IPgdtxRPot/i9pUZo8lA9I=
 github.com/terminalstatic/go-xsd-validate v0.1.6 h1:TenYeQ3eY631qNi1/cTmLH/s2slHPRKTTHT+XSHkepo=
 github.com/terminalstatic/go-xsd-validate v0.1.6/go.mod h1:18lsvYFofBflqCrvo1umpABZ99+GneNTw2kEEc8UPJw=
 github.com/testcontainers/testcontainers-go v0.34.1-0.20241204123437-72be13940122 h1:dsnk0a/bMsSQzsfrFCvXkbp9arGuAVgike7POsCRXOg=
