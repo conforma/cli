@@ -26,7 +26,7 @@ import (
 	"time"
 
 	ecc "github.com/enterprise-contract/enterprise-contract-controller/api/v1alpha1"
-	"github.com/sigstore/cosign/v2/pkg/oci"
+	"github.com/sigstore/cosign/v3/pkg/oci"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 

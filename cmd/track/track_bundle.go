@@ -21,7 +21,7 @@ import (
 	"os"
 	"strings"
 
-	hd "github.com/MakeNowJust/heredoc"
+	hd "github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 

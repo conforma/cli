@@ -19,8 +19,8 @@ package sigstore
 import (
 	"context"
 
-	hd "github.com/MakeNowJust/heredoc"
-	"github.com/sigstore/cosign/v2/cmd/cosign/cli/options"
+	hd "github.com/MakeNowJust/heredoc/v2"
+	"github.com/sigstore/cosign/v3/cmd/cosign/cli/options"
 	"github.com/spf13/cobra"
 )
 

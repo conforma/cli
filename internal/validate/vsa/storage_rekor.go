@@ -24,7 +24,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sigstore/cosign/v2/pkg/cosign"
+	"github.com/sigstore/cosign/v3/pkg/cosign"
 	rekorapi "github.com/sigstore/rekor/pkg/client"
 	log "github.com/sirupsen/logrus"
 )

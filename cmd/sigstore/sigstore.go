@@ -17,7 +17,7 @@
 package sigstore
 
 import (
-	"github.com/sigstore/cosign/v2/cmd/cosign/cli/initialize"
+	"github.com/sigstore/cosign/v3/cmd/cosign/cli/initialize"
 	"github.com/spf13/cobra"
 
 	_ "github.com/conforma/cli/internal/rego"

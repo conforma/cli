@@ -25,10 +25,10 @@ import (
 	"sort"
 	"strings"
 
-	hd "github.com/MakeNowJust/heredoc"
+	hd "github.com/MakeNowJust/heredoc/v2"
 	"github.com/google/go-containerregistry/pkg/name"
 	app "github.com/konflux-ci/application-api/api/v1alpha1"
-	"github.com/sigstore/cosign/v2/pkg/cosign"
+	"github.com/sigstore/cosign/v3/pkg/cosign"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"

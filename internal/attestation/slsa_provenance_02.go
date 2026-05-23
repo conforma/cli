@@ -22,7 +22,7 @@ import (
 
 	"github.com/in-toto/in-toto-golang/in_toto"
 	v02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
-	"github.com/sigstore/cosign/v2/pkg/oci"
+	"github.com/sigstore/cosign/v3/pkg/oci"
 
 	"github.com/conforma/cli/internal/signature"
 )

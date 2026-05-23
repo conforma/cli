@@ -20,7 +20,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 
-	"github.com/sigstore/cosign/v2/pkg/oci"
+	"github.com/sigstore/cosign/v3/pkg/oci"
 )
 
 type EntitySignature struct {

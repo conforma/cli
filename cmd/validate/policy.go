@@ -21,7 +21,7 @@ import (
 	"errors"
 	"fmt"
 
-	hd "github.com/MakeNowJust/heredoc"
+	hd "github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/cobra"
 
 	validate_utils "github.com/conforma/cli/internal/validate"

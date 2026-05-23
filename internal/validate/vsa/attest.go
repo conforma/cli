@@ -27,9 +27,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sigstore/cosign/v2/pkg/cosign"
-	att "github.com/sigstore/cosign/v2/pkg/cosign/attestation"
-	cosigntypes "github.com/sigstore/cosign/v2/pkg/types"
+	"github.com/sigstore/cosign/v3/pkg/cosign"
+	att "github.com/sigstore/cosign/v3/pkg/cosign/attestation"
+	cosigntypes "github.com/sigstore/cosign/v3/pkg/types"
 	"github.com/sigstore/sigstore/pkg/signature"
 	"github.com/sigstore/sigstore/pkg/signature/dsse"
 	sigopts "github.com/sigstore/sigstore/pkg/signature/options"

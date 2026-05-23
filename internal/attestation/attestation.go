@@ -23,9 +23,9 @@ import (
 	"fmt"
 
 	"github.com/in-toto/in-toto-golang/in_toto"
-	"github.com/sigstore/cosign/v2/pkg/cosign"
-	"github.com/sigstore/cosign/v2/pkg/oci"
-	"github.com/sigstore/cosign/v2/pkg/types"
+	"github.com/sigstore/cosign/v3/pkg/cosign"
+	"github.com/sigstore/cosign/v3/pkg/oci"
+	"github.com/sigstore/cosign/v3/pkg/types"
 
 	"github.com/conforma/cli/internal/signature"
 )

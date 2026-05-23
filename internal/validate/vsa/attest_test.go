@@ -29,7 +29,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sigstore/cosign/v2/pkg/types"
+	"github.com/sigstore/cosign/v3/pkg/types"
 	"github.com/sigstore/sigstore/pkg/signature"
 	"github.com/spf13/afero"
 )

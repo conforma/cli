@@ -22,7 +22,7 @@ import (
 	"io"
 	"sort"
 
-	"github.com/sigstore/cosign/v2/pkg/cosign"
+	"github.com/sigstore/cosign/v3/pkg/cosign"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/conforma/cli/internal/attestation"
