@@ -43,7 +43,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/stuart-warren/yamlfmt v0.2.0
-	github.com/tektoncd/pipeline v1.9.2
+	github.com/tektoncd/pipeline v1.9.3
 	github.com/testcontainers/testcontainers-go v0.34.1-0.20241204123437-72be13940122 // using unreleased version that contains the fix in https://github.com/testcontainers/testcontainers-go/pull/2899
 	github.com/testcontainers/testcontainers-go/modules/registry v0.34.0
 	golang.org/x/benchmarks v0.0.0-20241115175113-a2b48b605b42
