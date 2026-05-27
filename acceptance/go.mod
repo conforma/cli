@@ -14,7 +14,7 @@ require (
 	github.com/go-git/go-git/v5 v5.17.1
 	github.com/go-openapi/strfmt v0.25.0
 	github.com/google/go-containerregistry v0.21.5
-	github.com/in-toto/in-toto-golang v0.10.0
+	github.com/in-toto/in-toto-golang v0.11.0
 	github.com/konflux-ci/application-api v0.0.0-20240812090716-e7eb2ecfb409
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/otiai10/copy v1.14.1
