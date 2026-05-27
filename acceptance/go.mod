@@ -10,7 +10,7 @@ require (
 	github.com/enterprise-contract/enterprise-contract-controller/api v0.1.257
 	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/gkampitakis/go-snaps v0.5.19
-	github.com/go-git/go-billy/v5 v5.8.0
+	github.com/go-git/go-billy/v5 v5.9.0
 	github.com/go-git/go-git/v5 v5.17.1
 	github.com/go-openapi/strfmt v0.25.0
 	github.com/google/go-containerregistry v0.21.5
