@@ -201,6 +201,27 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 			}
 			data.policyConfiguration = policyConfiguration
 
+			// Merge policy overlays if provided
+			if len(data.policyOverlays) > 0 {
+				var overlays []string
+				for _, overlayFile := range data.policyOverlays {
+					overlay, err := validate_utils.GetPolicyConfig(ctx, overlayFile)
+					if err != nil {
+						allErrors = errors.Join(allErrors, fmt.Errorf("failed to load policy overlay %s: %w", overlayFile, err))
+						return
+					}
+					overlays = append(overlays, overlay)
+				}
+
+				mergedConfig, err := validate_utils.MergePolicyConfigs(ctx, data.policyConfiguration, overlays)
+				if err != nil {
+					allErrors = errors.Join(allErrors, fmt.Errorf("failed to merge policy configs: %w", err))
+					return
+				}
+				data.policyConfiguration = mergedConfig
+				log.Debugf("Merged base policy with %d overlay(s)", len(overlays))
+			}
+
 			policyOptions := policy.Options{
 				EffectiveTime: data.effectiveTime,
 				Identity: cosign.Identity{
@@ -484,6 +505,11 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 		  * git reference (github.com/user/repo//default?ref=main), or
 		  * inline JSON ('{sources: {...}, identity: {...}}')")`))
 
+	cmd.Flags().StringSliceVar(&data.policyOverlays, "policy-overlay", data.policyOverlays, hd.Doc(`
+		Policy overlay files to merge with the base policy. Can be specified multiple times.
+		Overlays are applied in order. Maps are deeply merged, arrays are concatenated.
+		Supports the same formats as --policy (files, git references, inline JSON/YAML).`))
+
 	cmd.Flags().StringVarP(&data.imageRef, "image", "i", data.imageRef, "OCI image reference")
 
 	cmd.Flags().StringVarP(&data.publicKey, "public-key", "k", data.publicKey,
@@ -640,6 +666,7 @@ type imageData struct {
 	outputFile                  string
 	policy                      policy.Policy
 	policyConfiguration         string
+	policyOverlays              []string
 	policySource                string
 	publicKey                   string
 	rekorURL                    string
