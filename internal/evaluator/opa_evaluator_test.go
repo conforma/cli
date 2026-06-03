@@ -77,7 +77,7 @@ func TestDestroy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Set up the environment
 			if tc.workDir != "" {
-				err := fs.MkdirAll(tc.workDir, 0755)
+				err := fs.MkdirAll(tc.workDir, 0o755)
 				assert.NoError(t, err, "Failed to create workDir in in-memory filesystem")
 			}
 

@@ -29,7 +29,7 @@ import (
 	"github.com/conforma/cli/internal/documentation/asciidoc"
 )
 
-const DirectoryPermissions = 0755
+const DirectoryPermissions = 0o755
 
 var (
 	man  = flag.String("man", "", "Location of the generated Man files")

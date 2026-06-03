@@ -83,7 +83,7 @@ func InitLogging(verbose, quiet, debug, trace bool, logfile string) {
 	}
 
 	if logfile != "" {
-		if l, err := os.OpenFile(logfile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600); err == nil {
+		if l, err := os.OpenFile(logfile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
 			log.SetOutput(l)
 		} else {
 			fmt.Fprintf(os.Stderr, "Unable to create log file %q, log lines will appear on standard error. Error was: %s\n", logfile, err.Error())

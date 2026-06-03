@@ -68,7 +68,7 @@ func (k *kindCluster) buildCliImage(ctx context.Context) error {
 	// Build into a directory not excluded by .dockerignore (which excludes
 	// dist/) and not conflicting with the versioned binary from make build.
 	buildDir := ".acceptance-build"
-	if err := os.MkdirAll(buildDir, 0755); err != nil {
+	if err := os.MkdirAll(buildDir, 0o755); err != nil {
 		return fmt.Errorf("creating build directory: %w", err)
 	}
 	defer os.RemoveAll(buildDir)
@@ -140,7 +140,7 @@ func (k *kindCluster) buildCliImage(ctx context.Context) error {
 
 	// Write cache hash only after a successful build
 	if cacheFile != "" {
-		_ = os.WriteFile(cacheFile, []byte(currentHash), 0644) // #nosec G306
+		_ = os.WriteFile(cacheFile, []byte(currentHash), 0o644) // #nosec G306
 	}
 
 	return nil
@@ -323,7 +323,7 @@ func (k *kindCluster) BuildSnapshotArtifact(ctx context.Context, content string)
 	filePath := "snapshotartifact"
 
 	// #nosec G306 -- reduce-snapshot.sh needs these permissions
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
 		return ctx, fmt.Errorf("failed to write JSON to file: %w", err)
 	}
 
@@ -408,7 +408,7 @@ func copyFile(src, dst string) error {
 	}
 	defer in.Close()
 
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755) // #nosec G302
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755) // #nosec G302
 	if err != nil {
 		return err
 	}

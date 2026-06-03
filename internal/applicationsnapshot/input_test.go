@@ -167,13 +167,13 @@ func Test_DetermineInputSpec(t *testing.T) {
 			ctx = oci.WithClient(ctx, &client)
 
 			if tc.input.File != "" {
-				if err := afero.WriteFile(fs, tc.input.File, []byte(testJson), 0400); err != nil {
+				if err := afero.WriteFile(fs, tc.input.File, []byte(testJson), 0o400); err != nil {
 					panic(err)
 				}
 			}
 
 			if tc.input.Images == "/home/list-of-images.json" {
-				if err := afero.WriteFile(fs, tc.input.Images, []byte(testJson), 0400); err != nil {
+				if err := afero.WriteFile(fs, tc.input.Images, []byte(testJson), 0o400); err != nil {
 					panic(err)
 				}
 			}
@@ -204,7 +204,7 @@ func TestReadSnapshotFile(t *testing.T) {
 		fs := afero.NewMemMapFs()
 		spec := `{"components":[{"name": "Named", "containerImage":""},{"name": "Set name", "containerImage":"registry.io/repository/image:another"}]}`
 
-		err := afero.WriteFile(fs, "/correct.json", []byte(spec), 0644)
+		err := afero.WriteFile(fs, "/correct.json", []byte(spec), 0o644)
 		if err != nil {
 			t.Fatalf("Setup failure: could not write file: %v", err)
 		}
@@ -221,7 +221,7 @@ func TestReadSnapshotFile(t *testing.T) {
 		spec := `bad spec`
 		specFile := "/badSpec.json"
 
-		err := afero.WriteFile(fs, specFile, []byte(spec), 0644)
+		err := afero.WriteFile(fs, specFile, []byte(spec), 0o644)
 		if err != nil {
 			t.Fatalf("Setup failure: could not write file: %v", err)
 		}
@@ -262,7 +262,7 @@ func TestReadSnapshotFile(t *testing.T) {
 			}
 		}`
 
-		err := afero.WriteFile(fs, "/cluster-record.json", []byte(clusterRecord), 0644)
+		err := afero.WriteFile(fs, "/cluster-record.json", []byte(clusterRecord), 0o644)
 		if err != nil {
 			t.Fatalf("Setup failure: could not write file: %v", err)
 		}
