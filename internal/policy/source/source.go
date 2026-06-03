@@ -134,7 +134,7 @@ func getPolicyThroughCache(ctx context.Context, s PolicySource, workDir string, 
 		}
 
 		base := filepath.Dir(dest)
-		if err := fs.MkdirAll(base, 0755); err != nil {
+		if err := fs.MkdirAll(base, 0o755); err != nil {
 			return "", nil, err
 		}
 
@@ -242,7 +242,7 @@ func (s inlineData) GetPolicy(ctx context.Context, workDir string, showMsg bool)
 	dl := func(source string, dest string) (metadata.Metadata, error) {
 		fs := utils.FS(ctx)
 
-		if err := fs.MkdirAll(dest, 0755); err != nil {
+		if err := fs.MkdirAll(dest, 0o755); err != nil {
 			return nil, err
 		}
 
@@ -253,7 +253,7 @@ func (s inlineData) GetPolicy(ctx context.Context, workDir string, showMsg bool)
 			Size: int64(len(dest)),
 		}
 
-		return m, afero.WriteFile(fs, f, s.source, 0400)
+		return m, afero.WriteFile(fs, f, s.source, 0o400)
 	}
 
 	dest, _, err := getPolicyThroughCache(ctx, s, workDir, dl)

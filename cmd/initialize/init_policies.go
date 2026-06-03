@@ -79,7 +79,7 @@ func initPoliciesCmd() *cobra.Command {
 			}
 			fs := utils.FS(ctx)
 			workDir := destDir
-			err := fs.MkdirAll(workDir, 0755)
+			err := fs.MkdirAll(workDir, 0o755)
 			if err != nil {
 				log.Debug("Failed to create policy directory!")
 				return err

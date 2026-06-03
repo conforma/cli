@@ -49,7 +49,7 @@ func createTektonBundle(ctx context.Context, name string, data *godog.Table) (co
 		writer := tar.NewWriter(&data)
 		if err := writer.WriteHeader(&tar.Header{
 			Name:     name,
-			Mode:     0600,
+			Mode:     0o600,
 			Size:     int64(len(content)),
 			Typeflag: tar.TypeReg,
 		}); err != nil {
