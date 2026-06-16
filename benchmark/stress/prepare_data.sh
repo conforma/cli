@@ -16,13 +16,23 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Creates the files in the data directory that should contain all the data
-# needed to run the benchmark, uses the ../offliner for images and plain git
-# clone for the git data dependency. Uses the same golden-container image as the
-# simple benchmark -- the stress benchmark duplicates it across components at
-# runtime.
+# needed to run the benchmark. Tries to pull a pre-built data archive from Quay
+# first, falling back to building from upstream using the ../offliner for images
+# and plain git clone for the git data dependency. Uses the same
+# golden-container image as the simple benchmark -- the stress benchmark
+# duplicates it across components at runtime.
 set -o errexit
 set -o nounset
 set -o pipefail
+
+quay_ref="quay.io/conforma/benchmark-data:stress-v1"
+
+if command -v oras &>/dev/null && oras pull "${quay_ref}" -o . 2>/dev/null; then
+    echo "Downloaded data.tar.gz from ${quay_ref}"
+    exit 0
+fi
+
+echo "Quay pull failed or oras not available, regenerating from upstream..."
 
 offliner="$(git rev-parse --show-toplevel)/benchmark/offliner"
 
