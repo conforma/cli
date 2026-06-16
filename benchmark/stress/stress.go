@@ -55,6 +55,9 @@ func envInt(name string, fallback int) int {
 	if err != nil {
 		panic(fmt.Sprintf("invalid %s value %q: %v", name, v, err))
 	}
+	if n < 1 {
+		panic(fmt.Sprintf("%s must be >= 1, got %d", name, n))
+	}
 	return n
 }
 
