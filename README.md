@@ -20,12 +20,12 @@ Before building or testing `ec`, install the following tools:
 - Podman or Docker (for acceptance tests and container-based workflows)
 - Node.js 18+ (for `tekton-lint`)
 
-On Fedora/RHEL systems, acceptance tests often require Podman to run as a user service.
+On Fedora/RHEL systems, acceptance tests often require Podman to run as a system service.
 Run:
 
 ```bash
-systemctl disable --now --user podman.service
-systemctl enable --user --now podman.socket
+systemctl disable --now podman.socket podman.service
+systemctl enable --now podman.socket podman.service
 ```
 
 then run the test/build commands below.
@@ -94,10 +94,10 @@ $ systemctl disable --now podman.socket podman.service
 
 It is advised to do a reboot afterwards.
 
-To start Podman for the user:
+To start Podman:
 
 ``` bash
-$ systemctl enable --user --now podman.socket podman.service
+$ systemctl enable --now podman.socket podman.service
 ```
 
 #### **2.2. Get localhost:37837: connection reset by peer**
