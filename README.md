@@ -24,7 +24,7 @@ On Fedora/RHEL systems, acceptance tests often require Podman to run as a user s
 Run:
 
 ```bash
-systemctl disable --now --user podman.socket podman.service
+systemctl disable --now podman.socket podman.service
 systemctl enable --user --now podman.socket podman.service
 ```
 
@@ -94,7 +94,7 @@ $ systemctl disable --now podman.socket podman.service
 
 It is advised to do a reboot afterwards.
 
-To start Podman:
+To start Podman for the user:
 
 ``` bash
 $ systemctl enable --user --now podman.socket podman.service
