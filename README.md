@@ -11,6 +11,25 @@ such as:
 Consult the [documentation][docs] for available sub-commands, descriptions and
 examples of use.
 
+## Development Requirements
+
+Before building or testing `ec`, install the following tools:
+
+- Go 1.25.8+ (matching `go.mod`)
+- Make
+- Podman or Docker (for acceptance tests and container-based workflows)
+- Node.js 18+ (for `tekton-lint`)
+
+On Fedora/RHEL systems, acceptance tests often require Podman to run as a user service.
+Run:
+
+```bash
+systemctl disable --now --user podman.service
+systemctl enable --user --now podman.socket
+```
+
+then run the test/build commands below.
+
 ## Building
 
 Run `make build` from the root directory and use the `dist/ec` executable, or
