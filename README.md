@@ -21,14 +21,8 @@ Before building or testing `ec`, install the following tools:
 - Node.js 18+ (for `tekton-lint`)
 
 On Fedora/RHEL systems, acceptance tests often require Podman to run as a user service.
-Run:
-
-```bash
-systemctl disable --now podman.socket podman.service
-systemctl enable --user --now podman.socket podman.service
-```
-
-then run the test/build commands below.
+Use the Troubleshooting section below for the required Podman service commands and then run
+the appropriate Building or Testing commands.
 
 ## Building
 
