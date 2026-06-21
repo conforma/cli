@@ -91,7 +91,7 @@ It is advised to do a reboot afterwards.
 To start Podman for the user:
 
 ``` bash
-$ systemctl enable --user --now podman.socket podman.service
+$ systemctl enable --user --now podman.socket
 ```
 
 #### **2.2. Get localhost:37837: connection reset by peer**
