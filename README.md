@@ -11,6 +11,22 @@ such as:
 Consult the [documentation][docs] for available sub-commands, descriptions and
 examples of use.
 
+## Prerequisites
+
+The following tools are required to build and work with `ec`:
+
+- **[Go](https://go.dev/dl/)** 1.25.8 or later — the project's minimum
+  version is defined in [`go.mod`](go.mod)
+- **[Make](https://www.gnu.org/software/make/)** — used by all build,
+  test, and lint targets
+- **[Podman](https://podman.io/)** or **[Docker](https://www.docker.com/)**
+  — required for running acceptance tests (Testcontainers). On
+  Fedora/RHEL, ensure Podman runs as a **user service** rather than a
+  system service (see [Troubleshooting](#21-variety-of-issues---podman-running-as-a-system-service)
+  below)
+- **[Node.js](https://nodejs.org/)** 18 or later — required for
+  `tekton-lint`, which is run as part of `make lint`
+
 ## Building
 
 Run `make build` from the root directory and use the `dist/ec` executable, or
