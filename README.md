@@ -11,6 +11,19 @@ such as:
 Consult the [documentation][docs] for available sub-commands, descriptions and
 examples of use.
 
+## Development Requirements
+
+Before building or testing `ec`, install the following tools:
+
+- Go 1.25.8+ (matching `go.mod`)
+- Make
+- Podman or Docker (for acceptance tests and container-based workflows)
+- Node.js 18+ (for `tekton-lint`)
+
+On Fedora/RHEL systems, acceptance tests often require Podman to run as a user service.
+Use the troubleshooting section below for the required Podman service commands, and
+then run the appropriate Building or Testing commands.
+
 ## Building
 
 Run `make build` from the root directory and use the `dist/ec` executable, or
@@ -78,7 +91,7 @@ It is advised to do a reboot afterwards.
 To start Podman for the user:
 
 ``` bash
-$ systemctl enable --user --now podman.socket podman.service
+$ systemctl enable --user --now podman.socket
 ```
 
 #### **2.2. Get localhost:37837: connection reset by peer**
