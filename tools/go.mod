@@ -11,7 +11,7 @@ require (
 	github.com/tektoncd/cli v0.44.1
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	gotest.tools/gotestsum v1.12.1
-	helm.sh/helm/v3 v3.18.5
+	helm.sh/helm/v3 v3.20.2
 	k8s.io/kubernetes v1.34.2
 	sigs.k8s.io/kustomize/kustomize/v5 v5.7.1
 )
