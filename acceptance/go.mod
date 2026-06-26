@@ -23,7 +23,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/secure-systems-lab/go-securesystemslib v0.10.0
 	github.com/sigstore/cosign/v2 v2.6.2
-	github.com/sigstore/rekor v1.5.0
+	github.com/sigstore/rekor v1.5.2
 	github.com/sigstore/sigstore v1.10.5
 	github.com/stretchr/testify v1.11.1
 	github.com/tektoncd/cli v0.44.0
