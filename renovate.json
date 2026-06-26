@@ -3,6 +3,18 @@
   "extends": [
     "github>conforma/.github//config/renovate/renovate.json"
   ],
+  "packageRules": [
+    {
+      "description": "Group Go version updates across all files (Dockerfiles, go.mod, .tool-versions)",
+      "matchDepNames": [
+        "go",
+        "golang",
+        "docker.io/library/golang",
+        "registry.access.redhat.com/ubi9/go-toolset"
+      ],
+      "groupName": "go version"
+    }
+  ],
   "customManagers": [
     {
       "customType": "regex",
