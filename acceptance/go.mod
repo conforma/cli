@@ -48,6 +48,9 @@ require (
 // Maybe less important in acceptance, but it seems sensible to use the fork here too
 replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry v0.20.7-0.20250703195040-6f40a3734728
 
+// knative.dev/eventing < v0.49.2 imports knative.dev/pkg/{metrics,tracing/config} which were removed
+require knative.dev/eventing v0.49.2 // indirect
+
 require (
 	cel.dev/expr v0.25.1 // indirect
 	dario.cat/mergo v1.0.2 // indirect

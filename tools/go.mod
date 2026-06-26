@@ -16,6 +16,9 @@ require (
 	sigs.k8s.io/kustomize/kustomize/v5 v5.7.1
 )
 
+// knative.dev/eventing < v0.49.2 imports knative.dev/pkg/{metrics,tracing/config} which were removed
+exclude knative.dev/eventing v0.30.3
+
 require (
 	4d63.com/gocheckcompilerdirectives v1.3.0 // indirect
 	4d63.com/gochecknoglobals v0.2.2 // indirect
