@@ -10,3 +10,10 @@ other than any data that is contained within it. Benchmarks are run from within
 the directory they're defined in, simply by running `go run .`, additional
 arguments can be passed in, for example `-benchnum 10` to run the benchmark 10
 times.
+
+## Available benchmarks
+
+- **simple/** — Single-component validation against the `@redhat` policy collection.
+- **stress/** — Multi-component validation with configurable parallelism. Set
+  `EC_STRESS_COMPONENTS` (default 10) and `EC_STRESS_WORKERS` (default 35) to
+  control the workload.
