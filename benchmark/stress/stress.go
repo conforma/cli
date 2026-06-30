@@ -79,9 +79,9 @@ func setup() (string, suite.Closer) {
 }
 
 type component struct {
-	Name           string     `json:"name"`
-	ContainerImage string     `json:"containerImage"`
-	Source         *source    `json:"source,omitempty"`
+	Name           string  `json:"name"`
+	ContainerImage string  `json:"containerImage"`
+	Source         *source `json:"source,omitempty"`
 }
 
 type source struct {
@@ -156,7 +156,7 @@ func ec(dir string, components, workers int) func() {
 		if err := suite.Execute([]string{
 			"validate",
 			"image",
-			"--json-input",
+			"--images",
 			snap,
 			"--policy",
 			policy,
