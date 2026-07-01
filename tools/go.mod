@@ -3,16 +3,16 @@ module github.com/conforma/cli/tools
 go 1.26.3
 
 require (
-	github.com/daixiang0/gci v0.13.7
-	github.com/golangci/golangci-lint/v2 v2.11.4
+	github.com/daixiang0/gci v0.14.0
+	github.com/golangci/golangci-lint/v2 v2.12.2
 	github.com/google/addlicense v1.2.0
 	github.com/open-policy-agent/conftest v0.68.2
-	github.com/tektoncd/chains v0.26.2
-	github.com/tektoncd/cli v0.44.1
+	github.com/tektoncd/chains v0.27.1
+	github.com/tektoncd/cli v0.45.0
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
-	gotest.tools/gotestsum v1.12.1
+	gotest.tools/gotestsum v1.13.0
 	helm.sh/helm/v3 v3.18.5
-	k8s.io/kubernetes v1.34.2
+	k8s.io/kubernetes v1.36.2
 	sigs.k8s.io/kustomize/kustomize/v5 v5.8.1
 )
 
