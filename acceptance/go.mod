@@ -3,17 +3,17 @@ module github.com/conforma/cli/acceptance
 go 1.25.9
 
 require (
-	cuelang.org/go v0.15.1
+	cuelang.org/go v0.15.4
 	github.com/cucumber/godog v0.15.1
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/doiit/picocolors v1.0.1
-	github.com/enterprise-contract/enterprise-contract-controller/api v0.1.257
+	github.com/enterprise-contract/enterprise-contract-controller/api v0.1.281
 	github.com/evanphx/json-patch/v5 v5.9.11
-	github.com/gkampitakis/go-snaps v0.5.19
+	github.com/gkampitakis/go-snaps v0.5.22
 	github.com/go-git/go-billy/v5 v5.8.0
-	github.com/go-git/go-git/v5 v5.17.1
+	github.com/go-git/go-git/v5 v5.17.2
 	github.com/go-openapi/strfmt v0.25.0
-	github.com/google/go-containerregistry v0.21.5
+	github.com/google/go-containerregistry v0.21.7
 	github.com/in-toto/in-toto-golang v0.10.0
 	github.com/konflux-ci/application-api v0.0.0-20240812090716-e7eb2ecfb409
 	github.com/opencontainers/image-spec v1.1.1
@@ -22,11 +22,11 @@ require (
 	github.com/pkg/diff v0.0.0-20210226163009-20ebb0f2a09e
 	github.com/pkg/errors v0.9.1
 	github.com/secure-systems-lab/go-securesystemslib v0.10.0
-	github.com/sigstore/cosign/v2 v2.6.2
+	github.com/sigstore/cosign/v2 v2.6.3
 	github.com/sigstore/rekor v1.5.0
-	github.com/sigstore/sigstore v1.10.5
+	github.com/sigstore/sigstore v1.10.8
 	github.com/stretchr/testify v1.11.1
-	github.com/tektoncd/cli v0.44.0
+	github.com/tektoncd/cli v0.44.2
 	github.com/tektoncd/pipeline v1.12.0
 	github.com/testcontainers/testcontainers-go v0.34.1
 	github.com/transparency-dev/merkle v0.0.2
@@ -34,10 +34,10 @@ require (
 	github.com/yudai/gojsondiff v1.0.0
 	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
 	gopkg.in/go-jose/go-jose.v2 v2.6.3
-	k8s.io/api v0.35.4
-	k8s.io/apimachinery v0.35.4
-	k8s.io/client-go v0.35.4
-	oras.land/oras-go/v2 v2.6.0
+	k8s.io/api v0.35.6
+	k8s.io/apimachinery v0.35.6
+	k8s.io/client-go v0.35.6
+	oras.land/oras-go/v2 v2.6.1
 	sigs.k8s.io/kind v0.26.0
 	sigs.k8s.io/kustomize/api v0.20.1
 	sigs.k8s.io/kustomize/kyaml v0.20.1
@@ -45,7 +45,7 @@ require (
 )
 
 // Maybe less important in acceptance, but it seems sensible to use the fork here too
-replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry v0.20.7-0.20250703195040-6f40a3734728
+replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry v0.20.7
 
 require (
 	cel.dev/expr v0.25.1 // indirect
