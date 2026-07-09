@@ -3,6 +3,9 @@
   "extends": [
     "github>conforma/.github//config/renovate/renovate.json"
   ],
+  "gomod": {
+    "fileMatch": ["(^|/)go\\.mod$"]
+  },
   "customManagers": [
     {
       "customType": "regex",
