@@ -48,7 +48,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/registry v0.34.0
 	golang.org/x/benchmarks v0.0.0-20241115175113-a2b48b605b42
 	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
-	golang.org/x/net v0.56.0
+	golang.org/x/net v0.57.0
 	golang.org/x/sync v0.22.0
 	k8s.io/apiextensions-apiserver v0.35.4
 	k8s.io/apimachinery v0.35.4
