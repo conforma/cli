@@ -1,0 +1,63 @@
+= ec inspect ecp
+
+Inspect and display the effective EnterpriseContractPolicy configuration
+
+== Synopsis
+
+Load a base EnterpriseContractPolicy configuration and optionally merge it with
+overlay files, then display the resulting effective configuration.
+
+This is useful for debugging and understanding how policy overlays are merged
+with the base policy. The output shows the final configuration that would be
+used during validation.
+
+[source,shell]
+----
+ec inspect ecp --policy <policy> [flags]
+----
+
+== Examples
+Display a single policy configuration:
+
+  ec inspect ecp --policy policy.yaml
+
+Display the merged result of a base policy and overlays:
+
+  ec inspect ecp --policy standard.yaml --policy-overlay team.yaml
+
+Display the result of multiple overlays (applied in order):
+
+  ec inspect ecp --policy standard.yaml \
+    --policy-overlay team.yaml \
+    --policy-overlay hotfix.yaml
+
+== Options
+
+-h, --help:: help for ecp (Default: false)
+-p, --policy:: Policy configuration as:
+  * Kubernetes reference ([<namespace>/]<name>)
+  * file (policy.yaml)
+  * git reference (github.com/user/repo//default?ref=main), or
+  * inline JSON ('{sources: {...}, identity: {...}}')
+--policy-overlay:: Policy overlay files to merge with the base policy. Can be specified multiple times.
+Overlays are applied in order. Maps are deeply merged, arrays are concatenated.
+Supports the same formats as --policy (files, git references, inline JSON/YAML). (Default: [])
+
+== Options inherited from parent commands
+
+--debug:: same as verbose but also show function names and line numbers (Default: false)
+--kubeconfig:: path to the Kubernetes config file to use
+--logfile:: file to write the logging output. If not specified logging output will be written to stderr
+--quiet:: less verbose output (Default: false)
+--retry-duration:: base duration for exponential backoff calculation (Default: 1s)
+--retry-factor:: exponential backoff multiplier (Default: 2)
+--retry-jitter:: randomness factor for backoff calculation (0.0-1.0) (Default: 0.1)
+--retry-max-retry:: maximum number of retry attempts (Default: 3)
+--retry-max-wait:: maximum wait time between retries (Default: 3s)
+--timeout:: max overall execution duration (Default: 5m0s)
+--trace:: enable trace logging, set one or more comma separated values: none,all,perf,cpu,mem,opa,log (Default: none)
+--verbose:: more verbose output (Default: false)
+
+== See also
+
+ * xref:ec_inspect.adoc[ec inspect - Inspect policy rules]
