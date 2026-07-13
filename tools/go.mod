@@ -19,6 +19,10 @@ require (
 // knative.dev/eventing < v0.49.2 imports knative.dev/pkg/{metrics,tracing/config} which were removed
 exclude knative.dev/eventing v0.30.3
 
+// gocloud.dev >= v0.44.0 removed the docstore/awsdynamodb package, which
+// tektoncd/chains (via tektoncd/cli) still imports
+replace gocloud.dev => gocloud.dev v0.43.0
+
 require (
 	4d63.com/gocheckcompilerdirectives v1.3.0 // indirect
 	4d63.com/gochecknoglobals v0.2.2 // indirect
