@@ -39,6 +39,9 @@ Tests use build tags with different timeouts:
 
 ## Key Conventions
 
+- **Product name:** This project is "Conforma CLI" (binary name: `ec`). Do not use the former
+  name "ec-cli" in user-facing strings, error messages, or documentation, even if issue
+  descriptions or existing comments reference the old name.
 - **Multi-module project:** root, `acceptance/`, `tools/` each have their own go.mod.
   Run `go mod tidy` in the right module.
 - **Debug mode:** `--debug` or `EC_DEBUG=1` preserves `ec-work-*` temp directories for inspection.
