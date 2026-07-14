@@ -63,6 +63,29 @@ Read these before modifying the corresponding areas:
 - [internal/validate/vsa/DESIGN.md](internal/validate/vsa/DESIGN.md) — VSA: storage backends, DSSE signing rationale, expiration model
 - [acceptance/README.md](acceptance/README.md) — acceptance test framework, Testcontainers, WireMock, snapshot testing
 
+## Release and Kubernetes Manifests
+
+Follow these guidelines when modifying files in the `release/` directory (`release/setup.yaml`,
+`release/cli.yaml`, and related manifests):
+
+- **YAML document hygiene:** When removing a resource from a multi-document YAML file, verify
+  that no empty documents remain between `---` separators. A bare `---` with no content below it
+  creates an empty YAML document that fails GVK (Group/Version/Kind) resolution in `kubectl apply`
+  and similar tooling. After removal, check the file for consecutive `---` lines or a leading `---`
+  with no resource following it.
+
+- **Documentation co-change:** When modifying `release/` manifests, always check
+  `release/README.md` for stale references that need updating. If a resource is added, removed, or
+  renamed, the README must reflect the current state of the manifests. Review the README before
+  committing to ensure it does not describe resources or behaviors that no longer exist.
+
+- **Resource rename impact:** When renaming Kubernetes resources (e.g., changing a Role or
+  RoleBinding name), prefer updating fields in-place rather than renaming the resource itself.
+  Renaming creates new objects on apply while leaving stale objects under the old name on existing
+  clusters. If a rename is necessary, document the migration steps: note which old resources must
+  be manually deleted from existing clusters, and include those steps in the PR description and
+  the `release/README.md`.
+
 ## Troubleshooting
 
 System-level issues that surface in acceptance tests:
