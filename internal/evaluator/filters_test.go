@@ -758,6 +758,169 @@ func TestUnifiedPostEvaluationFilter(t *testing.T) {
 	})
 }
 
+func TestUnifiedCategorizeResultsFutureEffectiveOn(t *testing.T) {
+	now := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
+	futureDate := "2099-01-01T00:00:00Z"
+	pastDate := "2020-01-01T00:00:00Z"
+
+	source := ecc.Source{
+		Config: &ecc.SourceConfig{
+			Include: []string{"*"},
+		},
+	}
+	configProvider := &simpleConfigProvider{
+		effectiveTime: now,
+	}
+	filter := NewUnifiedPostEvaluationFilter(NewECPolicyResolver(source, configProvider))
+
+	tests := []struct {
+		name            string
+		effectiveTime   time.Time
+		effectiveOn     string
+		severity        string
+		expectWarning   bool
+		expectEnhanced  bool
+		expectedMessage string
+	}{
+		{
+			name:          "severity override demotes failure to warning",
+			effectiveTime: now,
+			effectiveOn:   futureDate,
+			severity:      "warning",
+			expectWarning: true,
+		},
+		{
+			name:            "future effective_on demoted to warning with enhanced message",
+			effectiveTime:   now,
+			effectiveOn:     futureDate,
+			expectWarning:   true,
+			expectEnhanced:  true,
+			expectedMessage: "some failure. This will become a failure starting on " + futureDate,
+		},
+		{
+			name:          "past effective_on stays as failure",
+			effectiveTime: now,
+			effectiveOn:   pastDate,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			metadata := map[string]interface{}{
+				metadataEffectiveOn: tc.effectiveOn,
+			}
+			if tc.severity != "" {
+				metadata["severity"] = tc.severity
+			}
+
+			result := Result{
+				Message:  "some failure",
+				Metadata: metadata,
+			}
+
+			originalResult := Outcome{
+				Failures: []Result{result},
+			}
+
+			warnings, failures, _, _ := filter.CategorizeResults(
+				[]Result{result}, originalResult, tc.effectiveTime)
+
+			if tc.expectWarning {
+				assert.Len(t, warnings, 1)
+				assert.Empty(t, failures)
+				if tc.expectEnhanced {
+					assert.Equal(t, tc.expectedMessage, warnings[0].Message)
+				}
+			} else {
+				assert.Empty(t, warnings)
+				assert.Len(t, failures, 1)
+			}
+		})
+	}
+}
+
+func TestLegacyCategorizeResultsFutureEffectiveOn(t *testing.T) {
+	now := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
+	futureDate := "2099-01-01T00:00:00Z"
+	pastDate := "2020-01-01T00:00:00Z"
+
+	source := ecc.Source{
+		Config: &ecc.SourceConfig{
+			Include: []string{"*"},
+		},
+	}
+	configProvider := &simpleConfigProvider{
+		effectiveTime: now,
+	}
+	filter := NewLegacyPostEvaluationFilter(source, configProvider)
+
+	tests := []struct {
+		name            string
+		effectiveTime   time.Time
+		effectiveOn     string
+		severity        string
+		expectWarning   bool
+		expectEnhanced  bool
+		expectedMessage string
+	}{
+		{
+			name:          "severity override demotes failure to warning",
+			effectiveTime: now,
+			effectiveOn:   futureDate,
+			severity:      "warning",
+			expectWarning: true,
+		},
+		{
+			name:            "future effective_on demoted to warning with enhanced message",
+			effectiveTime:   now,
+			effectiveOn:     futureDate,
+			expectWarning:   true,
+			expectEnhanced:  true,
+			expectedMessage: "some failure. This will become a failure starting on " + futureDate,
+		},
+		{
+			name:          "past effective_on stays as failure",
+			effectiveTime: now,
+			effectiveOn:   pastDate,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			metadata := map[string]interface{}{
+				metadataCode:        "test.future_rule",
+				metadataEffectiveOn: tc.effectiveOn,
+			}
+			if tc.severity != "" {
+				metadata["severity"] = tc.severity
+			}
+
+			result := Result{
+				Message:  "some failure",
+				Metadata: metadata,
+			}
+
+			originalResult := Outcome{
+				Failures: []Result{result},
+			}
+
+			warnings, failures, _, _ := filter.CategorizeResults(
+				[]Result{result}, originalResult, tc.effectiveTime)
+
+			if tc.expectWarning {
+				assert.Len(t, warnings, 1)
+				assert.Empty(t, failures)
+				if tc.expectEnhanced {
+					assert.Equal(t, tc.expectedMessage, warnings[0].Message)
+				}
+			} else {
+				assert.Empty(t, warnings)
+				assert.Len(t, failures, 1)
+			}
+		})
+	}
+}
+
 func TestUnifiedPostEvaluationFilterVsLegacy(t *testing.T) {
 	// Test that the new comprehensive post-evaluation filter produces
 	// the same results as the legacy filtering approach
@@ -1795,4 +1958,37 @@ func TestPipelineIntentionWithMultipleValues(t *testing.T) {
 		assert.True(t, result.IncludedPackages["security"],
 			"security package should be included (has included rules)")
 	})
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// formatEffectiveOnMessage tests
+//////////////////////////////////////////////////////////////////////////////
+
+func TestFormatFutureEnforcementMessage(t *testing.T) {
+	tests := []struct {
+		name        string
+		message     string
+		effectiveOn string
+		expected    string
+	}{
+		{
+			name:        "appends enforcement date",
+			message:     "The required 'cpe' label is missing",
+			effectiveOn: "2024-12-01T00:00:00Z",
+			expected:    "The required 'cpe' label is missing. This will become a failure starting on 2024-12-01T00:00:00Z",
+		},
+		{
+			name:        "trims trailing period before appending",
+			message:     "The required 'cpe' label is missing.",
+			effectiveOn: "2025-01-15T00:00:00Z",
+			expected:    "The required 'cpe' label is missing. This will become a failure starting on 2025-01-15T00:00:00Z",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := formatEffectiveOnMessage(tc.message, tc.effectiveOn)
+			assert.Equal(t, tc.expected, got)
+		})
+	}
 }

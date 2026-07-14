@@ -221,7 +221,7 @@ func TestConftestEvaluatorEvaluateSeverity(t *testing.T) {
 				},
 
 				{
-					Message: "not yet effective",
+					Message: "not yet effective. This will become a failure starting on 3021-01-01T00:00:00Z",
 					Metadata: map[string]any{
 						"effective_on": "3021-01-01T00:00:00Z",
 					},
