@@ -128,7 +128,7 @@ Feature: Verify Conforma Trusted Artifact Tekton Task
       | SNAPSHOT_FILENAME       | snapshotartifact                                                     |
       | SOURCE_DATA_ARTIFACT    | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST}  |
       | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                          |
-      | POLICY_BUNDLE_DIGEST    | sha256:f904979d405a39a3cc492439b379b4b117c622bbe7126a0e1ba76527ec3ce6a2 |
+      | POLICY_BUNDLE_DIGEST    | sha256:2a851b5d56259ba46391f72bc4e75ed5475510dce5ae47d054b72baf1e908d26 |
       | STRICT                  | false                                                                |
       | IGNORE_REKOR            | true                                                                 |
       | TRUSTED_ARTIFACTS_DEBUG | "true"                                                               |
