@@ -1,0 +1,156 @@
+# The purpose of this pipeline is to execute the verify-enterprise-contract-v2 task for container
+# images that are built but not automatically released in order to provide early feedback to users.
+# When auto release is enabled, the task is executed by the release pipeline immediately after the
+# container images are built, thus it is not necessary to execute the task via this pipeline.
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: enterprise-contract
+  labels:
+    build.appstudio.redhat.com/pipeline: "enterprise-contract"
+spec:
+  params:
+    - name: SNAPSHOT
+      type: string
+      description: |
+        Spec section of an ApplicationSnapshot resource. Not all fields of the
+        resource are required. A minimal example:
+          {
+            "components": [
+              {
+                "containerImage": "quay.io/example/repo:latest"
+              }
+            ]
+          }
+        Each "containerImage" in the "components" array is validated.
+    - name: POLICY_CONFIGURATION
+      type: string
+      description: |
+        Name of the policy configuration (EnterpriseContractConfiguration
+        object) to use. `namespace/name` or `name` syntax supported. If
+        namespace is omitted the namespace where the task runs is used.
+      default: enterprise-contract-service/default
+    - name: SSL_CERT_DIR
+      type: string
+      description: |
+        Path to a directory containing SSL certs to be used when communicating
+        with external services. This is useful when using the integrated registry
+        and a local instance of Rekor on a development cluster which may use
+        certificates issued by a not-commonly trusted root CA. In such cases,
+        "/var/run/secrets/kubernetes.io/serviceaccount" is a good value. Multiple
+        paths can be provided by using the ":" separator.
+      default: ""
+    - name: PUBLIC_KEY
+      type: string
+      default: "k8s://openshift-pipelines/public-key"
+      description: |
+        Public key used to verify signatures. Must be a valid k8s cosign
+        reference, e.g. k8s://my-space/my-secret where my-secret contains
+        the expected cosign.pub attribute.
+    - name: WORKERS
+      type: string
+      description: Number of parallel workers to use for policy evaluation.
+      default: "1"
+    - name: CA_TRUST_CONFIGMAP_NAME
+      type: string
+      description: The name of the ConfigMap to read CA bundle data from.
+      default: "trusted-ca"
+    - name: CA_TRUST_CONFIG_MAP_KEY
+      type: string
+      description: The name of the key in the ConfigMap that contains the CA bundle data.
+      default: "ca-bundle.crt"
+    - name: EXTRA_RULE_DATA
+      type: string
+      description: Merge additional Rego variables into the policy data. Use syntax "key=value,key2=value2..."
+      default: ""
+    - name: SINGLE_COMPONENT
+      type: string
+      description: Reduce the Snapshot to only the component whose build caused the Snapshot to be created
+      default: "false"
+    - name: SINGLE_COMPONENT_CUSTOM_RESOURCE
+      type: string
+      description: PipelineRun ID
+      default: "pr/$(context.pipelineRun.name)"
+    - name: STRICT
+      type: string
+      description: |
+        A boolean flag that determines whether the result of the test will mark the TaskRun as passing or not.
+        Swap to false to make the IntegrationTestScenario informative.
+
+        Setting to false is useful on specific conditions but will always mark the integration test as successful and
+        humans will tend to ignore the test results if they failed. Use with caution.
+      default: "true"
+    - name: EFFECTIVE_TIME
+      type: string
+      description: Run policy checks with the provided time. Expects a
+        RFC3339 formatted value, e.g. "2026-06-24T00:00:00Z"
+      default: "now"
+  results:
+    - name: TEST_OUTPUT
+      value: "$(tasks.verify.results.TEST_OUTPUT)"
+  tasks:
+    - name: collect-keyless-params
+      taskRef:
+        resolver: bundles
+        params:
+          - name: bundle
+            value: quay.io/conforma/tekton-task:konflux
+          - name: name
+            value: collect-keyless-params
+          - name: kind
+            value: task
+    - name: verify
+      runAfter:
+        - collect-keyless-params
+      params:
+        - name: POLICY_CONFIGURATION
+          value: "$(params.POLICY_CONFIGURATION)"
+        - name: IMAGES
+          value: "$(params.SNAPSHOT)"
+        - name: SSL_CERT_DIR
+          value: "$(params.SSL_CERT_DIR)"
+        - name: STRICT
+          value: "$(params.STRICT)"
+
+        - name: PUBLIC_KEY
+          # PUBLIC_KEY will be ignored if any of the CERTIFICATE_* params are present
+          value: "$(params.PUBLIC_KEY)"
+        - name: IGNORE_REKOR
+          # Set this true because Chains in default Konflux does not create Rekor entries
+          # when signing things. It will be ignored if any of the CERTIFICATE_* params
+          # because keyless verification does require Rekor.
+          value: "true"
+
+        - name: CERTIFICATE_OIDC_ISSUER
+          value: "$(tasks.collect-keyless-params.results.defaultOIDCIssuer)"
+        - name: CERTIFICATE_IDENTITY
+          value: "$(tasks.collect-keyless-params.results.tektonChainsIdentity)"
+        - name: TUF_MIRROR
+          value: "$(tasks.collect-keyless-params.results.tufUrl)"
+        - name: REKOR_HOST
+          value: "$(tasks.collect-keyless-params.results.rekorUrl)"
+
+        - name: WORKERS
+          value: "$(params.WORKERS)"
+        - name: CA_TRUST_CONFIGMAP_NAME
+          value: "$(params.CA_TRUST_CONFIGMAP_NAME)"
+        - name: CA_TRUST_CONFIG_MAP_KEY
+          value: "$(params.CA_TRUST_CONFIG_MAP_KEY)"
+        - name: EXTRA_RULE_DATA
+          value: "$(params.EXTRA_RULE_DATA)"
+        - name: SINGLE_COMPONENT
+          value: "$(params.SINGLE_COMPONENT)"
+        - name: SINGLE_COMPONENT_CUSTOM_RESOURCE
+          value: "$(params.SINGLE_COMPONENT_CUSTOM_RESOURCE)"
+        - name: EFFECTIVE_TIME
+          value: "$(params.EFFECTIVE_TIME)"
+      taskRef:
+        resolver: bundles
+        params:
+          - name: bundle
+            value: quay.io/conforma/tekton-task:konflux
+          - name: name
+            value: verify-enterprise-contract
+          - name: kind
+            value: task
+      timeout: 4h
