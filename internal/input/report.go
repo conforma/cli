@@ -39,6 +39,7 @@ type Input struct {
 	Violations   []evaluator.Result `json:"violations"`
 	Warnings     []evaluator.Result `json:"warnings"`
 	Successes    []evaluator.Result `json:"successes"`
+	Exceptions   []evaluator.Result `json:"exceptions,omitempty"`
 	Success      bool               `json:"success"`
 	SuccessCount int                `json:"success-count"`
 }
