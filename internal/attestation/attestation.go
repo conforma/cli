@@ -166,6 +166,11 @@ func ProvenanceFromBundlePayload(sig oci.Signature, dsseJSON []byte) (Attestatio
 		return nil, fmt.Errorf("malformed bundle attestation: %w", err)
 	}
 
+	if statement.Type != in_toto.StatementInTotoV1 &&
+		statement.Type != in_toto.StatementInTotoV01 {
+		return nil, fmt.Errorf("unsupported attestation type: %s", statement.Type)
+	}
+
 	signatures, err := createEntitySignatures(sig, payload)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create signed entity: %w", err)
