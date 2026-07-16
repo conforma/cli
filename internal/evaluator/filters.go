@@ -66,8 +66,8 @@ type FilterFactory interface {
 // It handles include/exclude criteria, severity promotion/demotion,
 // effective time filtering, and success computation.
 type PostEvaluationFilter interface {
-	// FilterResults processes all result types and returns the filtered results
-	// along with updated missing includes tracking.
+	// FilterResults processes all result types and returns the filtered results,
+	// updated missing includes tracking, and config-excluded exception results.
 	FilterResults(
 		results []Result,
 		rules policyRules,
@@ -75,7 +75,7 @@ type PostEvaluationFilter interface {
 		componentName string,
 		missingIncludes map[string]bool,
 		effectiveTime time.Time,
-	) ([]Result, map[string]bool)
+	) ([]Result, map[string]bool, []Result)
 
 	// CategorizeResults takes filtered results and categorizes them by type
 	// (warnings, failures, exceptions, skipped) with appropriate severity logic.
@@ -424,16 +424,21 @@ type PolicyResolutionResult struct {
 	MissingIncludes map[string]bool
 	// Explanations provides reasons for why rules/packages were included/excluded
 	Explanations map[string]string
+	// MatchingExcludeCriteria maps each excluded rule ID to the criteria pattern that excluded it.
+	// This is used to look up time metadata (effectiveOn/effectiveUntil) for the matching criteria,
+	// since meta is keyed by the raw criteria value (e.g. "pkg", "pkg.*") not by the resolved rule ID.
+	MatchingExcludeCriteria map[string]string
 }
 
 // NewPolicyResolutionResult creates a new PolicyResolutionResult with initialized maps
 func NewPolicyResolutionResult() PolicyResolutionResult {
 	return PolicyResolutionResult{
-		IncludedRules:    make(map[string]bool),
-		ExcludedRules:    make(map[string]bool),
-		IncludedPackages: make(map[string]bool),
-		MissingIncludes:  make(map[string]bool),
-		Explanations:     make(map[string]string),
+		IncludedRules:           make(map[string]bool),
+		ExcludedRules:           make(map[string]bool),
+		IncludedPackages:        make(map[string]bool),
+		MissingIncludes:         make(map[string]bool),
+		Explanations:            make(map[string]string),
+		MatchingExcludeCriteria: make(map[string]string),
 	}
 }
 
@@ -605,6 +610,7 @@ func (r *basePolicyResolver) baseEvaluateRuleInclusion(ruleID string, ruleInfo r
 		log.Debugf("[evaluateRuleInclusion] Rule: %s INCLUDED", ruleID)
 	} else if excludeScore > 0 {
 		result.ExcludedRules[ruleID] = true
+		result.MatchingExcludeCriteria[ruleID] = bestMatchingPattern(matchers, r.exclude.get(target, ""))
 		result.Explanations[ruleID] = fmt.Sprintf("excluded (include score: %d, exclude score: %d)", includeScore, excludeScore)
 		log.Debugf("[evaluateRuleInclusion] Rule: %s EXCLUDED", ruleID)
 	} else {
@@ -793,6 +799,25 @@ func LegacyIsResultIncluded(result Result, imageRef string, componentName string
 	return includeScore > excludeScore
 }
 
+// bestMatchingPattern returns the pattern from patterns that has the highest individual
+// LegacyScore and appears in matchers. Used to identify which exclude criteria pattern
+// triggered a rule exclusion, so its time metadata can be retrieved via getMeta.
+func bestMatchingPattern(matchers []string, patterns []string) string {
+	best := ""
+	bestScore := 0
+	for _, needle := range matchers {
+		for _, hay := range patterns {
+			if hay == needle {
+				if s := LegacyScore(hay); s > bestScore {
+					bestScore = s
+					best = hay
+				}
+			}
+		}
+	}
+	return best
+}
+
 // LegacyScoreMatches returns the combined score for every match between needles and haystack.
 // 'toBePruned' contains items that will be removed (pruned) from this map if a match is found.
 // This is the legacy scoring function.
@@ -946,7 +971,7 @@ func (f *LegacyPostEvaluationFilter) FilterResults(
 	componentName string,
 	missingIncludes map[string]bool,
 	effectiveTime time.Time,
-) ([]Result, map[string]bool) {
+) ([]Result, map[string]bool, []Result) {
 	// Filter results based on include/exclude criteria only (no pipeline intention)
 	var filteredResults []Result
 	for _, result := range results {
@@ -957,7 +982,7 @@ func (f *LegacyPostEvaluationFilter) FilterResults(
 		}
 	}
 
-	return filteredResults, missingIncludes
+	return filteredResults, missingIncludes, nil
 }
 
 // CategorizeResults implements the PostEvaluationFilter interface for legacy compatibility.
@@ -1027,7 +1052,7 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 	componentName string,
 	missingIncludes map[string]bool,
 	effectiveTime time.Time,
-) ([]Result, map[string]bool) {
+) ([]Result, map[string]bool, []Result) {
 	// Check if we're using an ECPolicyResolver (which handles pipeline intentions)
 	// vs IncludeExcludePolicyResolver (which doesn't)
 	if ecResolver, ok := f.policyResolver.(*ECPolicyResolver); ok {
@@ -1035,6 +1060,7 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 		policyResolution := ecResolver.ResolvePolicy(rules, imageRef)
 
 		var filteredResults []Result
+		var configExceptions []Result
 		for _, result := range results {
 			code := ExtractStringFromMetadata(result, metadataCode)
 			// For results without codes, always include them (matches legacy behavior)
@@ -1046,6 +1072,21 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 			// Check if the result's rule is included based on policy resolution
 			if policyResolution.IncludedRules[code] {
 				filteredResults = append(filteredResults, result)
+			} else if policyResolution.ExcludedRules[code] {
+				criteriaValue := policyResolution.MatchingExcludeCriteria[code]
+				meta := f.policyResolver.Excludes().getMeta(criteriaValue)
+				newMeta := make(map[string]interface{}, len(result.Metadata))
+				for k, v := range result.Metadata {
+					newMeta[k] = v
+				}
+				if meta.effectiveOn != "" {
+					newMeta[metadataEffectiveOn] = meta.effectiveOn
+				}
+				if meta.effectiveUntil != "" {
+					newMeta[metadataEffectiveUntil] = meta.effectiveUntil
+				}
+				result.Metadata = newMeta
+				configExceptions = append(configExceptions, result)
 			}
 		}
 
@@ -1056,11 +1097,12 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 			}
 		}
 
-		return filteredResults, missingIncludes
+		return filteredResults, missingIncludes, configExceptions
 	}
 
 	// Fall back to legacy filtering for other policy resolvers
 	var filteredResults []Result
+	var configExceptions []Result
 	for _, result := range results {
 		code := ExtractStringFromMetadata(result, metadataCode)
 		// For results without codes, always include them (matches legacy behavior)
@@ -1070,9 +1112,28 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 			continue
 		}
 
-		// Use legacy filtering logic for all results
-		if LegacyIsResultIncluded(result, imageRef, componentName, missingIncludes, f.policyResolver.Includes(), f.policyResolver.Excludes()) {
+		ruleMatchers := LegacyMakeMatchers(result)
+		excludePatterns := f.policyResolver.Excludes().get(imageRef, componentName)
+		excludeScore := LegacyScoreMatches(ruleMatchers, excludePatterns, map[string]bool{})
+		includeScore := LegacyScoreMatches(ruleMatchers, f.policyResolver.Includes().get(imageRef, componentName), missingIncludes)
+
+		if includeScore > excludeScore {
 			filteredResults = append(filteredResults, result)
+		} else if excludeScore > 0 {
+			pattern := bestMatchingPattern(ruleMatchers, excludePatterns)
+			meta := f.policyResolver.Excludes().getMeta(pattern)
+			newMeta := make(map[string]interface{}, len(result.Metadata))
+			for k, v := range result.Metadata {
+				newMeta[k] = v
+			}
+			if meta.effectiveOn != "" {
+				newMeta[metadataEffectiveOn] = meta.effectiveOn
+			}
+			if meta.effectiveUntil != "" {
+				newMeta[metadataEffectiveUntil] = meta.effectiveUntil
+			}
+			result.Metadata = newMeta
+			configExceptions = append(configExceptions, result)
 		}
 	}
 
@@ -1096,7 +1157,7 @@ func (f *UnifiedPostEvaluationFilter) FilterResults(
 		}
 	}
 
-	return filteredResults, missingIncludes
+	return filteredResults, missingIncludes, configExceptions
 }
 
 // CategorizeResults takes filtered results and categorizes them by type

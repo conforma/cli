@@ -35,10 +35,12 @@ import (
 )
 
 type Input struct {
-	FilePath     string             `json:"filepath"`
-	Violations   []evaluator.Result `json:"violations"`
-	Warnings     []evaluator.Result `json:"warnings"`
-	Successes    []evaluator.Result `json:"successes"`
+	FilePath   string             `json:"filepath"`
+	Violations []evaluator.Result `json:"violations"`
+	Warnings   []evaluator.Result `json:"warnings"`
+	Successes  []evaluator.Result `json:"successes"`
+	// Exceptions holds policy rules excluded from evaluation by the policy configuration,
+	// carrying time-bounded waiver metadata such as effective_on and effective_until.
 	Exceptions   []evaluator.Result `json:"exceptions,omitempty"`
 	Success      bool               `json:"success"`
 	SuccessCount int                `json:"success-count"`

@@ -280,7 +280,10 @@ func (b *basePolicyEvaluator) postProcessResults(ctx context.Context, runResults
 	effectiveTime := b.policy.EffectiveTime()
 	ctx = context.WithValue(ctx, effectiveTimeKey, effectiveTime)
 
+	// Exceptions are not counted toward totalRules to preserve the fail-closed invariant:
+	// an all-excluded policy must not report success with zero real checks performed.
 	totalRules := 0
+	allExceptions := 0
 
 	missingIncludes := map[string]bool{}
 	for _, defaultItem := range b.include.defaultItems {
@@ -306,21 +309,22 @@ func (b *basePolicyEvaluator) postProcessResults(ctx context.Context, runResults
 			addRuleMetadata(ctx, &allResults[j], b.rules)
 		}
 
-		filteredResults, updatedMissingIncludes := unifiedFilter.FilterResults(
+		filteredResults, updatedMissingIncludes, configExceptions := unifiedFilter.FilterResults(
 			allResults, b.allRules, target.Target, target.ComponentName, missingIncludes, effectiveTime)
 		missingIncludes = updatedMissingIncludes
 
-		warnings, failures, exceptions, skipped := unifiedFilter.CategorizeResults(
+		warnings, failures, _, skipped := unifiedFilter.CategorizeResults(
 			filteredResults, result, effectiveTime)
 
 		result.Warnings = warnings
 		result.Failures = failures
-		result.Exceptions = exceptions
+		result.Exceptions = ensureNonNilSlice(configExceptions)
 		result.Skipped = skipped
 
 		result.Successes = b.computeSuccesses(result, b.rules, target.Target, target.ComponentName, missingIncludes, unifiedFilter, effectiveTime)
 
 		totalRules += len(result.Warnings) + len(result.Failures) + len(result.Successes)
+		allExceptions += len(configExceptions)
 		results = append(results, result)
 	}
 
@@ -337,6 +341,12 @@ func (b *basePolicyEvaluator) postProcessResults(ctx context.Context, runResults
 	trim(&results)
 
 	if totalRules == 0 {
+		if allExceptions > 0 {
+			// All rules were excluded by policy config: warn but return the exceptions so
+			// downstream consumers (e.g. SVR generators) can represent the waivers.
+			log.Warn("all rules were excluded by policy config; no policy checks were performed")
+			return results, nil
+		}
 		log.Error("no successes, warnings, or failures, check input")
 		return nil, fmt.Errorf("no successes, warnings, or failures, check input")
 	}
@@ -395,7 +405,7 @@ func (b *basePolicyEvaluator) computeSuccesses(
 		}
 
 		if unifiedFilter != nil {
-			filteredResults, _ := unifiedFilter.FilterResults(
+			filteredResults, _, _ := unifiedFilter.FilterResults(
 				[]Result{success}, rules, imageRef, componentName, missingIncludes, effectiveTime)
 			if len(filteredResults) == 0 {
 				log.Debugf("Skipping result success: %#v", success)
