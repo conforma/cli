@@ -152,6 +152,10 @@ spec:
       type: string
       description: Run policy checks with the provided time.
       default: "now"
+    - name: ALLOW_PAST_EFFECTIVE_TIME
+      type: string
+      description: Allow setting EFFECTIVE_TIME to a date in the past.
+      default: "false"
     - name: EXTRA_RULE_DATA
       type: string
       description: Merge additional Rego variables into the policy data. Use syntax "key=value,key2=value2..."
@@ -431,6 +435,7 @@ spec:
           --show-successes=true
           --show-policy-docs-link=true
           --effective-time="${EFFECTIVE_TIME}"
+          --allow-past-effective-time="${ALLOW_PAST_EFFECTIVE_TIME}"
           --extra-rule-data="${EXTRA_RULE_DATA}"
           --retry-max-wait="${RETRY_MAX_WAIT}"
           --retry-max-retry="${RETRY_MAX_RETRY}"
@@ -514,6 +519,8 @@ spec:
           value: "$(params.INFO)"
         - name: EFFECTIVE_TIME
           value: "$(params.EFFECTIVE_TIME)"
+        - name: ALLOW_PAST_EFFECTIVE_TIME
+          value: "$(params.ALLOW_PAST_EFFECTIVE_TIME)"
         - name: EXTRA_RULE_DATA
           value: "$(params.EXTRA_RULE_DATA)"
         - name: RETRY_MAX_WAIT

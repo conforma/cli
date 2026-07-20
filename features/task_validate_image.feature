@@ -356,10 +356,11 @@ Feature: Verify Enterprise Contract Tekton Tasks
       {"publicKey": ${known_PUBLIC_KEY}}
       ```
     When version 0.1 of the task named "verify-enterprise-contract" is run with parameters:
-      | IMAGES               | {"components": [{"containerImage": "${REGISTRY}/acceptance/effective-time"}]} |
-      | POLICY_CONFIGURATION | ${NAMESPACE}/${POLICY_NAME}                                                   |
-      | IGNORE_REKOR         | true                                                                          |
-      | EFFECTIVE_TIME       | 2020-01-01T00:00:00Z                                                          |
+      | IMAGES                       | {"components": [{"containerImage": "${REGISTRY}/acceptance/effective-time"}]} |
+      | POLICY_CONFIGURATION         | ${NAMESPACE}/${POLICY_NAME}                                                   |
+      | IGNORE_REKOR                 | true                                                                          |
+      | EFFECTIVE_TIME               | 2020-01-01T00:00:00Z                                                          |
+      | ALLOW_PAST_EFFECTIVE_TIME    | true                                                                          |
     Then the task should succeed
       And the task logs for step "show-config" should contain `"effective-time": "2020-01-01T00:00:00Z"`
 

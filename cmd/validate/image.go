@@ -202,7 +202,8 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 			data.policyConfiguration = policyConfiguration
 
 			policyOptions := policy.Options{
-				EffectiveTime: data.effectiveTime,
+				EffectiveTime:          data.effectiveTime,
+				AllowPastEffectiveTime: data.allowPastEffectiveTime,
 				Identity: cosign.Identity{
 					Issuer:        data.certificateOIDCIssuer,
 					IssuerRegExp:  data.certificateOIDCIssuerRegExp,
@@ -547,6 +548,11 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 		a RFC3339 formatted value, e.g. 2022-11-18T00:00:00Z.
 	`))
 
+	cmd.Flags().BoolVar(&data.allowPastEffectiveTime, "allow-past-effective-time", false, hd.Doc(`
+		Allow setting --effective-time to a date in the past. By default, dates
+		more than 5 minutes in the past are rejected.
+	`))
+
 	cmd.Flags().StringSliceVar(&data.extraRuleData, "extra-rule-data", data.extraRuleData, hd.Doc(`
 		Extra data to be provided to the Rego policy evaluator. Use format 'key=value'. May be used multiple times.
 	`))
@@ -633,6 +639,7 @@ type imageData struct {
 	certificateOIDCIssuer       string
 	certificateOIDCIssuerRegExp string
 	effectiveTime               string
+	allowPastEffectiveTime      bool
 	extraRuleData               []string
 	filePath                    string
 	filterType                  string

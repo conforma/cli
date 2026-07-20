@@ -245,10 +245,11 @@ func TestNewPolicy(t *testing.T) {
 			utils.SetTestRekorPublicKey(t)
 
 			got, err := NewPolicy(ctx, Options{
-				PolicyRef:     c.policyRef,
-				RekorURL:      c.rekorUrl,
-				PublicKey:     c.publicKey,
-				EffectiveTime: timeNowStr,
+				PolicyRef:              c.policyRef,
+				RekorURL:               c.rekorUrl,
+				PublicKey:              c.publicKey,
+				EffectiveTime:          timeNowStr,
+				AllowPastEffectiveTime: true,
 			})
 
 			if c.expectErr {
@@ -656,10 +657,10 @@ func TestIdentity(t *testing.T) {
 }
 
 func TestParseEffectiveTime(t *testing.T) {
-	_, err := parseEffectiveTime("")
+	_, err := parseEffectiveTime("", false)
 	assert.ErrorContains(t, err, "invalid policy time argument")
 
-	effective, err := parseEffectiveTime(Now)
+	effective, err := parseEffectiveTime(Now, false)
 	assert.NoError(t, err)
 	assert.Equal(t, time.UTC, effective.Location())
 
@@ -671,22 +672,72 @@ func TestParseEffectiveTime(t *testing.T) {
 	epoch := time.Unix(0, 0).UTC()
 	now = func() time.Time { return epoch }
 
-	effective, err = parseEffectiveTime(Now)
+	effective, err = parseEffectiveTime(Now, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, effective)
 	assert.Equal(t, epoch, *effective)
 
-	effective, err = parseEffectiveTime("2001-02-03T04:05:06+07:00")
+	effective, err = parseEffectiveTime("2001-02-03T04:05:06+07:00", true)
 	assert.NoError(t, err)
 	assert.NotNil(t, effective)
 	assert.Equal(t, time.Date(2001, 2, 2, 21, 5, 6, 0, time.UTC), *effective)
 
-	effective, err = parseEffectiveTime("2001-02-03")
+	effective, err = parseEffectiveTime("2001-02-03", true)
 	assert.NoError(t, err)
 	assert.NotNil(t, effective)
 	assert.Equal(t, time.Date(2001, 2, 3, 0, 0, 0, 0, time.UTC), *effective)
 
-	effective, err = parseEffectiveTime("attestation")
+	effective, err = parseEffectiveTime("attestation", false)
+	assert.NoError(t, err)
+	assert.Nil(t, effective)
+}
+
+func TestParseEffectiveTimePastRejection(t *testing.T) {
+	then := now
+	t.Cleanup(func() {
+		now = then
+	})
+
+	fixedNow := time.Date(2025, 7, 20, 12, 0, 0, 0, time.UTC)
+	now = func() time.Time { return fixedNow }
+
+	// Past date (RFC3339) rejected by default
+	_, err := parseEffectiveTime("2025-01-01T00:00:00Z", false)
+	assert.ErrorContains(t, err, "is in the past")
+	assert.ErrorContains(t, err, "--allow-past-effective-time")
+
+	// Past date (date-only) rejected by default
+	_, err = parseEffectiveTime("2025-01-01", false)
+	assert.ErrorContains(t, err, "is in the past")
+
+	// Past date allowed with allowPast=true
+	effective, err := parseEffectiveTime("2025-01-01T00:00:00Z", true)
+	assert.NoError(t, err)
+	assert.NotNil(t, effective)
+
+	// Time within 5-minute grace period is accepted
+	withinGrace := fixedNow.Add(-3 * time.Minute).Format(time.RFC3339)
+	effective, err = parseEffectiveTime(withinGrace, false)
+	assert.NoError(t, err)
+	assert.NotNil(t, effective)
+
+	// Time just past the 5-minute grace period is rejected
+	pastGrace := fixedNow.Add(-6 * time.Minute).Format(time.RFC3339)
+	_, err = parseEffectiveTime(pastGrace, false)
+	assert.ErrorContains(t, err, "is in the past")
+
+	// Future date is always accepted
+	effective, err = parseEffectiveTime("2030-01-01T00:00:00Z", false)
+	assert.NoError(t, err)
+	assert.NotNil(t, effective)
+
+	// "now" is unaffected
+	effective, err = parseEffectiveTime(Now, false)
+	assert.NoError(t, err)
+	assert.NotNil(t, effective)
+
+	// "attestation" is unaffected
+	effective, err = parseEffectiveTime("attestation", false)
 	assert.NoError(t, err)
 	assert.Nil(t, effective)
 }
@@ -1152,7 +1203,7 @@ func TestNewInputPolicy(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			ctx := context.Background()
 
-			policy, err := NewInputPolicy(ctx, c.policyRef, c.effectiveTime)
+			policy, err := NewInputPolicy(ctx, c.policyRef, c.effectiveTime, true)
 
 			if c.expectErr {
 				assert.Error(t, err, "Expected error for invalid input")
@@ -1323,8 +1374,9 @@ func TestPreProcessPolicy(t *testing.T) {
 		{
 			name: "successful preprocessing with simple policy",
 			policyOptions: Options{
-				PolicyRef:     fmt.Sprintf(`{"publicKey": %s}`, utils.TestPublicKeyJSON),
-				EffectiveTime: "2023-01-01T12:00:00Z",
+				PolicyRef:              fmt.Sprintf(`{"publicKey": %s}`, utils.TestPublicKeyJSON),
+				EffectiveTime:          "2023-01-01T12:00:00Z",
+				AllowPastEffectiveTime: true,
 			},
 			expectErr:   false,
 			description: "Should successfully preprocess a simple policy without sources",
@@ -1342,7 +1394,8 @@ func TestPreProcessPolicy(t *testing.T) {
 						}
 					]
 				}`, utils.TestPublicKeyJSON),
-				EffectiveTime: "2023-01-01T12:00:00Z",
+				EffectiveTime:          "2023-01-01T12:00:00Z",
+				AllowPastEffectiveTime: true,
 			},
 			mockDownload: func(ctx context.Context, dest, source string, showMsg bool) (metadata.Metadata, error) {
 				// Mock successful download
@@ -1367,7 +1420,8 @@ func TestPreProcessPolicy(t *testing.T) {
 						}
 					]
 				}`, utils.TestPublicKeyJSON),
-				EffectiveTime: "2023-01-01T12:00:00Z",
+				EffectiveTime:          "2023-01-01T12:00:00Z",
+				AllowPastEffectiveTime: true,
 			},
 			mockDownload: func(ctx context.Context, dest, source string, showMsg bool) (metadata.Metadata, error) {
 				return nil, fmt.Errorf("network error: connection refused")
@@ -1379,8 +1433,9 @@ func TestPreProcessPolicy(t *testing.T) {
 		{
 			name: "failed preprocessing with invalid policy reference",
 			policyOptions: Options{
-				PolicyRef:     `{"invalid": "json""}`,
-				EffectiveTime: "2023-01-01T12:00:00Z",
+				PolicyRef:              `{"invalid": "json""}`,
+				EffectiveTime:          "2023-01-01T12:00:00Z",
+				AllowPastEffectiveTime: true,
 			},
 			expectErr:   true,
 			errMsg:      "unable to parse",

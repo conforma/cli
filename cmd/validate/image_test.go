@@ -598,6 +598,7 @@ spec:
 				"/policy.yaml",
 				"--effective-time",
 				"1970-01-01",
+				"--allow-past-effective-time",
 			}...)
 			cmd.SetArgs(args)
 

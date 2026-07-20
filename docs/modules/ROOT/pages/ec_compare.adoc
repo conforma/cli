@@ -33,6 +33,7 @@ ec compare <policy1> <policy2> [flags]
 ----
 == Options
 
+--allow-past-effective-time:: Allow setting --effective-time to a date in the past (Default: false)
 --effective-time:: Effective time for policy evaluation (RFC3339 format, 'now') (Default: now)
 -h, --help:: help for compare (Default: false)
 --image-digest:: Image digest for volatile config matching
