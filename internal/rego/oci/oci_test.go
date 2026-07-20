@@ -129,6 +129,96 @@ func TestOCIBlob(t *testing.T) {
 	}
 }
 
+func TestOCIParsedBlob(t *testing.T) {
+	t.Cleanup(ClearCaches)
+	ClearCaches()
+
+	// Each ref must match the SHA256 of the test data content
+	// echo -n '{"spam": "maps"}' | sha256sum → 4bbf56a3...
+	validRef := ast.StringTerm("registry.local/spam@sha256:4bbf56a3a9231f752d3b9c174637975f0f83ed2b15e65799837c571e4ef3374b")
+	// echo -n 'not valid json' | sha256sum → 62eb7d4f...
+	invalidJSONRef := ast.StringTerm("registry.local/spam@sha256:62eb7d4ff39a69b09cf8fdaa37579468bf970290cb3ff1fe87554cba9d06cc50")
+
+	t.Run("valid JSON blob", func(t *testing.T) {
+		ClearCaches()
+		client := fake.FakeClient{}
+		layer := static.NewLayer([]byte(`{"spam": "maps"}`), types.OCIUncompressedLayer)
+		client.On("Layer", mock.Anything, mock.Anything).Return(layer, nil)
+
+		ctx := oci.WithClient(context.Background(), &client)
+		bctx := rego.BuiltinContext{Context: ctx}
+
+		result, err := ociParsedBlob(bctx, validRef)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		obj, ok := result.Value.(ast.Object)
+		require.True(t, ok)
+		val := obj.Get(ast.StringTerm("spam"))
+		require.NotNil(t, val)
+		require.Equal(t, ast.String("maps"), val.Value)
+	})
+
+	t.Run("invalid JSON blob", func(t *testing.T) {
+		ClearCaches()
+		client := fake.FakeClient{}
+		layer := static.NewLayer([]byte(`not valid json`), types.OCIUncompressedLayer)
+		client.On("Layer", mock.Anything, mock.Anything).Return(layer, nil)
+
+		ctx := oci.WithClient(context.Background(), &client)
+		bctx := rego.BuiltinContext{Context: ctx}
+
+		result, err := ociParsedBlob(bctx, invalidJSONRef)
+		require.NoError(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("caching returns same result", func(t *testing.T) {
+		ClearCaches()
+		client := fake.FakeClient{}
+		layer := static.NewLayer([]byte(`{"spam": "maps"}`), types.OCIUncompressedLayer)
+		client.On("Layer", mock.Anything, mock.Anything).Return(layer, nil)
+
+		ctx := oci.WithClient(context.Background(), &client)
+		bctx := rego.BuiltinContext{Context: ctx}
+
+		result1, err := ociParsedBlob(bctx, validRef)
+		require.NoError(t, err)
+		require.NotNil(t, result1)
+
+		result2, err := ociParsedBlob(bctx, validRef)
+		require.NoError(t, err)
+		require.NotNil(t, result2)
+
+		require.Same(t, result1, result2)
+		client.AssertNumberOfCalls(t, "Layer", 1)
+	})
+
+	t.Run("unexpected uri type", func(t *testing.T) {
+		ClearCaches()
+		client := fake.FakeClient{}
+		ctx := oci.WithClient(context.Background(), &client)
+		bctx := rego.BuiltinContext{Context: ctx}
+
+		result, err := ociParsedBlob(bctx, ast.IntNumberTerm(42))
+		require.NoError(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("remote error", func(t *testing.T) {
+		ClearCaches()
+		client := fake.FakeClient{}
+		client.On("Layer", mock.Anything, mock.Anything).Return(nil, errors.New("boom!"))
+
+		ctx := oci.WithClient(context.Background(), &client)
+		bctx := rego.BuiltinContext{Context: ctx}
+
+		result, err := ociParsedBlob(bctx, validRef)
+		require.NoError(t, err)
+		require.Nil(t, result)
+	})
+}
+
 func TestOCIBlobFiles(t *testing.T) {
 	t.Cleanup(ClearCaches)
 	ClearCaches() // Clear before test to avoid interference from previous tests
@@ -1258,6 +1348,7 @@ func TestFunctionsRegistered(t *testing.T) {
 		ociImageIndexName,
 		ociImageTagRefsName,
 		ociImageReferrersName,
+		ociParsedBlobName,
 	}
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
@@ -1771,6 +1862,7 @@ func TestOCIImageReferrers(t *testing.T) {
 					require.NotNil(t, obj.Get(ast.StringTerm("mediaType")), "descriptor should have mediaType")
 					require.NotNil(t, obj.Get(ast.StringTerm("size")), "descriptor should have size")
 					require.NotNil(t, obj.Get(ast.StringTerm("artifactType")), "descriptor should have artifactType")
+					require.NotNil(t, obj.Get(ast.StringTerm("annotations")), "descriptor should have annotations")
 				}
 
 				// Verify the referrers match (order-independent)
@@ -1778,4 +1870,29 @@ func TestOCIImageReferrers(t *testing.T) {
 			}
 		})
 	}
+
+	// Verify annotations field is present as an object on every referrer descriptor
+	t.Run("annotations field is an object", func(t *testing.T) {
+		ClearCaches()
+
+		bctx := rego.BuiltinContext{Context: context.Background()}
+		got, err := ociImageReferrers(bctx, ast.StringTerm(digestRef))
+		require.NoError(t, err)
+		require.NotNil(t, got)
+
+		arr, ok := got.Value.(*ast.Array)
+		require.True(t, ok)
+		require.Greater(t, arr.Len(), 0)
+
+		for i := 0; i < arr.Len(); i++ {
+			obj, ok := arr.Elem(i).Value.(ast.Object)
+			require.True(t, ok)
+
+			annTerm := obj.Get(ast.StringTerm("annotations"))
+			require.NotNil(t, annTerm, "descriptor %d should have annotations field", i)
+
+			_, ok = annTerm.Value.(ast.Object)
+			require.True(t, ok, "descriptor %d annotations should be an object", i)
+		}
+	})
 }

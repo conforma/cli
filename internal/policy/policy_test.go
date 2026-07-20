@@ -1615,6 +1615,41 @@ type FakeCosignClient struct {
 	publicKey string
 }
 
+func TestSkipAttSigCheck(t *testing.T) {
+	ctx := context.Background()
+	ctx = withSignatureClient(ctx, &FakeCosignClient{publicKey: utils.TestPublicKey})
+	utils.SetTestRekorPublicKey(t)
+	utils.SetTestFulcioRoots(t)
+	utils.SetTestCTLogPublicKey(t)
+
+	t.Run("disabled by default", func(t *testing.T) {
+		p, err := NewPolicy(ctx, Options{
+			PolicyRef:     toJson(&ecc.EnterpriseContractPolicySpec{PublicKey: utils.TestPublicKey}),
+			EffectiveTime: Now,
+			Identity: cosign.Identity{
+				Issuer:  "https://example.com/oidc",
+				Subject: "test@example.com",
+			},
+		})
+		require.NoError(t, err)
+		assert.False(t, p.SkipAttSigCheck())
+	})
+
+	t.Run("enabled when set", func(t *testing.T) {
+		p, err := NewPolicy(ctx, Options{
+			PolicyRef:       toJson(&ecc.EnterpriseContractPolicySpec{PublicKey: utils.TestPublicKey}),
+			EffectiveTime:   Now,
+			SkipAttSigCheck: true,
+			Identity: cosign.Identity{
+				Issuer:  "https://example.com/oidc",
+				Subject: "test@example.com",
+			},
+		})
+		require.NoError(t, err)
+		assert.True(t, p.SkipAttSigCheck())
+	})
+}
+
 func (c *FakeCosignClient) publicKeyFromKeyRef(ctx context.Context, publicKey string) (sigstoreSig.Verifier, error) {
 	if strings.Contains(publicKey, "invalid:") {
 		return nil, fmt.Errorf("invalid public key reference format")

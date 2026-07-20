@@ -1,0 +1,49 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  annotations:
+    build.appstudio.openshift.io/repo: https://github.com/conforma/cli?rev={{revision}}
+    build.appstudio.redhat.com/commit_sha: '{{revision}}'
+    build.appstudio.redhat.com/pull_request_number: '{{pull_request_number}}'
+    build.appstudio.redhat.com/target_branch: '{{target_branch}}'
+    pipelinesascode.tekton.dev/cancel-in-progress: "true"
+    pipelinesascode.tekton.dev/max-keep-runs: "3"
+    pipelinesascode.tekton.dev/on-cel-expression: event == "pull_request" && target_branch == "main"
+  creationTimestamp:
+  labels:
+    appstudio.openshift.io/application: ec-main
+    appstudio.openshift.io/component: cli-main
+    pipelines.appstudio.openshift.io/type: test
+  name: cli-e2e-on-pull-request
+  namespace: rhtap-contract-tenant
+spec:
+  params:
+  - name: git-url
+    value: https://github.com/conforma/e2e-tests.git
+  - name: revision
+    # renovate: datasource=git-refs depName=https://github.com/conforma/e2e-tests branch=main
+    value: 2f3c8026b9389b490bd53a878dc216f9847155f7
+  - name: oci-container-repo
+    value: quay.io/conforma/e2e-tests
+  - name: oci-container-repo-credentials-secret
+    value: konflux-test-infra
+  - name: aws-credentials-secret
+    value: mapt-kind-secret
+  - name: deprovision-aws-credentials-secret
+    value: mapt-kind-secret
+  - name: custom-ec-cli-url
+    value: '{{source_url}}'
+  - name: custom-ec-cli-revision
+    value: '{{revision}}'
+  pipelineRef:
+    resolver: git
+    params:
+    - name: url
+      value: https://github.com/conforma/e2e-tests.git
+    - name: revision
+      # renovate: datasource=git-refs depName=https://github.com/conforma/e2e-tests branch=main
+      value: 2f3c8026b9389b490bd53a878dc216f9847155f7
+    - name: pathInRepo
+      value: .tekton/pipelines/conforma-e2e/pipeline.yaml
+  taskRunTemplate:
+    serviceAccountName: konflux-integration-runner

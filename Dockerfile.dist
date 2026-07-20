@@ -16,7 +16,7 @@
 
 ## Build
 
-FROM registry.access.redhat.com/ubi9/go-toolset:1.25.8@sha256:7a0aad98db45c0aac69813bb9b5af20018bd51f47a2fc183aeca89d6a05c046e AS build
+FROM registry.access.redhat.com/ubi9/go-toolset:1.26.3@sha256:17c888d75753f128f6cbdc5587932c3abd2632ca8e0931aa27b9a60c7a75ac62 AS build
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -43,7 +43,7 @@ RUN /build/build.sh "${BUILD_LIST}" "${BUILD_SUFFIX}"
 
 ## Final image
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:8d0a8fb39ec907e8ca62cdd24b62a63ca49a30fe465798a360741fde58437a23
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:463cae32c6f6f5594b11a5c22de275016bd8545ce58a6373388e8b24f13fc15c
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -76,7 +76,10 @@ COPY --from=build "/build/dist/ec_${TARGETOS}_${TARGETARCH}" /usr/local/bin/ec
 COPY --from=build "/build/dist/kubectl_${TARGETOS}_${TARGETARCH}" /usr/local/bin/kubectl
 
 # Copy reduce-snapshot script needed for single component mode
-COPY hack/reduce-snapshot.sh /usr/local/bin
+COPY hack/reduce-snapshot.sh /usr/local/bin/
+
+# Copy pin-konflux-policy-bundle script needed for policy bundle digest pinning
+COPY hack/pin-konflux-policy-bundle.sh /usr/local/bin/
 
 # OpenShift preflight check requires a license
 COPY --from=build /build/LICENSE /licenses/LICENSE

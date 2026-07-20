@@ -17,7 +17,7 @@
 # Minimal image for acceptance tests. The ec and kubectl binaries are
 # pre-built on the host and injected here to avoid the multi-stage Go
 # compilation that the production Dockerfile uses.
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:8d0a8fb39ec907e8ca62cdd24b62a63ca49a30fe465798a360741fde58437a23
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:463cae32c6f6f5594b11a5c22de275016bd8545ce58a6373388e8b24f13fc15c
 
 RUN microdnf upgrade --assumeyes --nodocs --setopt=keepcache=0 --refresh && microdnf -y --nodocs --setopt=keepcache=0 install gzip jq ca-certificates
 
@@ -27,6 +27,7 @@ ARG KUBECTL_BINARY
 COPY ${EC_BINARY} /usr/local/bin/ec
 COPY ${KUBECTL_BINARY} /usr/local/bin/kubectl
 COPY hack/reduce-snapshot.sh /usr/local/bin/
+COPY hack/pin-konflux-policy-bundle.sh /usr/local/bin/
 
 RUN ln -s /usr/local/bin/ec /usr/local/bin/conforma
 

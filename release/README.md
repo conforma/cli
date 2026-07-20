@@ -5,8 +5,9 @@ executes in [Konflux](https://konflux-ci.dev/).
 
 ## Setup
 
-The [setup.yaml](setup.yaml) file should be applied to the namespace where the release Pipeline
-will run. This creates a ServiceAccount with access to perform the release.
+The [setup.yaml](setup.yaml) file defines the RBAC resources for the release Pipeline. The
+pipeline runs as the `konflux-bot-0` ServiceAccount (pre-created by Konflux) with push
+secrets attached in the cluster.
 
 ## Why are there two verify-enterprise-contract Tasks?
 

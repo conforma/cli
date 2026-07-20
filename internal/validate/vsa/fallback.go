@@ -163,7 +163,8 @@ func CreateWorkerFallbackContext(ctx context.Context, fallbackPolicy policy.Poli
 		var err error
 		if utils.IsOpaEnabled() {
 			log.Debugf("🔄 Worker: Using OPA evaluator")
-			c, err = evaluator.NewOPAEvaluator()
+			c, err = evaluator.NewOPAEvaluator(
+				ctx, policySources, fallbackPolicy, sourceGroup, nil)
 		} else {
 			log.Debugf("🔄 Worker: Using Conftest evaluator with filter type: include-exclude")
 			// Use the unified filtering approach with the specified filter type

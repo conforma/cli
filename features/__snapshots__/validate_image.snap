@@ -2164,7 +2164,17 @@ Error: success criteria not met
 ---
 
 [TestFeatures/Dropping rego capabilities:stderr - 1]
-Error: error validating image ${REGISTRY}/acceptance/ec-happy-day of component Unnamed: load: loading policies: get compiler: 3 errors occurred:
+Error: error validating image ${REGISTRY}/acceptance/ec-happy-day of component Unnamed: policy compilation error: the policy references Rego built-in functions not available in this version of Conforma CLI (v1.15.2).
+
+Upgrade Conforma CLI to a newer version that includes the required functions.
+
+If upgrading does not help, check for less common causes:
+  - Conforma CLI disables certain built-in functions for security (opa.runtime, http.send, net.lookup_ip_addr). Policies using these will not compile regardless of the CLI version
+  - The policy may use Rego syntax requiring a newer OPA version.
+    Adjust the policy to target OPA v1.15.2 or earlier
+
+Details:
+  load: loading policies: get compiler: 3 errors occurred:
 ${TEMP}/ec-work-${RANDOM}/policy/${RANDOM}/main.rego:14: rego_type_error: undefined function opa.runtime
 ${TEMP}/ec-work-${RANDOM}/policy/${RANDOM}/main.rego:22: rego_type_error: undefined function http.send
 ${TEMP}/ec-work-${RANDOM}/policy/${RANDOM}/main.rego:33: rego_type_error: undefined function net.lookup_ip_addr
@@ -3647,12 +3657,6 @@ Error: success criteria not met
         }
       ],
       "success": true,
-      "signatures": [
-        {
-          "keyid": "",
-          "sig": ""
-        }
-      ],
       "attestations": [
         {
           "type": "https://in-toto.io/Statement/v0.1",
@@ -5529,6 +5533,7 @@ Error: success criteria not met
 ---
 
 [TestFeatures/invalid image signature with valid att sig and skip-image-sig-check flag:stderr - 1]
+time="${TIMESTAMP}" level=warning msg="Image signature check skipped"
 
 ---
 
@@ -5594,6 +5599,7 @@ Error: success criteria not met
 ---
 
 [TestFeatures/happy day with skip-image-sig-check flag:stderr - 1]
+time="${TIMESTAMP}" level=warning msg="Image signature check skipped"
 
 ---
 
@@ -5778,5 +5784,364 @@ Error: success criteria not met
 ---
 
 [TestFeatures/discover artifact referrers via OCI Referrers API:stderr - 1]
+
+---
+
+[TestFeatures/invalid att signature with valid image sig and skip-att-sig-check flag:stdout - 1]
+{
+  "success": true,
+  "components": [
+    {
+      "name": "Unnamed",
+      "containerImage": "${REGISTRY}/acceptance/invalid-att-signature@sha256:${REGISTRY_acceptance/invalid-att-signature:latest_DIGEST}",
+      "source": {},
+      "successes": [
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "builtin.attestation.syntax_check"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "builtin.image.signature_check"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "main.acceptor"
+          }
+        }
+      ],
+      "success": true,
+      "signatures": [
+        {
+          "keyid": "",
+          "sig": "${IMAGE_SIGNATURE_acceptance/invalid-att-signature}"
+        }
+      ],
+      "attestations": [
+        {
+          "type": "https://in-toto.io/Statement/v0.1",
+          "predicateType": "https://slsa.dev/provenance/v0.2",
+          "predicateBuildType": "https://tekton.dev/attestations/chains/pipelinerun@v2",
+          "signatures": [
+            {
+              "keyid": "",
+              "sig": "${ATTESTATION_SIGNATURE_acceptance/invalid-att-signature}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "key": "${known_PUBLIC_KEY_JSON}",
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::${GITHOST}/git/invalid-att-signature.git?ref=${LATEST_COMMIT}"
+        ]
+      }
+    ],
+    "rekorUrl": "${REKOR}",
+    "publicKey": "${known_PUBLIC_KEY}"
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[TestFeatures/invalid att signature with valid image sig and skip-att-sig-check flag:stderr - 1]
+time="${TIMESTAMP}" level=warning msg="Attestation signature check skipped, fetching attestations without verification"
+
+---
+
+[TestFeatures/skip both image and att sig checks for debugging:stdout - 1]
+{
+  "success": true,
+  "components": [
+    {
+      "name": "Unnamed",
+      "containerImage": "${REGISTRY}/acceptance/skip-both-sig-checks@sha256:${REGISTRY_acceptance/skip-both-sig-checks:latest_DIGEST}",
+      "source": {},
+      "successes": [
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "builtin.attestation.syntax_check"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "main.acceptor"
+          }
+        }
+      ],
+      "success": true,
+      "attestations": [
+        {
+          "type": "https://in-toto.io/Statement/v0.1",
+          "predicateType": "https://slsa.dev/provenance/v0.2",
+          "predicateBuildType": "https://tekton.dev/attestations/chains/pipelinerun@v2",
+          "signatures": [
+            {
+              "keyid": "",
+              "sig": "${ATTESTATION_SIGNATURE_acceptance/skip-both-sig-checks}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "key": "${known_PUBLIC_KEY_JSON}",
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::${GITHOST}/git/skip-both-sig-checks.git?ref=${LATEST_COMMIT}"
+        ]
+      }
+    ],
+    "rekorUrl": "${REKOR}",
+    "publicKey": "${known_PUBLIC_KEY}"
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[TestFeatures/skip both image and att sig checks for debugging:stderr - 1]
+time="${TIMESTAMP}" level=warning msg="Image signature check skipped"
+time="${TIMESTAMP}" level=warning msg="Attestation signature check skipped, fetching attestations without verification"
+time="${TIMESTAMP}" level=warning msg="Both --skip-image-sig-check and --skip-att-sig-check are active, all cryptographic verification is disabled"
+
+---
+
+[TestFeatures/volatile config exclude matches multi-arch expanded component name:stdout - 1]
+{
+  "success": true,
+  "components": [
+    {
+      "name": "multi-arch-test-sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2-arm64",
+      "containerImage": "${REGISTRY}/acceptance/multi-arch-volatile@sha256:${REGISTRY_acceptance/multi-arch-volatile:latest_DIGEST}",
+      "source": {},
+      "successes": [
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "builtin.attestation.signature_check"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "builtin.attestation.syntax_check"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "builtin.image.signature_check"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "filtering.always_pass"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "filtering.always_pass_with_collection"
+          }
+        }
+      ],
+      "success": true,
+      "signatures": [
+        {
+          "keyid": "",
+          "sig": "${IMAGE_SIGNATURE_acceptance/multi-arch-volatile}"
+        }
+      ],
+      "attestations": [
+        {
+          "type": "https://in-toto.io/Statement/v0.1",
+          "predicateType": "https://slsa.dev/provenance/v0.2",
+          "predicateBuildType": "https://tekton.dev/attestations/chains/pipelinerun@v2",
+          "signatures": [
+            {
+              "keyid": "",
+              "sig": "${ATTESTATION_SIGNATURE_acceptance/multi-arch-volatile}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "key": "${known_PUBLIC_KEY_JSON}",
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::${GITHOST}/git/happy-day-policy.git?ref=${LATEST_COMMIT}"
+        ],
+        "config": {
+          "include": [
+            "@stamps",
+            "filtering.always_pass",
+            "filtering.always_fail"
+          ]
+        },
+        "volatileConfig": {
+          "exclude": [
+            {
+              "value": "filtering.always_fail",
+              "componentNames": [
+                "multi-arch-test"
+              ]
+            },
+            {
+              "value": "filtering.always_fail_with_collection",
+              "componentNames": [
+                "multi-arch-test"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "publicKey": "${known_PUBLIC_KEY}"
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[TestFeatures/volatile config exclude matches multi-arch expanded component name:stderr - 1]
+
+---
+
+[TestFeatures/volatile config exclude does not match different multi-arch component:stdout - 1]
+{
+  "success": false,
+  "components": [
+    {
+      "name": "other-component-sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2-amd64",
+      "containerImage": "${REGISTRY}/acceptance/multi-arch-volatile-neg@sha256:${REGISTRY_acceptance/multi-arch-volatile-neg:latest_DIGEST}",
+      "source": {},
+      "violations": [
+        {
+          "msg": "always fail",
+          "metadata": {
+            "code": "filtering.always_fail"
+          }
+        },
+        {
+          "msg": "always fail with collection",
+          "metadata": {
+            "code": "filtering.always_fail_with_collection"
+          }
+        }
+      ],
+      "successes": [
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "builtin.attestation.signature_check"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "builtin.attestation.syntax_check"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "builtin.image.signature_check"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "filtering.always_pass"
+          }
+        },
+        {
+          "msg": "Pass",
+          "metadata": {
+            "code": "filtering.always_pass_with_collection"
+          }
+        }
+      ],
+      "success": false,
+      "signatures": [
+        {
+          "keyid": "",
+          "sig": "${IMAGE_SIGNATURE_acceptance/multi-arch-volatile-neg}"
+        }
+      ],
+      "attestations": [
+        {
+          "type": "https://in-toto.io/Statement/v0.1",
+          "predicateType": "https://slsa.dev/provenance/v0.2",
+          "predicateBuildType": "https://tekton.dev/attestations/chains/pipelinerun@v2",
+          "signatures": [
+            {
+              "keyid": "",
+              "sig": "${ATTESTATION_SIGNATURE_acceptance/multi-arch-volatile-neg}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "key": "${known_PUBLIC_KEY_JSON}",
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::${GITHOST}/git/happy-day-policy.git?ref=${LATEST_COMMIT}"
+        ],
+        "config": {
+          "include": [
+            "@stamps",
+            "filtering.always_pass",
+            "filtering.always_fail"
+          ]
+        },
+        "volatileConfig": {
+          "exclude": [
+            {
+              "value": "filtering.always_fail",
+              "componentNames": [
+                "multi-arch-test"
+              ]
+            },
+            {
+              "value": "filtering.always_fail_with_collection",
+              "componentNames": [
+                "multi-arch-test"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "publicKey": "${known_PUBLIC_KEY}"
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[TestFeatures/volatile config exclude does not match different multi-arch component:stderr - 1]
+Error: success criteria not met
 
 ---

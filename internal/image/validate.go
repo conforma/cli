@@ -19,6 +19,7 @@ package image
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"runtime/trace"
 	"sort"
 	"time"
@@ -76,14 +77,27 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 
 	// Handle image signature validation
 	if p.SkipImageSigCheck() {
-		log.Debug("Image signature check skipped")
+		log.Warn("Image signature check skipped")
 	} else {
 		out.SetImageSignatureCheckFromError(a.ValidateImageSignature(ctx))
 	}
 
-	out.SetAttestationSignatureCheckFromError(a.ValidateAttestationSignature(ctx))
-	if !out.AttestationSignatureCheck.Passed {
-		return out, nil
+	// Handle attestation signature validation
+	if p.SkipAttSigCheck() {
+		log.Warn("Attestation signature check skipped, fetching attestations without verification")
+		if p.SkipImageSigCheck() {
+			log.Warn("Both --skip-image-sig-check and --skip-att-sig-check are active, all cryptographic verification is disabled")
+		}
+		if err := a.FetchAttestationsWithoutVerification(ctx); err != nil {
+			log.Warnf("Failed to fetch attestations without verification: %v", err)
+			out.SetAttestationSignatureCheckFromError(fmt.Errorf("failed to fetch attestations (signature check skipped): %w", err))
+			return out, nil
+		}
+	} else {
+		out.SetAttestationSignatureCheckFromError(a.ValidateAttestationSignature(ctx))
+		if !out.AttestationSignatureCheck.Passed {
+			return out, nil
+		}
 	}
 
 	out.Signatures = a.Signatures()
@@ -112,7 +126,13 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 		return out, nil
 	}
 
-	inputPath, inputJSON, err := a.WriteInputFile(ctx)
+	inputMap, inputJSON, err := a.BuildInput(ctx)
+	if err != nil {
+		log.Debug("Problem building input!")
+		return nil, err
+	}
+
+	inputPath, _, err := a.WriteInputFile(ctx)
 	if err != nil {
 		log.Debug("Problem writing input files!")
 		return nil, err
@@ -121,9 +141,9 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 	var allResults []evaluator.Outcome
 
 	for _, e := range evaluators {
-		// Todo maybe: Handle each one concurrently
 		target := evaluator.EvaluationTarget{
 			Inputs:        []string{inputPath},
+			ParsedInput:   inputMap,
 			ComponentName: comp.Name,
 		}
 		if ref := a.ImageReference(ctx); ref == "" {
@@ -133,10 +153,10 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 		}
 
 		results, err := e.Evaluate(ctx, target)
-		log.Debug("\n\nRunning conftest policy check\n\n")
+		log.Debug("\n\nRunning policy check\n\n")
 
 		if err != nil {
-			log.Debug("Problem running conftest policy check!")
+			log.Debug("Problem running policy check!")
 			return nil, err
 		}
 		allResults = append(allResults, results...)

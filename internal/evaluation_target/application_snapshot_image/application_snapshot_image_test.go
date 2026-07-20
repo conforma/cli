@@ -326,6 +326,100 @@ func TestWriteInputFileMultipleAttestations(t *testing.T) {
 	assert.JSONEq(t, string(inputJSON), string(bytes))
 }
 
+func TestBuildInput(t *testing.T) {
+	t.Run("basic round-trip", func(t *testing.T) {
+		a := ApplicationSnapshotImage{
+			reference:    name.MustParseReference("registry.io/repository/image:tag"),
+			attestations: []attestation.Attestation{createSimpleAttestation(nil)},
+			snapshot: app.SnapshotSpec{
+				Components: []app.SnapshotComponent{
+					{ContainerImage: "registry.io/repository/image:tag"},
+				},
+			},
+			component: app.SnapshotComponent{
+				Name:           "my-component",
+				ContainerImage: "registry.io/repository/image:tag",
+			},
+		}
+
+		parsed, inputJSON, err := a.BuildInput(context.Background())
+		require.NoError(t, err)
+		assert.NotNil(t, parsed)
+		assert.NotEmpty(t, inputJSON)
+
+		img, ok := parsed["image"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "registry.io/repository/image:tag", img["ref"])
+
+		assert.Equal(t, "my-component", parsed["component_name"])
+
+		var fromJSON map[string]any
+		require.NoError(t, json.Unmarshal(inputJSON, &fromJSON))
+		assert.Equal(t, parsed["component_name"], fromJSON["component_name"])
+	})
+
+	t.Run("with parent image", func(t *testing.T) {
+		a := ApplicationSnapshotImage{
+			reference:        name.MustParseReference("registry.io/repository/image:tag"),
+			parentRef:        name.MustParseReference("registry.io/repository/parent:latest"),
+			parentConfigJSON: json.RawMessage(`{"Labels":{"io.k8s.display-name":"Base"}}`),
+		}
+
+		parsed, _, err := a.BuildInput(context.Background())
+		require.NoError(t, err)
+
+		img, ok := parsed["image"].(map[string]any)
+		require.True(t, ok)
+		parent, ok := img["parent"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "registry.io/repository/parent:latest", parent["ref"])
+	})
+
+	t.Run("without parent image", func(t *testing.T) {
+		a := ApplicationSnapshotImage{
+			reference: name.MustParseReference("registry.io/repository/image:tag"),
+		}
+
+		parsed, _, err := a.BuildInput(context.Background())
+		require.NoError(t, err)
+
+		img, ok := parsed["image"].(map[string]any)
+		require.True(t, ok)
+		parent, exists := img["parent"]
+		if exists {
+			parentMap, ok := parent.(map[string]any)
+			assert.True(t, !ok || parentMap["ref"] == nil || parentMap["ref"] == "")
+		}
+	})
+
+	t.Run("matches WriteInputFile output", func(t *testing.T) {
+		a := ApplicationSnapshotImage{
+			reference:    name.MustParseReference("registry.io/repository/image:tag"),
+			attestations: []attestation.Attestation{createSimpleAttestation(nil)},
+			snapshot: app.SnapshotSpec{
+				Components: []app.SnapshotComponent{
+					{ContainerImage: "registry.io/repository/image:tag"},
+				},
+			},
+			component: app.SnapshotComponent{
+				Name:           "test-component",
+				ContainerImage: "registry.io/repository/image:tag",
+			},
+		}
+
+		parsed, buildJSON, err := a.BuildInput(context.Background())
+		require.NoError(t, err)
+
+		fs := afero.NewMemMapFs()
+		ctx := utils.WithFS(context.Background(), fs)
+		_, writeJSON, err := a.WriteInputFile(ctx)
+		require.NoError(t, err)
+
+		assert.JSONEq(t, string(writeJSON), string(buildJSON))
+		assert.NotNil(t, parsed)
+	})
+}
+
 func TestNewApplicationSnapshotImage(t *testing.T) {
 	ctx := context.Background()
 
@@ -1081,6 +1175,156 @@ func createBundleDSSESignature(t *testing.T, statement any) oci.Signature {
 }
 
 // createDSSESignature creates a test signature with a DSSE envelope containing the given statement
+func TestParseAttestationsFromSignatures(t *testing.T) {
+	ref := name.MustParseReference("registry.io/repository/image:tag")
+
+	//nolint:staticcheck
+	slsaV02Statement := in_toto.ProvenanceStatementSLSA02{
+		StatementHeader: in_toto.StatementHeader{
+			Type:          in_toto.StatementInTotoV01,
+			PredicateType: v02.PredicateSLSAProvenance,
+			Subject: []in_toto.Subject{
+				{
+					Name:   "test-image",
+					Digest: common.DigestSet{"sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"},
+				},
+			},
+		},
+		Predicate: v02.ProvenancePredicate{
+			BuildType: pipelineRunBuildType,
+			Builder:   common.ProvenanceBuilder{ID: "https://tekton.dev/chains/v2"},
+		},
+	}
+
+	//nolint:staticcheck
+	slsaV1Statement := in_toto.ProvenanceStatementSLSA1{
+		StatementHeader: in_toto.StatementHeader{
+			Type:          in_toto.StatementInTotoV01,
+			PredicateType: "https://slsa.dev/provenance/v1",
+			Subject: []in_toto.Subject{
+				{
+					Name:   "test-image",
+					Digest: common.DigestSet{"sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"},
+				},
+			},
+		},
+		Predicate: slsav1.ProvenancePredicate{
+			BuildDefinition: slsav1.ProvenanceBuildDefinition{
+				BuildType:          "https://tekton.dev/attestations/chains/pipelinerun@v2",
+				ExternalParameters: json.RawMessage(`{}`),
+			},
+			RunDetails: slsav1.ProvenanceRunDetails{
+				Builder: slsav1.Builder{ID: "https://tekton.dev/chains/v2"},
+			},
+		},
+	}
+
+	//nolint:staticcheck
+	spdxStatement := in_toto.Statement{
+		StatementHeader: in_toto.StatementHeader{
+			Type:          in_toto.StatementInTotoV01,
+			PredicateType: "https://spdx.dev/Document",
+			Subject: []in_toto.Subject{
+				{
+					Name:   "test-image",
+					Digest: common.DigestSet{"sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"},
+				},
+			},
+		},
+		Predicate: json.RawMessage(`{"spdxVersion":"SPDX-2.3"}`),
+	}
+
+	//nolint:staticcheck
+	unknownStatement := in_toto.Statement{
+		StatementHeader: in_toto.StatementHeader{
+			Type:          in_toto.StatementInTotoV01,
+			PredicateType: "https://example.com/unknown/v1",
+			Subject: []in_toto.Subject{
+				{
+					Name:   "test-image",
+					Digest: common.DigestSet{"sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"},
+				},
+			},
+		},
+		Predicate: json.RawMessage(`{"custom":"data"}`),
+	}
+
+	cases := []struct {
+		name              string
+		signatures        []oci.Signature
+		expectErr         bool
+		expectedAttCount  int
+		expectedPredTypes []string
+	}{
+		{
+			name:             "no signatures",
+			signatures:       []oci.Signature{},
+			expectedAttCount: 0,
+		},
+		{
+			name:              "SLSA v0.2",
+			signatures:        []oci.Signature{createDSSESignature(t, slsaV02Statement)},
+			expectedAttCount:  1,
+			expectedPredTypes: []string{v02.PredicateSLSAProvenance},
+		},
+		{
+			name:              "SLSA v1.0",
+			signatures:        []oci.Signature{createDSSESignature(t, slsaV1Statement)},
+			expectedAttCount:  1,
+			expectedPredTypes: []string{"https://slsa.dev/provenance/v1"},
+		},
+		{
+			name:              "SPDX document",
+			signatures:        []oci.Signature{createDSSESignature(t, spdxStatement)},
+			expectedAttCount:  1,
+			expectedPredTypes: []string{"https://spdx.dev/Document"},
+		},
+		{
+			name:              "unknown predicate type",
+			signatures:        []oci.Signature{createDSSESignature(t, unknownStatement)},
+			expectedAttCount:  1,
+			expectedPredTypes: []string{"https://example.com/unknown/v1"},
+		},
+		{
+			name: "multiple mixed types",
+			signatures: []oci.Signature{
+				createDSSESignature(t, slsaV02Statement),
+				createDSSESignature(t, slsaV1Statement),
+				createDSSESignature(t, spdxStatement),
+				createDSSESignature(t, unknownStatement),
+			},
+			expectedAttCount: 4,
+			expectedPredTypes: []string{
+				v02.PredicateSLSAProvenance,
+				"https://slsa.dev/provenance/v1",
+				"https://spdx.dev/Document",
+				"https://example.com/unknown/v1",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := ApplicationSnapshotImage{reference: ref}
+
+			err := a.parseAttestationsFromSignatures(tc.signatures)
+
+			if tc.expectErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tc.expectedAttCount, len(a.attestations))
+
+				if tc.expectedPredTypes != nil {
+					for i, expectedType := range tc.expectedPredTypes {
+						assert.Equal(t, expectedType, a.attestations[i].PredicateType())
+					}
+				}
+			}
+		})
+	}
+}
+
 func createDSSESignature(t *testing.T, statement any) oci.Signature {
 	t.Helper()
 
@@ -1366,4 +1610,159 @@ func TestValidateAttestationSignature(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIsImageSignatureAttestation(t *testing.T) {
+	cases := []struct {
+		name     string
+		sig      oci.Signature
+		expected bool
+	}{
+		{
+			name: "DSSE with cosign sign predicate",
+			sig: createBundleDSSESignature(t, map[string]string{
+				"predicateType": cosignSignPredicateType,
+			}),
+			expected: true,
+		},
+		{
+			name: "DSSE with SLSA provenance predicate",
+			sig: createBundleDSSESignature(t, map[string]string{
+				"predicateType": v02.PredicateSLSAProvenance,
+			}),
+			expected: false,
+		},
+		{
+			name: "non-DSSE payload treated as simple signing",
+			sig: func() oci.Signature {
+				s, err := static.NewSignature([]byte(`{"some": "data"}`), "sig")
+				require.NoError(t, err)
+				return s
+			}(),
+			expected: true,
+		},
+		{
+			name: "empty payload treated as simple signing",
+			sig: func() oci.Signature {
+				s, err := static.NewSignature([]byte(`{}`), "sig")
+				require.NoError(t, err)
+				return s
+			}(),
+			expected: true,
+		},
+		{
+			name: "DSSE with invalid base64 payload",
+			sig: func() oci.Signature {
+				envelope, err := json.Marshal(map[string]string{
+					"payloadType": "application/vnd.in-toto+json",
+					"payload":     "!!!not-base64!!!",
+				})
+				require.NoError(t, err)
+				s, err := static.NewSignature(envelope, "sig")
+				require.NoError(t, err)
+				return s
+			}(),
+			expected: false,
+		},
+		{
+			name: "DSSE with non-JSON inner payload",
+			sig: func() oci.Signature {
+				envelope, err := json.Marshal(map[string]string{
+					"payloadType": "application/vnd.in-toto+json",
+					"payload":     base64.StdEncoding.EncodeToString([]byte("not json")),
+				})
+				require.NoError(t, err)
+				s, err := static.NewSignature(envelope, "sig")
+				require.NoError(t, err)
+				return s
+			}(),
+			expected: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, isImageSignatureAttestation(tc.sig))
+		})
+	}
+}
+
+func TestExtractSignaturesFromBundle(t *testing.T) {
+	t.Run("single signature", func(t *testing.T) {
+		sig := makeBundleSig(t, []cosign.Signatures{
+			{KeyID: "key-1", Sig: "c2lnLTE="},
+		})
+
+		results, err := extractSignaturesFromBundle(sig)
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		assert.Equal(t, "c2lnLTE=", results[0].Signature)
+		assert.Equal(t, "key-1", results[0].KeyID)
+	})
+
+	t.Run("multiple signatures", func(t *testing.T) {
+		sig := makeBundleSig(t, []cosign.Signatures{
+			{KeyID: "key-a", Sig: "c2lnLWE="},
+			{KeyID: "key-b", Sig: "c2lnLWI="},
+		})
+
+		results, err := extractSignaturesFromBundle(sig)
+		require.NoError(t, err)
+		require.Len(t, results, 2)
+		assert.Equal(t, "c2lnLWE=", results[0].Signature)
+		assert.Equal(t, "key-a", results[0].KeyID)
+		assert.Equal(t, "c2lnLWI=", results[1].Signature)
+		assert.Equal(t, "key-b", results[1].KeyID)
+	})
+
+	t.Run("base signature takes priority over cosign signature", func(t *testing.T) {
+		sig := makeBundleSigWithBase64(t, "base-sig-value", []cosign.Signatures{
+			{KeyID: "key-1", Sig: "should-not-override"},
+		})
+
+		results, err := extractSignaturesFromBundle(sig)
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		assert.Equal(t, "base-sig-value", results[0].Signature)
+	})
+
+	t.Run("invalid payload returns error", func(t *testing.T) {
+		sig, err := static.NewSignature([]byte("not json"), "sig")
+		require.NoError(t, err)
+
+		_, err = extractSignaturesFromBundle(sig)
+		assert.ErrorContains(t, err, "cannot parse DSSE envelope")
+	})
+
+	t.Run("empty signatures list returns empty results", func(t *testing.T) {
+		sig := makeBundleSig(t, []cosign.Signatures{})
+
+		results, err := extractSignaturesFromBundle(sig)
+		require.NoError(t, err)
+		assert.Empty(t, results)
+	})
+}
+
+// makeBundleSig creates a static.Signature whose Uncompressed() returns a
+// cosign.AttestationPayload with the given signatures. The base Base64Signature
+// is empty so the cosign.Signatures values are used.
+func makeBundleSig(t *testing.T, sigs []cosign.Signatures) oci.Signature {
+	t.Helper()
+	return makeBundleSigWithBase64(t, "", sigs)
+}
+
+func makeBundleSigWithBase64(t *testing.T, base64Sig string, sigs []cosign.Signatures) oci.Signature {
+	t.Helper()
+
+	ap := cosign.AttestationPayload{
+		PayloadType: "application/vnd.in-toto+json",
+		PayLoad:     base64.StdEncoding.EncodeToString([]byte(`{}`)),
+		Signatures:  sigs,
+	}
+	payload, err := json.Marshal(ap)
+	require.NoError(t, err)
+
+	s, err := static.NewSignature(payload, base64Sig)
+	require.NoError(t, err)
+	return s
 }

@@ -76,6 +76,7 @@ type Policy interface {
 	Spec() ecc.EnterpriseContractPolicySpec
 	EffectiveTime() time.Time
 	SkipImageSigCheck() bool
+	SkipAttSigCheck() bool
 	AttestationTime(time.Time)
 	Identity() cosign.Identity
 	Keyless() bool
@@ -91,6 +92,7 @@ type policy struct {
 	identity          cosign.Identity
 	ignoreRekor       bool
 	skipImageSigCheck bool
+	skipAttSigCheck   bool
 }
 
 // PublicKeyPEM returns the PublicKey in PEM format. When SigVerifier is not
@@ -169,6 +171,7 @@ type Options struct {
 	Identity          cosign.Identity
 	IgnoreRekor       bool
 	SkipImageSigCheck bool
+	SkipAttSigCheck   bool
 	PolicyRef         string
 	PublicKey         string
 	RekorURL          string
@@ -266,6 +269,7 @@ func NewPolicy(ctx context.Context, opts Options) (Policy, error) {
 
 	p.ignoreRekor = opts.IgnoreRekor
 	p.skipImageSigCheck = opts.SkipImageSigCheck
+	p.skipAttSigCheck = opts.SkipAttSigCheck
 
 	if opts.PublicKey != "" && opts.PublicKey != p.PublicKey {
 		p.PublicKey = opts.PublicKey
@@ -407,6 +411,10 @@ func (p policy) EffectiveTime() time.Time {
 
 func (p policy) SkipImageSigCheck() bool {
 	return p.skipImageSigCheck
+}
+
+func (p policy) SkipAttSigCheck() bool {
+	return p.skipAttSigCheck
 }
 
 func isNow(choosenTime string) bool {

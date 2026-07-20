@@ -1,0 +1,112 @@
+
+[TestFeatures/server mode evaluation with passing policy:response - 1]
+{
+  "success": true,
+  "filepaths": [
+    {
+      "filepath": "input",
+      "violations": [],
+      "warnings": [],
+      "successes": null,
+      "success": true,
+      "success-count": 1
+    }
+  ],
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::https://${GITHOST}/git/happy-day-policy.git"
+        ]
+      }
+    ]
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[TestFeatures/server mode evaluation with violations:response - 1]
+{
+  "success": false,
+  "filepaths": [
+    {
+      "filepath": "input",
+      "violations": [
+        {
+          "msg": "ham is not delicious",
+          "metadata": {
+            "code": "ham.delicious"
+          }
+        },
+        {
+          "msg": "spam is not true",
+          "metadata": {
+            "code": "spam.valid"
+          }
+        }
+      ],
+      "warnings": [],
+      "successes": null,
+      "success": false,
+      "success-count": 0
+    }
+  ],
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::https://${GITHOST}/git/ham-policy"
+        ]
+      },
+      {
+        "policy": [
+          "git::https://${GITHOST}/git/spam-policy"
+        ]
+      }
+    ]
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[TestFeatures/server mode health endpoints:response - 1]
+{
+  "status": "ok"
+}
+---
+
+[TestFeatures/server mode invalid input:response - 1]
+{
+  "error": "request body is not valid JSON or YAML",
+  "status": 400
+}
+---
+
+[TestFeatures/server mode evaluation with YAML input:response - 1]
+{
+  "success": true,
+  "filepaths": [
+    {
+      "filepath": "input",
+      "violations": [],
+      "warnings": [],
+      "successes": null,
+      "success": true,
+      "success-count": 1
+    }
+  ],
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::https://${GITHOST}/git/happy-day-policy.git"
+        ]
+      }
+    ]
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---

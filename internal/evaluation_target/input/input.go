@@ -24,9 +24,11 @@ import (
 	"github.com/conforma/cli/internal/evaluator"
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/policy/source"
+	"github.com/conforma/cli/internal/utils"
 )
 
 var newConftestEvaluator = evaluator.NewConftestEvaluator
+var newOPAEvaluator = evaluator.NewOPAEvaluator
 
 // Input represents the structure needed to evaluate a generic file input
 type Input struct {
@@ -48,13 +50,19 @@ func NewInput(ctx context.Context, paths []string, p policy.Policy) (*Input, err
 			log.Debugf("policySource: %#v", policySource)
 		}
 
-		c, err := newConftestEvaluator(ctx, policySources, p, sourceGroup)
+		var c evaluator.Evaluator
+		var err error
+		if utils.IsOpaEnabled() {
+			c, err = newOPAEvaluator(ctx, policySources, p, sourceGroup, nil)
+		} else {
+			c, err = newConftestEvaluator(ctx, policySources, p, sourceGroup)
+		}
 		if err != nil {
-			log.Debug("Failed to initialize the conftest evaluator!")
+			log.Debug("Failed to initialize the evaluator!")
 			return nil, err
 		}
 
-		log.Debug("Conftest evaluator initialized")
+		log.Debug("Evaluator initialized")
 		i.Evaluators = append(i.Evaluators, c)
 
 	}

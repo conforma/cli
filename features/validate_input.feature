@@ -23,7 +23,7 @@ Feature: validate input
           name: init
           version: "0.1"
     """
-    When ec command is run with "validate input --file pipeline_definition.yaml --policy git::https://${GITHOST}/git/happy-day-config.git --output json"
+    When ec command is run with "validate input pipeline_definition.yaml --policy git::https://${GITHOST}/git/happy-day-config.git --output json"
     Then the exit status should be 0
     Then the output should match the snapshot
 
@@ -47,7 +47,7 @@ Feature: validate input
           name: init
           version: "0.1"
     """
-    When ec command is run with "validate input --file pipeline_definition.yaml --policy git::https://${GITHOST}/git/happy-day-config-with-public-key.git --output json"
+    When ec command is run with "validate input pipeline_definition.yaml --policy git::https://${GITHOST}/git/happy-day-config-with-public-key.git --output json"
     Then the exit status should be 0
     Then the output should match the snapshot
 
@@ -70,7 +70,7 @@ Feature: validate input
           name: init
           version: "0.1"
     """
-    When ec command is run with "validate input --file pipeline_definition.yaml --policy git::https://${GITHOST}/git/happy-day-config.git --output text --show-successes --color"
+    When ec command is run with "validate input pipeline_definition.yaml --policy git::https://${GITHOST}/git/happy-day-config.git --output text --show-successes --color"
     Then the exit status should be 0
     Then the output should match the snapshot
 
@@ -93,7 +93,7 @@ Feature: validate input
           name: init
           version: "0.1"
     """
-    When ec command is run with "validate input --file pipeline_definition.yaml --policy git::https://${GITHOST}/git/sad-day-config.git --output json"
+    When ec command is run with "validate input pipeline_definition.yaml --policy git::https://${GITHOST}/git/sad-day-config.git --output json"
     Then the exit status should be 1
     Then the output should match the snapshot
 
@@ -110,7 +110,7 @@ Feature: validate input
       spam: false
       ham: rotten
       """
-    When ec command is run with "validate input --file input.yaml --policy git::https://${GITHOST}/git/multiple-sources-config.git --output json"
+    When ec command is run with "validate input input.yaml --policy git::https://${GITHOST}/git/multiple-sources-config.git --output json"
     Then the exit status should be 1
     Then the output should match the snapshot
 
@@ -132,7 +132,7 @@ Feature: validate input
       """
       {}
       """
-    When ec command is run with "validate input --file ${TMPDIR}/input.json --policy ${TMPDIR}/policy.yaml -o yaml"
+    When ec command is run with "validate input ${TMPDIR}/input.json --policy ${TMPDIR}/policy.yaml -o yaml"
     Then the exit status should be 0
     Then the output should match the snapshot
 
@@ -153,6 +153,29 @@ Feature: validate input
       """
       {}
       """
-    When ec command is run with "validate input --file ${TMPDIR}/input.json --policy ${TMPDIR}/policy.yaml -o yaml"
+    When ec command is run with "validate input ${TMPDIR}/input.json --policy ${TMPDIR}/policy.yaml -o yaml"
     Then the exit status should be 1
+    Then the output should match the snapshot
+
+  Scenario: deprecated file flag backward compatibility
+    Given a git repository named "happy-day-config" with
+      | policy.yaml | examples/happy_config.yaml |
+    Given a git repository named "happy-day-policy" with
+      | main.rego | examples/happy_day.rego |
+    Given a pipeline definition file named "pipeline_definition.yaml" containing
+    """
+    ---
+    apiVersion: tekton.dev/v1
+    kind: Pipeline
+    metadata:
+      name: basic-build
+    spec:
+      tasks:
+      - name: appstudio-init
+        taskRef:
+          name: init
+          version: "0.1"
+    """
+    When ec command is run with "validate input --file pipeline_definition.yaml --policy git::https://${GITHOST}/git/happy-day-config.git --output json"
+    Then the exit status should be 0
     Then the output should match the snapshot

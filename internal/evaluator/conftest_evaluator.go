@@ -221,6 +221,7 @@ func (r conftestRunner) Run(ctx context.Context, fileList []string) (result []Ou
 	var conftestResult []output.CheckResult
 	conftestResult, err = r.TestRunner.Run(ctx, fileList)
 	if err != nil {
+		err = wrapRegoError(err)
 		return
 	}
 
@@ -268,6 +269,7 @@ func (r conftestRunner) Run(ctx context.Context, fileList []string) (result []Ou
 	}
 	engine, err = conftest.LoadWithData(r.Policy, r.Data, compilerOptions)
 	if err != nil {
+		err = wrapRegoError(err)
 		return
 	}
 
@@ -428,7 +430,10 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 	nonAnnotatedRules := nonAnnotatedRules{}
 	// Track data source directories for prepareDataDirs
 	dataSourceDirs := []string{}
-	// Download all sources
+	// Resolve all policy sources. Despite calling GetPolicy on every Evaluate,
+	// actual downloads are cached via sync.OnceValues in getPolicyThroughCache,
+	// (so we are not downloading policies on each request when the `ec validate
+	// input --server` web service is running).
 	for _, s := range c.policySources {
 		dir, err := s.GetPolicy(ctx, c.workDir, false)
 		if err != nil {
@@ -661,7 +666,7 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		result.Skipped = skipped
 
 		// Replace the placeholder successes slice with the actual successes.
-		result.Successes = c.computeSuccesses(result, rules, target.Target, target.ComponentName, missingIncludes, unifiedFilter)
+		result.Successes = c.computeSuccesses(result, rules, target.Target, target.ComponentName, missingIncludes, unifiedFilter, effectiveTime)
 
 		totalRules += len(result.Warnings) + len(result.Failures) + len(result.Successes)
 
@@ -802,6 +807,7 @@ func (c conftestEvaluator) computeSuccesses(
 	componentName string,
 	missingIncludes map[string]bool,
 	unifiedFilter PostEvaluationFilter,
+	effectiveTime time.Time,
 ) []Result {
 	// what rules, by code, have we seen in the Conftest results, use map to
 	// take advantage of hashing for quicker lookup
@@ -858,7 +864,7 @@ func (c conftestEvaluator) computeSuccesses(
 		if unifiedFilter != nil {
 			// Use the unified filter to check if this success should be included
 			filteredResults, _ := unifiedFilter.FilterResults(
-				[]Result{success}, rules, imageRef, componentName, missingIncludes, time.Now())
+				[]Result{success}, rules, imageRef, componentName, missingIncludes, effectiveTime)
 
 			if len(filteredResults) == 0 {
 				log.Debugf("Skipping result success: %#v", success)
@@ -978,7 +984,7 @@ func createConfigJSON(ctx context.Context, dataDir string, p ConfigProvider) err
 	}
 	if !exists {
 		log.Debugf("Config data dir '%s' does not exist, will create.", dataDir)
-		if err := fs.MkdirAll(configDataDir, 0755); err != nil {
+		if err := fs.MkdirAll(configDataDir, 0o755); err != nil {
 			return err
 		}
 	}
@@ -1027,7 +1033,7 @@ func createConfigJSON(ctx context.Context, dataDir string, p ConfigProvider) err
 	}
 	// write our jsonData content to the config/config.json file in the data dir
 	log.Debugf("Writing config data to %s: %#v", configFilePath, string(configJSON))
-	if err := afero.WriteFile(fs, configFilePath, configJSON, 0444); err != nil {
+	if err := afero.WriteFile(fs, configFilePath, configJSON, 0o444); err != nil {
 		return err
 	}
 
@@ -1044,7 +1050,7 @@ func (c *conftestEvaluator) createDataDirectory(ctx context.Context) error {
 	}
 	if !exists {
 		log.Debugf("Data dir '%s' does not exist, will create.", dataDir)
-		if err := fs.MkdirAll(dataDir, 0755); err != nil {
+		if err := fs.MkdirAll(dataDir, 0o755); err != nil {
 			return err
 		}
 	}
@@ -1195,13 +1201,9 @@ func strictCapabilities(ctx context.Context) (string, error) {
 	log.Debug("Network access from rego policies disabled")
 
 	builtins := make([]*ast.Builtin, 0, len(capabilities.Builtins))
-	disallowed := sets.NewString(
-		// disallow access to environment variables
-		"opa.runtime",
-		// disallow external connections. This is a second layer of defense since
-		// AllowNet should prevent external connections in the first place.
-		"http.send", "net.lookup_ip_addr",
-	)
+	// disallowedBuiltins is defined in rego_errors.go as the single source of
+	// truth for security-restricted built-in functions.
+	disallowed := sets.NewString(disallowedBuiltins...)
 	for _, b := range capabilities.Builtins {
 		if !disallowed.Has(b.Name) {
 			builtins = append(builtins, b)

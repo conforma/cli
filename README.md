@@ -11,6 +11,17 @@ such as:
 Consult the [documentation][docs] for available sub-commands, descriptions and
 examples of use.
 
+## Installation
+
+Install a pre-built binary from the [latest release](https://github.com/conforma/cli/releases),
+or build from source:
+
+```bash
+make build        # builds dist/ec for your platform
+```
+
+See the [documentation][docs] for usage examples.
+
 ## Building
 
 Run `make build` from the root directory and use the `dist/ec` executable, or
@@ -105,6 +116,19 @@ This issue may be resolved by increasing the total number of keys by executing t
 ``` bash
 $ echo kernel.keys.maxkeys=1000 | sudo tee -a /etc/sysctl.conf && sudo sysctl -p
 ```
+
+#### **2.4. Ryuk reaper container fails to start**
+
+Acceptance tests may fail with errors like `No such container` or `unexpected container status "removing"` when the testcontainers' ryuk reaper container cannot access the Docker socket. To diagnose, run ryuk manually in the foreground:
+``` bash
+$ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock testcontainers/ryuk:0.11.0
+```
+If the error is `permission denied while trying to connect to the Docker daemon socket`, create or update `~/.testcontainers.properties` with:
+```
+ryuk.container.privileged=true
+```
+
+This tells testcontainers to run the ryuk container with `--privileged`, granting it access to the Docker socket.
 
 #### **3. Apiserver and Rekor Host Resolution Failure**
 

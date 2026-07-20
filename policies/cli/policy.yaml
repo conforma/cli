@@ -29,11 +29,9 @@ sources:
     data:
       - github.com/release-engineering/rhtap-ec-policy//data
       - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest
-      # This is likely to be retired soon, but we need it now I think
-      - oci::quay.io/konflux-ci/konflux-vanguard/data-acceptable-bundles:latest
     policy:
       # Let's not pin the digest here
-      - oci::quay.io/enterprise-contract/ec-release-policy:latest
+      - oci::quay.io/conforma/release-policy:latest
     config:
       include:
         - '@redhat'

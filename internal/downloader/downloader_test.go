@@ -159,12 +159,11 @@ func TestOCITracing(t *testing.T) {
 	t.Cleanup(trace.Stop)
 
 	log.Level = logrus.TraceLevel
-	initialize = _initialize // we want it to re-execute for the test
 	t.Cleanup(func() {
 		log.Level = logrus.InfoLevel
 		initialize = sync.OnceFunc(_initialize)
-		goci.Transport = http.DefaultTransport
-		ghttp.Transport = http.DefaultTransport
+		ociGatherer = nil
+		httpGatherer = nil
 	})
 	registry := httptest.NewServer(registry.New())
 	t.Cleanup(registry.Close)
@@ -179,7 +178,12 @@ func TestOCITracing(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, remote.Push(ref, img))
 
-	_, err = gatherFunc(context.Background(), ref.String(), t.TempDir())
+	// Initialize directly then call ociGatherer.Gather to test the OCI
+	// tracing path. Bare localhost refs fall through to the registry's
+	// default gatherer (no tracing), so we invoke the gatherer directly.
+	_initialize()
+
+	_, err = ociGatherer.Gather(context.Background(), ref.String(), t.TempDir())
 	require.NoError(t, err)
 
 	trace.Stop()
@@ -215,12 +219,12 @@ func TestHTTPTracing(t *testing.T) {
 	t.Cleanup(trace.Stop)
 
 	log.Level = logrus.TraceLevel
-	initialize = _initialize // we want it to re-execute for the test
+	initialize = _initialize
 	t.Cleanup(func() {
 		log.Level = logrus.InfoLevel
 		initialize = sync.OnceFunc(_initialize)
-		goci.Transport = http.DefaultTransport
-		ghttp.Transport = http.DefaultTransport
+		ociGatherer = nil
+		httpGatherer = nil
 	})
 	var requests []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -261,32 +265,35 @@ func TestHTTPTracing(t *testing.T) {
 	assert.Equal(t, 3, found)
 }
 
+// TestOCIClientConfiguration verifies _initialize constructs an OCI gatherer.
+// OCIGatherer.transport is unexported, so we cannot verify the retry transport
+// directly (unlike TestHTTPClientConfiguration). TestOCITracing provides
+// integration-level verification that the transport stack is wired correctly.
 func TestOCIClientConfiguration(t *testing.T) {
-	defaultMaxRetry := echttp.DefaultRetry.MaxRetry
 	t.Cleanup(func() {
-		echttp.DefaultRetry.MaxRetry = defaultMaxRetry
+		ociGatherer = nil
+		httpGatherer = nil
 	})
-	echttp.DefaultRetry.MaxRetry = rand.Int() //nolint:gosec // G404 - no need for a secure random here
 
 	_initialize()
 
-	assert.IsType(t, &retry.Transport{}, goci.Transport)
-
-	transport := goci.Transport.(*retry.Transport)
-	assert.Equal(t, echttp.DefaultRetry.MaxRetry, transport.Policy().(*retry.GenericPolicy).MaxRetry)
+	assert.IsType(t, &goci.OCIGatherer{}, ociGatherer)
 }
 
 func TestHTTPClientConfiguration(t *testing.T) {
 	defaultMaxRetry := echttp.DefaultRetry.MaxRetry
 	t.Cleanup(func() {
 		echttp.DefaultRetry.MaxRetry = defaultMaxRetry
+		ociGatherer = nil
+		httpGatherer = nil
 	})
 	echttp.DefaultRetry.MaxRetry = rand.Int() //nolint:gosec // G404 - no need for a secure random here
 
 	_initialize()
 
-	assert.IsType(t, &retry.Transport{}, ghttp.Transport)
+	require.IsType(t, &ghttp.HTTPGatherer{}, httpGatherer)
+	assert.IsType(t, &retry.Transport{}, httpGatherer.Client.Transport)
 
-	transport := ghttp.Transport.(*retry.Transport)
+	transport := httpGatherer.Client.Transport.(*retry.Transport)
 	assert.Equal(t, echttp.DefaultRetry.MaxRetry, transport.Policy().(*retry.GenericPolicy).MaxRetry)
 }

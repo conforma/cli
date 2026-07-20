@@ -326,7 +326,7 @@ func removeDuplicateStrings(slice []string) []string {
 type Writer struct {
 	FS            afero.Fs    // defaults to the package-level FS or afero.NewOsFs()
 	TempDirPrefix string      // defaults to "vsa-"
-	FilePerm      os.FileMode // defaults to 0600
+	FilePerm      os.FileMode // defaults to 0o600
 }
 
 // NewWriter creates a new VSA file writer

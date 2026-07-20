@@ -138,6 +138,13 @@
 }
 ---
 
+[TestFeatures/Golden container image with OPA evaluator:results - 1]
+{
+  "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":5,\"failures\":0,\"warnings\":0,\"result\":\"SUCCESS\"}\n",
+  "VSA_GENERATED": "false"
+}
+---
+
 [TestFeatures/Golden container image with trusted artifacts:show-config - 1]
 {
   "policy": {

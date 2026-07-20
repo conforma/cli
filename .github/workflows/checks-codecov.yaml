@@ -127,7 +127,7 @@ jobs:
 
       - name: Install tkn CLI
         run: |
-          TKN_VERSION=$(grep 'tektoncd/cli' tools/go.mod | awk '{print $2}' | sed 's/^v//')
+          TKN_VERSION=$(grep 'github.com/tektoncd/cli' tools/go.mod | awk '{print $2}' | sed 's/^v//')
           TKN_TARBALL="tkn_${TKN_VERSION}_Linux_x86_64.tar.gz"
           curl -fsSL "https://github.com/tektoncd/cli/releases/download/v${TKN_VERSION}/checksums.txt" -o checksums.txt
           curl -fsSL "https://github.com/tektoncd/cli/releases/download/v${TKN_VERSION}/${TKN_TARBALL}" -o "${TKN_TARBALL}"
@@ -246,8 +246,4 @@ jobs:
           cache: false
 
       - name: Development tools can be run
-        run: |
-          go run -modfile tools/go.mod github.com/tektoncd/cli/cmd/tkn version
-          go run -modfile tools/go.mod sigs.k8s.io/kustomize/kustomize/v5 version
-          go run -modfile tools/go.mod helm.sh/helm/v3/cmd/helm version
-          go run -modfile tools/go.mod github.com/open-policy-agent/conftest --version
+        run: make tools-ci

@@ -81,23 +81,20 @@ func TestPrepareDataDirs(t *testing.T) {
 
 			// Create the base data directory
 			dataDir := "/test/data"
-			require.NoError(t, fs.MkdirAll(dataDir, 0755))
+			require.NoError(t, fs.MkdirAll(dataDir, 0o755))
 
 			// Create the test files with minimal content
 			for _, filePath := range tt.filePaths {
 				fullPath := filepath.Join(dataDir, filePath)
-				require.NoError(t, fs.MkdirAll(filepath.Dir(fullPath), 0755))
-				require.NoError(t, afero.WriteFile(fs, fullPath, []byte("test"), 0644))
+				require.NoError(t, fs.MkdirAll(filepath.Dir(fullPath), 0o755))
+				require.NoError(t, afero.WriteFile(fs, fullPath, []byte("test"), 0o644))
 			}
 
-			// Create evaluator instance
 			evaluator := conftestEvaluator{
 				dataDir: dataDir,
 				fs:      fs,
 			}
 
-			// Call prepareDataDirs with the base data directory as data source
-			// In real usage, dataSourceDirs would be the directories returned by GetPolicy
 			actualDirs, err := evaluator.prepareDataDirs(ctx, []string{dataDir})
 			require.NoError(t, err)
 

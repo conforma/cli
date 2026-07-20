@@ -19,6 +19,7 @@ package downloader
 import (
 	"context"
 	"fmt"
+	net_http "net/http"
 	"regexp"
 	"strings"
 	"sync"
@@ -37,14 +38,39 @@ type key int
 
 const downloadImplKey key = 0
 
+// downloadImpl defines the interface for downloading files.
 type downloadImpl interface {
 	Download(context.Context, string, []string) error
 }
 
 var log = logrus.StandardLogger()
 
+// ociGatherer and httpGatherer hold gatherer instances configured with
+// tracing and retry transports via WithTransport. Initialized once by
+// _initialize via sync.OnceFunc.
+var (
+	ociGatherer  *goci.OCIGatherer
+	httpGatherer *ghttp.HTTPGatherer
+)
+
+// gatherFunc dispatches sources to the appropriate gatherer. OCI and HTTP
+// scheme prefixes route to custom gatherers; all other sources fall through
+// to the go-gather registry.
 var gatherFunc = func(ctx context.Context, source, destination string) (metadata.Metadata, error) {
 	initialize()
+
+	// Dispatch to custom gatherers only for unambiguous scheme prefixes.
+	// Bare hostnames (e.g. quay.io/..., 127.0.0.1/...) fall through to
+	// the registry, which checks git matchers before OCI matchers.
+	switch {
+	case strings.HasPrefix(source, "oci://") || strings.HasPrefix(source, "oci::"):
+		return ociGatherer.Gather(ctx, source, destination)
+	case strings.HasPrefix(source, "https://") || strings.HasPrefix(source, "http://"):
+		if httpGatherer.Matcher(source) {
+			return httpGatherer.Gather(ctx, source, destination)
+		}
+	}
+
 	g, err := registry.GetGatherer(source)
 	if err != nil {
 		return nil, err
@@ -52,10 +78,13 @@ var gatherFunc = func(ctx context.Context, source, destination string) (metadata
 	return g.Gather(ctx, source, destination)
 }
 
+// _initialize builds the transport stack (optional tracing + retry) and
+// constructs the OCI and HTTP gatherer instances.
 var _initialize = func() {
+	var base net_http.RoundTripper = net_http.DefaultTransport
+
 	if log.IsLevelEnabled(logrus.TraceLevel) {
-		goci.Transport = http.NewTracingRoundTripperWithLogger(goci.Transport)
-		ghttp.Transport = http.NewTracingRoundTripperWithLogger(ghttp.Transport)
+		base = http.NewTracingRoundTripperWithLogger(base)
 	}
 
 	backoff := retry.ExponentialBackoff(http.DefaultBackoff.Duration, http.DefaultBackoff.Factor, http.DefaultBackoff.Jitter)
@@ -69,13 +98,16 @@ var _initialize = func() {
 		return policy
 	}
 
-	ociTransport := retry.NewTransport(goci.Transport)
+	ociTransport := retry.NewTransport(base)
 	ociTransport.Policy = policyfn
-	goci.Transport = ociTransport
+	oci := goci.NewOCIGatherer(goci.WithTransport(ociTransport))
 
-	httpTransport := retry.NewTransport(ghttp.Transport)
+	httpTransport := retry.NewTransport(base)
 	httpTransport.Policy = policyfn
-	ghttp.Transport = httpTransport
+	h := ghttp.NewHTTPGatherer(ghttp.WithTransport(httpTransport))
+
+	ociGatherer = oci
+	httpGatherer = h
 }
 
 var initialize = sync.OnceFunc(_initialize)

@@ -76,6 +76,7 @@ func CreateRemoteOptions(ctx context.Context) []remote.Option {
 type Client interface {
 	VerifyImageSignatures(name.Reference, *cosign.CheckOpts) ([]oci.Signature, bool, error)
 	VerifyImageAttestations(name.Reference, *cosign.CheckOpts) ([]oci.Signature, bool, error)
+	FetchAttestationLayers(name.Reference) ([]oci.Signature, error)
 	HasBundles(context.Context, name.Reference) (bool, error)
 	Head(name.Reference) (*v1.Descriptor, error)
 	ResolveDigest(name.Reference) (string, error)
@@ -128,6 +129,34 @@ func (c *defaultClient) VerifyImageAttestations(ref name.Reference, opts *cosign
 
 	opts.RegistryClientOpts = append(opts.RegistryClientOpts, ociremote.WithRemoteOptions(c.opts...))
 	return cosign.VerifyImageAttestations(c.ctx, ref, opts)
+}
+
+func (c *defaultClient) FetchAttestationLayers(ref name.Reference) ([]oci.Signature, error) {
+	if trace.IsEnabled() {
+		region := trace.StartRegion(c.ctx, "ec:fetch-attestation-layers")
+		defer region.End()
+		trace.Logf(c.ctx, "", "image=%q", ref)
+	}
+
+	signedEntity, err := ociremote.SignedEntity(ref, ociremote.WithRemoteOptions(c.opts...))
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch signed entity: %w", err)
+	}
+
+	layers, err := signedEntity.Attestations()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch attestations: %w", err)
+	}
+	if layers == nil {
+		return nil, nil
+	}
+
+	sigs, err := layers.Get()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get attestation signatures: %w", err)
+	}
+
+	return sigs, nil
 }
 
 func (c *defaultClient) HasBundles(ctx context.Context, ref name.Reference) (bool, error) {

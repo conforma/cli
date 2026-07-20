@@ -28,6 +28,7 @@ package evaluator
 
 import (
 	"testing"
+	"time"
 
 	ecc "github.com/conforma/crds/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
@@ -532,6 +533,7 @@ func TestComputeSuccessesLegacyFallback(t *testing.T) {
 				tt.componentName,
 				tt.missingIncludes,
 				nil, // nil unifiedFilter triggers the legacy fallback path
+				time.Now(),
 			)
 
 			assert.Equal(t, tt.expectedCount, len(successes), "unexpected number of successes")

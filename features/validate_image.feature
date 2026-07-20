@@ -56,6 +56,65 @@ Feature: evaluate enterprise contract
     # builtin.attestation.image_check is not found in the success output
     Then the output should match the snapshot
 
+  Scenario: invalid att signature with valid image sig and skip-att-sig-check flag
+    Given a key pair named "known"
+    Given a key pair named "unknown"
+    Given an image named "acceptance/invalid-att-signature"
+
+    # We're going to use the "known" public key when validating, so the image
+    # sig check should pass but the att sig check should fail (if it wasn't skipped).
+    Given a valid image signature of "acceptance/invalid-att-signature" image signed by the "known" key
+    Given a valid attestation of "acceptance/invalid-att-signature" signed by the "unknown" key
+
+    Given a git repository named "invalid-att-signature" with
+      | main.rego | examples/happy_day.rego |
+    Given policy configuration named "invalid-att-signature-policy" with specification
+    """
+    {
+      "sources": [
+        {
+          "policy": [
+            "git::https://${GITHOST}/git/invalid-att-signature.git"
+          ]
+        }
+      ]
+    }
+    """
+    # Notice we're using the --skip-att-sig-check flag, which is the reason this is
+    # green even though attestation is signed with a different key to the one we're providing
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/invalid-att-signature --policy acceptance/invalid-att-signature-policy --public-key ${known_PUBLIC_KEY} --skip-att-sig-check --rekor-url ${REKOR} --show-successes --output json"
+    Then the exit status should be 0
+    Then the output should match the snapshot
+
+  Scenario: skip both image and att sig checks for debugging
+    Given a key pair named "known"
+    Given a key pair named "unknown"
+    Given an image named "acceptance/skip-both-sig-checks"
+
+    # Both signatures use the wrong key. Without the skip flags this would fail.
+    Given a valid image signature of "acceptance/skip-both-sig-checks" image signed by the "unknown" key
+    Given a valid attestation of "acceptance/skip-both-sig-checks" signed by the "unknown" key
+
+    Given a git repository named "skip-both-sig-checks" with
+      | main.rego | examples/happy_day.rego |
+    Given policy configuration named "skip-both-sig-checks-policy" with specification
+    """
+    {
+      "sources": [
+        {
+          "policy": [
+            "git::https://${GITHOST}/git/skip-both-sig-checks.git"
+          ]
+        }
+      ]
+    }
+    """
+    # This is the expected real-world debugging usage: skip all signature checks
+    # to focus on policy evaluation when the signing key is unavailable
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/skip-both-sig-checks --policy acceptance/skip-both-sig-checks-policy --public-key ${known_PUBLIC_KEY} --skip-image-sig-check --skip-att-sig-check --rekor-url ${REKOR} --show-successes --output json"
+    Then the exit status should be 0
+    Then the output should match the snapshot
+
   Scenario: happy day with git config and yaml
     Given a key pair named "known"
     Given an image named "acceptance/ec-happy-day"
@@ -1054,6 +1113,107 @@ Feature: evaluate enterprise contract
     """
     When ec command is run with "validate image --image ${REGISTRY}/acceptance/volatile-config-test --policy acceptance/ec-policy --public-key ${known_PUBLIC_KEY} --ignore-rekor --output json"
     Then the exit status should be 0
+    Then the output should match the snapshot
+
+  # EC-1824: verify volatile config componentNames excludes work with
+  # multi-arch expanded component names (e.g., "foo-sha256:<digest>-arm64").
+
+  Scenario: volatile config exclude matches multi-arch expanded component name
+    Given a key pair named "known"
+    Given an image named "acceptance/multi-arch-volatile"
+    Given a valid image signature of "acceptance/multi-arch-volatile" image signed by the "known" key
+    Given a valid attestation of "acceptance/multi-arch-volatile" signed by the "known" key
+    Given a git repository named "happy-day-policy" with
+      | filtering.rego | examples/filtering.rego |
+    Given a file named "${TMPDIR}/multi-arch-images.json" containing
+    """
+    {
+      "components": [
+        {
+          "containerImage": "${REGISTRY}/acceptance/multi-arch-volatile",
+          "name": "multi-arch-test-sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2-arm64"
+        }
+      ]
+    }
+    """
+    Given policy configuration named "ec-policy" with specification
+    """
+    {
+      "sources": [
+        {
+          "volatileConfig": {
+            "exclude": [
+              {
+                "value": "filtering.always_fail",
+                "componentNames": ["multi-arch-test"]
+              },
+              {
+                "value": "filtering.always_fail_with_collection",
+                "componentNames": ["multi-arch-test"]
+              }
+            ]
+          },
+          "config": {
+            "include": ["@stamps", "filtering.always_pass", "filtering.always_fail"]
+          },
+          "policy": [
+            "git::https://${GITHOST}/git/happy-day-policy.git"
+          ]
+        }
+      ]
+    }
+    """
+    When ec command is run with "validate image --images ${TMPDIR}/multi-arch-images.json --policy acceptance/ec-policy --public-key ${known_PUBLIC_KEY} --ignore-rekor --show-successes --output json"
+    Then the exit status should be 0
+    Then the output should match the snapshot
+
+  Scenario: volatile config exclude does not match different multi-arch component
+    Given a key pair named "known"
+    Given an image named "acceptance/multi-arch-volatile-neg"
+    Given a valid image signature of "acceptance/multi-arch-volatile-neg" image signed by the "known" key
+    Given a valid attestation of "acceptance/multi-arch-volatile-neg" signed by the "known" key
+    Given a git repository named "happy-day-policy" with
+      | filtering.rego | examples/filtering.rego |
+    Given a file named "${TMPDIR}/multi-arch-images-neg.json" containing
+    """
+    {
+      "components": [
+        {
+          "containerImage": "${REGISTRY}/acceptance/multi-arch-volatile-neg",
+          "name": "other-component-sha256:a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2-amd64"
+        }
+      ]
+    }
+    """
+    Given policy configuration named "ec-policy" with specification
+    """
+    {
+      "sources": [
+        {
+          "volatileConfig": {
+            "exclude": [
+              {
+                "value": "filtering.always_fail",
+                "componentNames": ["multi-arch-test"]
+              },
+              {
+                "value": "filtering.always_fail_with_collection",
+                "componentNames": ["multi-arch-test"]
+              }
+            ]
+          },
+          "config": {
+            "include": ["@stamps", "filtering.always_pass", "filtering.always_fail"]
+          },
+          "policy": [
+            "git::https://${GITHOST}/git/happy-day-policy.git"
+          ]
+        }
+      ]
+    }
+    """
+    When ec command is run with "validate image --images ${TMPDIR}/multi-arch-images-neg.json --policy acceptance/ec-policy --public-key ${known_PUBLIC_KEY} --ignore-rekor --show-successes --output json"
+    Then the exit status should be 1
     Then the output should match the snapshot
 
   Scenario: Unsupported policies

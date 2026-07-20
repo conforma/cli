@@ -124,6 +124,7 @@ var tracker = &scenarioTracker{}
 // provided godog.ScenarioContext
 func initializeScenario(sc *godog.ScenarioContext) {
 	cli.AddStepsTo(sc)
+	cli.AddServerStepsTo(sc)
 	crypto.AddStepsTo(sc)
 	git.AddStepsTo(sc)
 	image.AddStepsTo(sc)

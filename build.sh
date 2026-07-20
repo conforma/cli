@@ -83,6 +83,8 @@ build_kubectl() {
     cp "${kubectlbin}" "dist/$3_$1_$2"
 }
 
+KUBECTL_VERSION="$(go list -modfile tools/kubectl/go.mod -mod=readonly -f '{{.Version}}' -m k8s.io/kubernetes)"
+
 for os_arch in ${BUILDS}; do
     GOOS="${os_arch%_*}"
     GOARCH="${os_arch#*_}"
@@ -92,6 +94,6 @@ for os_arch in ${BUILDS}; do
     build_ec "${GOOS}" "${GOARCH}" "${BINFILE}" "${EC_FULL_VERSION}"
 
     KUBECTLBIN="kubectl${DOT_EXE}"
-    echo "Building ${GOOS}/${GOARCH} of ${KUBECTLBIN} version $(go list -modfile tools/go.mod -mod=readonly -f '{{.Version}}' -m k8s.io/kubernetes)"
+    echo "Building ${GOOS}/${GOARCH} of ${KUBECTLBIN} version ${KUBECTL_VERSION}"
     build_kubectl "${GOOS}" "${GOARCH}" "${KUBECTLBIN}"
 done

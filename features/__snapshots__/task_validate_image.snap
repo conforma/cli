@@ -16,6 +16,12 @@ ${TIMESTAMP} INFO Step was skipped due to when expressions were evaluated to fal
 }
 ---
 
+[TestFeatures/Golden container image with OPA evaluator:results - 1]
+{
+  "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":5,\"failures\":0,\"warnings\":0,\"result\":\"SUCCESS\"}\n"
+}
+---
+
 [TestFeatures/Initialize TUF fails:initialize-tuf - 1]
 Error: Get "http://tuf.invalid/root.json": dial tcp: lookup tuf.invalid on 10.96.0.10:53: no such host
 
@@ -31,6 +37,12 @@ Error: Get "http://tuf.invalid/root.json": dial tcp: lookup tuf.invalid on 10.96
 {
   "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":0,\"failures\":1,\"warnings\":0,\"result\":\"FAILURE\"}\n"
 }
+---
+
+[TestFeatures/Golden container image:pin-policy-bundle - 1]
+Applying policy bundle digest override: sha256:f904979d405a39a3cc492439b379b4b117c622bbe7126a0e1ba76527ec3ce6a2
+'oci::quay.io/conforma/release-policy:konflux' not found in policy configuration, nothing to do.
+
 ---
 
 [TestFeatures/Golden container image:show-config - 1]
@@ -251,11 +263,7 @@ true
       "signatures": [
         {
           "keyid": "",
-          "sig": ""
-        },
-        {
-          "keyid": "",
-          "sig": ""
+          "sig": "MEUCID1cJkxyk1oGvXcoAVkDST9A1vfX2gxPEz+LUzN10nDmAiEAxh9rp79yr4fZmAWWOit0dZ5QWK+uYIU8fQVb0/rLIyM="
         }
       ],
       "attestations": [
@@ -266,16 +274,6 @@ true
             {
               "keyid": "",
               "sig": "MEUCIQC5bGm4zzbExXBMrZCmqZ98iqUhi8TV/maq/8dJ/c3POAIgCNw+RkeO7PAkT6JDWIvISZ2AjILu9YuPQ0qqfNwCqug="
-            }
-          ]
-        },
-        {
-          "type": "https://in-toto.io/Statement/v0.1",
-          "predicateType": "https://sigstore.dev/cosign/sign/v1",
-          "signatures": [
-            {
-              "keyid": "",
-              "sig": "MEUCID1cJkxyk1oGvXcoAVkDST9A1vfX2gxPEz+LUzN10nDmAiEAxh9rp79yr4fZmAWWOit0dZ5QWK+uYIU8fQVb0/rLIyM="
             }
           ]
         }
@@ -732,5 +730,35 @@ results.tufUrl:
 [TestFeatures/Keyless signing verification cosign v3 style with regexp params:results - 1]
 {
   "TEST_OUTPUT": "{\"timestamp\":\"${TIMESTAMP}\",\"namespace\":\"\",\"successes\":0,\"failures\":2,\"warnings\":0,\"result\":\"FAILURE\"}\n"
+}
+---
+
+[TestFeatures/Pin policy bundle digest:pin-policy-bundle - 1]
+Applying policy bundle digest override: sha256:f904979d405a39a3cc492439b379b4b117c622bbe7126a0e1ba76527ec3ce6a2
+Replaced: oci::quay.io/conforma/release-policy:konflux
+    with: oci::quay.io/conforma/release-policy@sha256:f904979d405a39a3cc492439b379b4b117c622bbe7126a0e1ba76527ec3ce6a2
+Modified policy written to: /tekton/home/policy-with-pinned-bundle.yaml
+
+---
+
+[TestFeatures/Pin policy bundle digest:show-config - 1]
+{
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "oci::quay.io/conforma/release-policy@sha256:f904979d405a39a3cc492439b379b4b117c622bbe7126a0e1ba76527ec3ce6a2"
+        ],
+        "config": {
+          "include": [
+            "slsa_provenance_available"
+          ]
+        }
+      }
+    ],
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----"
+  },
+  "key": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----\n",
+  "effective-time": "${TIMESTAMP}"
 }
 ---

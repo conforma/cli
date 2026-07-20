@@ -19,8 +19,17 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-PKG="$1"
-JIRA="${2:-""}"
+TIDY_ARGS=()
+POSITIONAL=()
+for arg in "$@"; do
+  case "$arg" in
+    --ignore-tidy-error) TIDY_ARGS+=("-e") ;;
+    *) POSITIONAL+=("$arg") ;;
+  esac
+done
+
+PKG="${POSITIONAL[0]}"
+JIRA="${POSITIONAL[1]:-""}"
 
 MOD_DIRS=$(git ls-files | grep go.mod$ | xargs -n1 dirname)
 
@@ -31,7 +40,7 @@ MOD_DIRS=$(git ls-files | grep go.mod$ | xargs -n1 dirname)
 # (If the module is not actually used, the go mod tidy should
 # remove it so we can be lazy about deciding which mod files to
 # update and just update them all.)
-for d in $MOD_DIRS; do ( cd "$d" && go get "$PKG" && go mod tidy ); done
+for d in $MOD_DIRS; do ( cd "$d" && go get "$PKG" && go mod tidy "${TIDY_ARGS[@]}" ); done
 
 # Prepare commit
 for d in $MOD_DIRS; do ( cd "$d" && git add go.mod go.sum ); done
@@ -44,4 +53,8 @@ fi
 # Make commit
 # (The --no-gpg-sign is to make it easier for agents.
 # If you do a rebase you'll get them all signed.)
-git commit --no-gpg-sign -m"chore(deps): Update $1" "${JIRA_REF_OPT[@]}"
+IGNORE_TIDY_ERROR_OPT=""
+if [[ " ${TIDY_ARGS[*]} " == *" -e "* ]]; then
+  IGNORE_TIDY_ERROR_OPT=" --ignore-tidy-error"
+fi
+git commit --no-gpg-sign -m "chore(deps): Update $PKG" -m "Commit created like this:" -m "  hack/go-mod-upgrade-helper $PKG $JIRA$IGNORE_TIDY_ERROR_OPT" "${JIRA_REF_OPT[@]}"

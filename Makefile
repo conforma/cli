@@ -177,6 +177,10 @@ feature_%: ## Run acceptance tests for a single feature file, e.g. make feature_
 # (Replace spaces with underscores in the scenario name.)
 scenario_%: build ## Run acceptance tests for a single scenario, e.g. make scenario_inline_policy
 	@cd acceptance && go test -test.run 'TestFeatures/$*'
+	@# With UPDATE_SNAPS=true all the other snap files will be deleted. Let's put them back.
+	@if [ -n "$$UPDATE_SNAPS" ]; then \
+	  git ls-files --deleted -- '../features/__snapshots__/*.snap' | xargs -r git checkout --; \
+	fi
 
 benchmark/%/data.tar.gz:
 	@cd benchmark/$*
@@ -193,8 +197,19 @@ benchmark_data: benchmark/simple/data.tar.gz ## Prepare data for benchmark
 .PHONY: benchmark
 benchmark: benchmark_simple ## Run benchmarks
 
+.PHONY: tools-ci
+tools-ci: ## Ensure all tools build cleanly
+	@echo "• tkn:" && \
+	go run -modfile tools/go.mod github.com/tektoncd/cli/cmd/tkn version && \
+	echo "• kustomize:" && \
+	go run -modfile tools/go.mod sigs.k8s.io/kustomize/kustomize/v5 version && \
+	echo "• helm:" && \
+	go run -modfile tools/go.mod helm.sh/helm/v3/cmd/helm version && \
+	echo "• conftest:" && \
+	go run -modfile tools/go.mod github.com/open-policy-agent/conftest --version
+
 .PHONY: ci
-ci: test lint-fix acceptance ## Run the usual required CI tasks
+ci: test lint-fix acceptance tools-ci ## Run the usual required CI tasks
 
 ##@ Linters
 
@@ -212,15 +227,15 @@ LINT_TO_GITHUB_ANNOTATIONS='map(map(.)[])[][] as $$d | $$d.posn | split(":") as 
 .PHONY: lint
 lint: tekton-lint go-mod-lint ## Run linter
 # addlicense doesn't give us a nice explanation so we prefix it with one
-	@go run -modfile tools/go.mod github.com/google/addlicense -c '$(COPY)' -y '' -s -check $(LICENSE_IGNORE) . | sed 's/^/Missing license header in: /g'
+	@git ls-files -z | xargs -0 go run -modfile tools/go.mod github.com/google/addlicense -c '$(COPY)' -y '' -s -check $(LICENSE_IGNORE) | sed 's/^/Missing license header in: /g'
 # piping to sed above looses the exit code, luckily addlicense is fast so we invoke it for the second time to exit 1 in case of issues
-	@go run -modfile tools/go.mod github.com/google/addlicense -c '$(COPY)' -y '' -s -check $(LICENSE_IGNORE) . >/dev/null 2>&1
+	@git ls-files -z | xargs -0 go run -modfile tools/go.mod github.com/google/addlicense -c '$(COPY)' -y '' -s -check $(LICENSE_IGNORE) >/dev/null 2>&1
 	@go run -modfile tools/go.mod github.com/golangci/golangci-lint/v2/cmd/golangci-lint run $(if $(GITHUB_ACTIONS), --timeout=10m0s)
 	@(cd acceptance && go run -modfile ../tools/go.mod github.com/golangci/golangci-lint/v2/cmd/golangci-lint run --path-prefix acceptance $(if $(GITHUB_ACTIONS), --timeout=10m0s))
 
 .PHONY: lint-fix
 lint-fix: ## Fix linting issues automagically
-	@go run -modfile tools/go.mod github.com/google/addlicense -c '$(COPY)' -y '' -s $(LICENSE_IGNORE) .
+	@git ls-files -z | xargs -0 go run -modfile tools/go.mod github.com/google/addlicense -c '$(COPY)' -y '' -s $(LICENSE_IGNORE)
 	@go run -modfile tools/go.mod github.com/golangci/golangci-lint/v2/cmd/golangci-lint run --fix
 	@(cd acceptance && go run -modfile ../tools/go.mod github.com/golangci/golangci-lint/v2/cmd/golangci-lint run --path-prefix acceptance --fix)
 # We don't apply the fixes from the internal (error handling) linter.

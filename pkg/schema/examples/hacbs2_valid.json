@@ -148,7 +148,7 @@
               "arguments": null,
               "environment": {
                 "container": "appstudio-configure-build",
-                "image": "quay.io/redhat-appstudio/appstudio-utils@sha256:e1d7e2bbff7032f078df41ab4d6345ada8474f615c0e93f6268ae9ba48a81b1d"
+                "image": "quay.io/konflux-ci/task-runner:1.7.0"
               },
               "annotations": null
             }

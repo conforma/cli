@@ -26,7 +26,7 @@ sources:
       - github.com/release-engineering/rhtap-ec-policy//data
       - oci::quay.io/konflux-ci/tekton-catalog/data-acceptable-bundles:latest
     policy:
-      - oci::quay.io/enterprise-contract/ec-release-policy:latest
+      - oci::quay.io/conforma/release-policy:latest
     config:
       include:
         - '@slsa3'

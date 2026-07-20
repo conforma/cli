@@ -574,25 +574,19 @@ func TestValidateImageWithVSACheck_FlagCombinations(t *testing.T) {
 
 func TestValidateImageSkipImageSigCheck(t *testing.T) {
 	tests := []struct {
-		name                    string
-		skipImageSigCheck       bool
-		expectImageSigCheckCall bool
-		expectImageSigResult    bool
-		expectAttSigCheckCall   bool
+		name                 string
+		skipImageSigCheck    bool
+		expectImageSigResult bool
 	}{
 		{
-			name:                    "skip image signature check disabled (default)",
-			skipImageSigCheck:       false,
-			expectImageSigCheckCall: true,
-			expectImageSigResult:    true,
-			expectAttSigCheckCall:   true,
+			name:                 "skip image signature check disabled (default)",
+			skipImageSigCheck:    false,
+			expectImageSigResult: true,
 		},
 		{
-			name:                    "skip image signature check enabled",
-			skipImageSigCheck:       true,
-			expectImageSigCheckCall: false,
-			expectImageSigResult:    false,
-			expectAttSigCheckCall:   true,
+			name:                 "skip image signature check enabled",
+			skipImageSigCheck:    true,
+			expectImageSigResult: false,
 		},
 	}
 
@@ -645,66 +639,123 @@ func TestValidateImageSkipImageSigCheck(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, output)
 
-			// Check if ImageSignatureCheck result was set based on expectations
 			if tt.expectImageSigResult {
-				// When image signature check is NOT skipped, it should have a result
 				assert.NotNil(t, output.ImageSignatureCheck.Result, "Expected ImageSignatureCheck to have a result")
 			} else {
-				// When image signature check IS skipped, it should not have a result
-				assert.Nil(t, output.ImageSignatureCheck.Result, "Expected ImageSignatureCheck to not have a result when skipped")
+				assert.Nil(t, output.ImageSignatureCheck.Result, "Expected no ImageSignatureCheck result when skipped")
 			}
 
-			// AttestationSignatureCheck should always have a result (not affected by the flag)
 			assert.NotNil(t, output.AttestationSignatureCheck.Result, "AttestationSignatureCheck should always have a result")
 
-			// Verify that skipped checks don't appear in violations or successes
-			violations := output.Violations()
-			successes := output.Successes()
-
 			if tt.skipImageSigCheck {
-				// When skipped, image signature check should not appear in violations or successes
-				for _, violation := range violations {
-					if violation.Metadata != nil {
-						code, ok := violation.Metadata["code"].(string)
-						if ok {
-							assert.NotEqual(t, "builtin.image.signature_check", code,
-								"Skipped image signature check should not appear in violations")
-						}
-					}
-				}
+				fakeClient.AssertNotCalled(t, "VerifyImageSignatures", mock.Anything, mock.Anything)
+			} else {
+				fakeClient.AssertCalled(t, "VerifyImageSignatures", refNoTag, mock.Anything)
+			}
+		})
+	}
+}
 
-				for _, success := range successes {
-					if success.Metadata != nil {
-						code, ok := success.Metadata["code"].(string)
-						if ok {
-							assert.NotEqual(t, "builtin.image.signature_check", code,
-								"Skipped image signature check should not appear in successes")
-						}
-					}
-				}
+func TestValidateImageSkipAttSigCheck(t *testing.T) {
+	tests := []struct {
+		name               string
+		skipAttSigCheck    bool
+		skipImageSigCheck  bool
+		fetchAttErr        error
+		expectAttSigResult bool
+		expectImgSigResult bool
+	}{
+		{
+			name:               "skip attestation signature check disabled (default)",
+			skipAttSigCheck:    false,
+			expectAttSigResult: true,
+			expectImgSigResult: true,
+		},
+		{
+			name:               "skip attestation signature check enabled",
+			skipAttSigCheck:    true,
+			expectAttSigResult: false,
+			expectImgSigResult: true,
+		},
+		{
+			name:               "skip attestation signature check with fetch error",
+			skipAttSigCheck:    true,
+			fetchAttErr:        fmt.Errorf("registry unavailable"),
+			expectAttSigResult: true,
+			expectImgSigResult: true,
+		},
+		{
+			name:               "skip both image and attestation signature checks",
+			skipAttSigCheck:    true,
+			skipImageSigCheck:  true,
+			expectAttSigResult: false,
+			expectImgSigResult: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := afero.NewMemMapFs()
+			ctx := utils.WithFS(context.Background(), fs)
+
+			comp := app.SnapshotComponent{
+				ContainerImage: imageRef,
 			}
 
-			// Attestation signature check should always appear in results (when it has a result)
-			foundAttestationCheck := false
-			for _, violation := range violations {
-				if violation.Metadata != nil {
-					code, ok := violation.Metadata["code"].(string)
-					if ok && code == "builtin.attestation.signature_check" {
-						foundAttestationCheck = true
-						break
-					}
-				}
+			ctx = withImageConfig(ctx, comp.ContainerImage)
+			client := ecoci.NewClient(ctx)
+			fakeClient := client.(*fake.FakeClient)
+
+			fakeClient.On("Head", ref).Return(&v1.Descriptor{MediaType: types.OCIManifestSchema1}, nil)
+			fakeClient.On("HasBundles", mock.Anything, refNoTag).Return(false, nil)
+			fakeClient.On("VerifyImageSignatures", refNoTag, mock.Anything).Return([]oci.Signature{}, false, fmt.Errorf("no signatures found"))
+			fakeClient.On("VerifyImageAttestations", refNoTag, mock.Anything).Return([]oci.Signature{}, false, fmt.Errorf("no attestations found"))
+			if tt.fetchAttErr != nil {
+				fakeClient.On("FetchAttestationLayers", refNoTag).Return([]oci.Signature(nil), tt.fetchAttErr)
+			} else {
+				fakeClient.On("FetchAttestationLayers", refNoTag).Return([]oci.Signature{validAttestation}, nil)
 			}
-			for _, success := range successes {
-				if success.Metadata != nil {
-					code, ok := success.Metadata["code"].(string)
-					if ok && code == "builtin.attestation.signature_check" {
-						foundAttestationCheck = true
-						break
-					}
-				}
+
+			opts := policy.Options{
+				EffectiveTime:     policy.Now,
+				SkipAttSigCheck:   tt.skipAttSigCheck,
+				SkipImageSigCheck: tt.skipImageSigCheck,
+				Identity: cosign.Identity{
+					Issuer:  "https://example.com/oidc",
+					Subject: "test@example.com",
+				},
 			}
-			assert.True(t, foundAttestationCheck, "AttestationSignatureCheck should appear in results")
+
+			updatedPolicy, _, err := policy.PreProcessPolicy(ctx, opts)
+			require.NoError(t, err)
+
+			snap := &app.SnapshotSpec{}
+			evaluators := []evaluator.Evaluator{}
+
+			output, err := ValidateImage(ctx, comp, snap, updatedPolicy, evaluators, false)
+
+			require.NoError(t, err)
+			require.NotNil(t, output)
+
+			if tt.expectAttSigResult {
+				assert.NotNil(t, output.AttestationSignatureCheck.Result, "Expected AttestationSignatureCheck to have a result")
+			} else {
+				assert.Nil(t, output.AttestationSignatureCheck.Result, "Expected no AttestationSignatureCheck result when skipped")
+			}
+
+			if tt.expectImgSigResult {
+				assert.NotNil(t, output.ImageSignatureCheck.Result, "Expected ImageSignatureCheck to have a result")
+			} else {
+				assert.Nil(t, output.ImageSignatureCheck.Result, "Expected no ImageSignatureCheck result when skipped")
+			}
+
+			if tt.skipAttSigCheck {
+				fakeClient.AssertCalled(t, "FetchAttestationLayers", refNoTag)
+				fakeClient.AssertNotCalled(t, "VerifyImageAttestations", mock.Anything, mock.Anything)
+			} else {
+				fakeClient.AssertCalled(t, "VerifyImageAttestations", refNoTag, mock.Anything)
+				fakeClient.AssertNotCalled(t, "FetchAttestationLayers", mock.Anything)
+			}
 		})
 	}
 }

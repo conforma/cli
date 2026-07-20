@@ -59,25 +59,26 @@ func init() {
 	}).Parse(cliNavTemplateText))
 }
 
-func GenerateCommandLineDocumentation(module string) error {
-	if err := generateCommandReference(cmd.RootCmd, module); err != nil {
-		return err
+func GenerateCommandLineDocumentation(module, marker string) ([]string, error) {
+	var generated []string
+	if err := generateCommandReference(cmd.RootCmd, module, marker, &generated); err != nil {
+		return nil, err
 	}
 
 	if err := generateCommandReferenceNav(cmd.RootCmd, module); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return generated, nil
 }
 
-func generateCommandReference(cmd *cobra.Command, module string) error {
+func generateCommandReference(cmd *cobra.Command, module, marker string, generated *[]string) error {
 	for _, c := range cmd.Commands() {
 		if !c.IsAvailableCommand() || c.IsAdditionalHelpTopicCommand() {
 			continue
 		}
 
-		if err := generateCommandReference(c, module); err != nil {
+		if err := generateCommandReference(c, module, marker, generated); err != nil {
 			return fmt.Errorf("generating Asciidoc for command %q: %w", c.Name(), err)
 		}
 	}
@@ -92,7 +93,17 @@ func generateCommandReference(cmd *cobra.Command, module string) error {
 	}
 	defer f.Close()
 
-	return commandTemplate.Execute(f, cmd)
+	if _, err := fmt.Fprintln(f, marker); err != nil {
+		return fmt.Errorf("writing marker to %q: %w", docpath, err)
+	}
+
+	if err := commandTemplate.Execute(f, cmd); err != nil {
+		return err
+	}
+
+	*generated = append(*generated, docpath)
+
+	return nil
 }
 
 func generateCommandReferenceNav(root *cobra.Command, module string) error {

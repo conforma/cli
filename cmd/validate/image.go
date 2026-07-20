@@ -211,6 +211,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				},
 				IgnoreRekor:       data.ignoreRekor,
 				SkipImageSigCheck: data.skipImageSigCheck,
+				SkipAttSigCheck:   data.skipAttSigCheck,
 				PolicyRef:         data.policyConfiguration,
 				PublicKey:         data.publicKey,
 				RekorURL:          data.rekorURL,
@@ -320,7 +321,8 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				var c evaluator.Evaluator
 				var err error
 				if utils.IsOpaEnabled() {
-					c, err = newOPAEvaluator()
+					c, err = newOPAEvaluator(
+						cmd.Context(), policySources, data.policy, sourceGroup, nil)
 				} else {
 					// Use the unified filtering approach with the specified filter type
 					c, err = evaluator.NewConftestEvaluatorWithFilterType(
@@ -498,6 +500,9 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 	cmd.Flags().BoolVar(&data.skipImageSigCheck, "skip-image-sig-check", data.skipImageSigCheck,
 		"Skip image signature validation checks.")
 
+	cmd.Flags().BoolVar(&data.skipAttSigCheck, "skip-att-sig-check", data.skipAttSigCheck,
+		"Skip attestation signature validation checks.")
+
 	cmd.Flags().StringVar(&data.certificateIdentity, "certificate-identity", data.certificateIdentity,
 		"URL of the certificate identity for keyless verification")
 
@@ -636,6 +641,7 @@ type imageData struct {
 	input                       string
 	ignoreRekor                 bool
 	skipImageSigCheck           bool
+	skipAttSigCheck             bool
 	output                      []string
 	outputFile                  string
 	policy                      policy.Policy

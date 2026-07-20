@@ -16,7 +16,7 @@
 
 ## Build
 
-FROM docker.io/library/golang:1.25.8 AS build
+FROM docker.io/library/golang:1.26.3 AS build
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -43,7 +43,7 @@ RUN /build/build.sh "${BUILD_LIST}" "${BUILD_SUFFIX}"
 
 ## Final image
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:8d0a8fb39ec907e8ca62cdd24b62a63ca49a30fe465798a360741fde58437a23
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:463cae32c6f6f5594b11a5c22de275016bd8545ce58a6373388e8b24f13fc15c
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -75,7 +75,10 @@ COPY --from=build "/build/dist/ec_${TARGETOS}_${TARGETARCH}" /usr/local/bin/ec
 COPY --from=build "/build/dist/kubectl_${TARGETOS}_${TARGETARCH}" /usr/local/bin/kubectl
 
 # Copy reduce-snapshot script needed for single component mode
-COPY hack/reduce-snapshot.sh /usr/local/bin
+COPY hack/reduce-snapshot.sh /usr/local/bin/
+
+# Copy pin-konflux-policy-bundle script needed for policy bundle digest pinning
+COPY hack/pin-konflux-policy-bundle.sh /usr/local/bin/
 
 # OpenShift preflight check requires a license
 COPY --from=build /build/LICENSE /licenses/LICENSE

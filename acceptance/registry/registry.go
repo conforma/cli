@@ -101,7 +101,7 @@ func startStubRegistry(ctx context.Context) (context.Context, error) {
 			{
 				HostFilePath:      "",
 				ContainerFilePath: "/config/config.json",
-				FileMode:          0644,
+				FileMode:          0o644,
 				Reader:            strings.NewReader(zotConfig),
 			},
 		},

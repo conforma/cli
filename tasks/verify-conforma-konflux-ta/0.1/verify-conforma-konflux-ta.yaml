@@ -27,7 +27,7 @@ metadata:
     app.kubernetes.io/version: "0.1"
 
 spec:
-  description: Verify the enterprise contract is met
+  description: Verify the Conforma policy is met
   params:
     - name: SNAPSHOT_FILENAME
       type: string
@@ -157,11 +157,32 @@ spec:
       description: Merge additional Rego variables into the policy data. Use syntax "key=value,key2=value2..."
       default: ""
 
+    - name: POLICY_BUNDLE_DIGEST
+      type: string
+      description: >-
+        Optional OCI digest to pin the release policy bundle. When provided,
+        the policy configuration is resolved and the reference
+        oci::quay.io/conforma/release-policy:konflux is replaced with
+        oci::quay.io/conforma/release-policy@<digest>. Accepts a full digest
+        (sha256:abc123...) or just the hex hash (abc123...).
+      # For Konflux stability we want to try pinning the policy bundle rather
+      # than use the floating oci::quay.io/conforma/release-policy:konflux tag.
+      # Instead of needing to bump this in hundreds of separate ECPs, we'll do
+      # it here instead. If you don't want this behavior then provide an empty
+      # string value for this param. To update this digest use the script in
+      # hack/update-policy-digest-in-tasks.sh
+      default: "sha256:f904979d405a39a3cc492439b379b4b117c622bbe7126a0e1ba76527ec3ce6a2"
+
     - name: WORKERS
       type: string
       description: >
         Number of parallel workers to use for policy evaluation.
       default: "4"
+
+    - name: EC_USE_OPA
+      type: string
+      description: Use the OPA evaluator instead of the default conftest evaluator. Set to "1" to enable.
+      default: ""
 
     - name: SINGLE_COMPONENT
       description: Reduce the Snapshot to only the component whose build caused the Snapshot to be created
@@ -326,6 +347,16 @@ spec:
       onError: continue # progress even if the step fails so we can see the debug logs
       command: [reduce-snapshot.sh]
 
+    - name: pin-policy-bundle
+      env:
+        - name: POLICY_CONFIGURATION
+          value: $(params.POLICY_CONFIGURATION)
+        - name: POLICY_BUNDLE_DIGEST
+          value: $(params.POLICY_BUNDLE_DIGEST)
+      image: quay.io/conforma/cli:latest
+      onError: continue
+      command: [pin-konflux-policy-bundle.sh]
+
     - name: validate
       image: quay.io/conforma/cli:latest
       onError: continue # progress even if the step fails so we can see the debug logs
@@ -335,6 +366,11 @@ spec:
 
         if [ -f "/mnt/trusted-ca/ca-bundle.crt" ]; then
             export SSL_CERT_FILE="/mnt/trusted-ca/ca-bundle.crt"
+        fi
+
+        # Use policy override file if pin-policy-bundle produced one
+        if [[ -f "${HOMEDIR}/policy-with-pinned-bundle.yaml" ]]; then
+          POLICY_CONFIGURATION="${HOMEDIR}/policy-with-pinned-bundle.yaml"
         fi
 
         cmd_args=(
@@ -498,6 +534,8 @@ spec:
           value: "$(params.VSA_SIGNING_KEY)"
         - name: VSA_UPLOAD
           value: "$(params.VSA_UPLOAD)"
+        - name: EC_USE_OPA
+          value: "$(params.EC_USE_OPA)"
         - name: HOMEDIR
           value: "$(params.HOMEDIR)"
         - name: SSL_CERT_DIR

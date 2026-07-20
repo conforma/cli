@@ -83,20 +83,23 @@ func init() {
 	builtins = findBuiltins()
 }
 
-func GenerateRegoReference(module string) error {
-	if err := generateRegoReference(module); err != nil {
-		return err
+func GenerateRegoReference(module, marker string) ([]string, error) {
+	generated, err := generateRegoReference(module, marker)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := generateRegoReferenceNav(module); err != nil {
-		return err
+		return nil, err
 	}
 
-	if err := generateRegoBuiltins(module); err != nil {
-		return err
+	builtinsPath, err := generateRegoBuiltins(module, marker)
+	if err != nil {
+		return nil, err
 	}
+	generated = append(generated, builtinsPath)
 
-	return nil
+	return generated, nil
 }
 
 func findBuiltins() []*ast.Builtin {
@@ -114,21 +117,31 @@ func findBuiltins() []*ast.Builtin {
 	return builtins
 }
 
-func generateRegoReference(module string) error {
+func generateRegoReference(module, marker string) ([]string, error) {
+	var generated []string
 	for _, b := range builtins {
 		docpath := filepath.Join(module, "pages", strings.ReplaceAll(b.Name, ".", "_")+".adoc")
 		f, err := os.Create(docpath)
 		if err != nil {
-			return fmt.Errorf("creating file %q: %w", docpath, err)
+			return nil, fmt.Errorf("creating file %q: %w", docpath, err)
 		}
-		defer f.Close()
+
+		if _, err := fmt.Fprintln(f, marker); err != nil {
+			f.Close()
+			return nil, fmt.Errorf("writing marker to %q: %w", docpath, err)
+		}
 
 		if err := regoTemplate.Execute(f, b); err != nil {
-			return err
+			f.Close()
+			return nil, err
 		}
+		if err := f.Close(); err != nil {
+			return nil, fmt.Errorf("closing file %q: %w", docpath, err)
+		}
+		generated = append(generated, docpath)
 	}
 
-	return nil
+	return generated, nil
 }
 
 func generateRegoReferenceNav(module string) error {
@@ -142,13 +155,17 @@ func generateRegoReferenceNav(module string) error {
 	return regoNavTemplate.Execute(f, builtins)
 }
 
-func generateRegoBuiltins(module string) error {
+func generateRegoBuiltins(module, marker string) (string, error) {
 	builtinsPath := filepath.Join(module, "pages", "rego_builtins.adoc")
 	f, err := os.Create(builtinsPath)
 	if err != nil {
-		return fmt.Errorf("creating file %q: %w", builtinsPath, err)
+		return "", fmt.Errorf("creating file %q: %w", builtinsPath, err)
 	}
 	defer f.Close()
 
-	return regoBuiltinsTemplate.Execute(f, builtins)
+	if _, err := fmt.Fprintln(f, marker); err != nil {
+		return "", fmt.Errorf("writing marker to %q: %w", builtinsPath, err)
+	}
+
+	return builtinsPath, regoBuiltinsTemplate.Execute(f, builtins)
 }

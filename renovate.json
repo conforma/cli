@@ -2,5 +2,15 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "github>conforma/.github//config/renovate/renovate.json"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["\\.tekton/.*\\.yaml$"],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=git-refs\\s+depName=(?<depName>[^\\s]+)\\s+branch=(?<currentValue>[^\\s]+)\\s*\\n\\s*value:\\s*(?<currentDigest>[a-f0-9]+)"
+      ],
+      "datasourceTemplate": "git-refs"
+    }
   ]
 }
