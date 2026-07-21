@@ -1,0 +1,102 @@
+# Copyright The Conforma Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: Benchmark
+
+"on":
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+
+  Stress:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      EC_STRESS_COMPONENTS: "10"
+      EC_STRESS_WORKERS: "5"
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # v2.15.1
+        with:
+          egress-policy: audit
+          disable-telemetry: true
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Go environment
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+
+      - name: Prepare benchmark data
+        run: |
+          cd benchmark/stress
+          ./prepare_data.sh
+
+      - name: Run stress benchmark
+        run: |
+          cd benchmark/stress
+          go run . 2>/dev/null | tee benchmark-output.txt
+
+      - name: Write job summary
+        if: always()
+        run: |
+          if [[ ! -f benchmark/stress/benchmark-output.txt ]]; then
+            echo "## Stress Benchmark" >> "$GITHUB_STEP_SUMMARY"
+            echo "Benchmark did not produce output." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          line=$(grep '^BenchmarkStress' benchmark/stress/benchmark-output.txt || true)
+          if [[ -z "$line" ]]; then
+            echo "## Stress Benchmark" >> "$GITHUB_STEP_SUMMARY"
+            echo "No benchmark results found in output." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          ns_op=$(echo "$line" | grep -oP '[\d.]+ ns/op' | awk '{print $1}')
+          peak_rss=$(echo "$line" | grep -oP '[\d.]+ peak-RSS-bytes' | awk '{print $1}')
+          alloc=$(echo "$line" | grep -oP '[\d.]+ allocated-bytes/op' | awk '{print $1}')
+          heap=$(echo "$line" | grep -oP '[\d.]+ heap-bytes-from-system' | awk '{print $1}')
+
+          secs=$(awk "BEGIN {printf \"%.1f\", ${ns_op:-0} / 1000000000}")
+          rss_mb=$(awk "BEGIN {printf \"%.0f\", ${peak_rss:-0} / 1048576}")
+          alloc_mb=$(awk "BEGIN {printf \"%.0f\", ${alloc:-0} / 1048576}")
+          heap_mb=$(awk "BEGIN {printf \"%.0f\", ${heap:-0} / 1048576}")
+
+          {
+            echo "## Stress Benchmark"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Components | ${EC_STRESS_COMPONENTS} |"
+            echo "| Workers | ${EC_STRESS_WORKERS} |"
+            echo "| Execution time | ${secs}s |"
+            echo "| Peak RSS | ${rss_mb} MB |"
+            echo "| Allocated memory | ${alloc_mb} MB |"
+            echo "| Heap from system | ${heap_mb} MB |"
+          } >> "$GITHUB_STEP_SUMMARY"
