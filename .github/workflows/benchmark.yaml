@@ -15,12 +15,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ---
-name: Benchmark
+name: Stress Benchmark
 
 "on":
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -31,6 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     env:
+      # Tuned for 4 vCPU / 16 GB CI runners to complete within 6-8 minutes.
+      # Code defaults are 10 components / 35 workers.
       EC_STRESS_COMPONENTS: "40"
       EC_STRESS_WORKERS: "10"
     steps:
@@ -57,10 +60,13 @@ jobs:
           cd benchmark/stress
           ./prepare_data.sh
 
+      - name: Build stress benchmark
+        run: go build -o benchmark/stress/stress ./benchmark/stress
+
       - name: Run stress benchmark
         run: |
           cd benchmark/stress
-          go run . 2>/dev/null | tee benchmark-output.txt
+          ./stress 2>/dev/null | tee benchmark-output.txt
 
       - name: Write job summary
         if: always()
