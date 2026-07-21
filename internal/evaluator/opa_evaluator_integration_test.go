@@ -447,6 +447,20 @@ deny contains result if {
 		}
 		assert.False(t, hasCheckA, "Expected check_a to be excluded for comp1")
 		assert.True(t, hasCheckB, "Expected check_b to be evaluated for comp1")
+
+		// check_a should appear as an exception with time metadata, not silently disappear.
+		var checkAException *Result
+		for _, outcome := range results {
+			for i, exc := range outcome.Exceptions {
+				if code, ok := exc.Metadata["code"].(string); ok && code == "test.check_a" {
+					checkAException = &outcome.Exceptions[i]
+					break
+				}
+			}
+		}
+		require.NotNil(t, checkAException, "Expected check_a to surface as an exception for comp1")
+		assert.Equal(t, "2024-01-01T00:00:00Z", checkAException.Metadata["effective_on"], "Expected effective_on to be stamped")
+		assert.Equal(t, "2025-01-01T00:00:00Z", checkAException.Metadata["effective_until"], "Expected effective_until to be stamped")
 	})
 
 	t.Run("comp2 evaluates both checks", func(t *testing.T) {
@@ -472,5 +486,151 @@ deny contains result if {
 		}
 		assert.True(t, hasCheckA, "Expected check_a to be evaluated for comp2")
 		assert.True(t, hasCheckB, "Expected check_b to be evaluated for comp2")
+	})
+}
+
+func TestOPAEvaluatorIntegrationVolatileExclusionSurfacesAsException(t *testing.T) {
+	ctx := context.Background()
+
+	effectiveOn := "2025-01-01T00:00:00Z"
+	effectiveUntil := "2030-01-01T00:00:00Z"
+	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+
+	policyContent := `package mypkg
+
+import rego.v1
+
+# METADATA
+# title: Always failing rule
+# custom:
+#   short_name: always_fail
+deny contains result if {
+	result := {
+		"code": "mypkg.always_fail",
+		"msg": "This rule always fails",
+	}
+}
+`
+	// Each scenario gets its own temp dir so download cache entries don't collide.
+	makeEvaluator := func(t *testing.T, src ecc.Source) (Evaluator, string) {
+		t.Helper()
+		tmpDir := t.TempDir()
+		policyDir := filepath.Join(tmpDir, "policy")
+		require.NoError(t, os.MkdirAll(policyDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(policyDir, "policy.rego"), []byte(policyContent), 0o600))
+
+		ps := &source.PolicyUrl{Url: "file://" + policyDir, Kind: source.PolicyKind}
+
+		cp := &mockConfigProvider{}
+		cp.On("EffectiveTime").Return(now)
+		cp.On("SigstoreOpts").Return(policy.SigstoreOpts{}, nil)
+		cp.On("Spec").Return(ecc.EnterpriseContractPolicySpec{
+			Sources: []ecc.Source{{Policy: []string{"file://" + policyDir}}},
+		})
+		ev, err := NewOPAEvaluator(ctx, []source.PolicySource{ps}, cp, src, nil)
+		require.NoError(t, err)
+		t.Cleanup(ev.Destroy)
+		return ev, tmpDir
+	}
+
+	t.Run("exact-code volatile exclusion surfaces as exception with metadata", func(t *testing.T) {
+		ev, tmpDir := makeEvaluator(t, ecc.Source{
+			VolatileConfig: &ecc.VolatileSourceConfig{
+				Exclude: []ecc.VolatileCriteria{{
+					Value:          "mypkg.always_fail",
+					EffectiveOn:    effectiveOn,
+					EffectiveUntil: effectiveUntil,
+				}},
+			},
+		})
+		inputPath := filepath.Join(tmpDir, "input.json")
+		require.NoError(t, os.WriteFile(inputPath, []byte(`{}`), 0o600))
+
+		results, err := ev.Evaluate(ctx, EvaluationTarget{Inputs: []string{inputPath}, Target: "image:latest"})
+		require.NoError(t, err)
+
+		var failures, exceptions []Result
+		for _, outcome := range results {
+			failures = append(failures, outcome.Failures...)
+			exceptions = append(exceptions, outcome.Exceptions...)
+		}
+		assert.Empty(t, failures, "excluded rule must not appear as failure")
+		require.Len(t, exceptions, 1)
+		assert.Equal(t, effectiveOn, exceptions[0].Metadata[metadataEffectiveOn])
+		assert.Equal(t, effectiveUntil, exceptions[0].Metadata[metadataEffectiveUntil])
+	})
+
+	t.Run("package-level volatile exclusion surfaces as exception with metadata", func(t *testing.T) {
+		ev, tmpDir := makeEvaluator(t, ecc.Source{
+			VolatileConfig: &ecc.VolatileSourceConfig{
+				Exclude: []ecc.VolatileCriteria{{
+					Value:          "mypkg",
+					EffectiveOn:    effectiveOn,
+					EffectiveUntil: effectiveUntil,
+				}},
+			},
+		})
+		inputPath := filepath.Join(tmpDir, "input.json")
+		require.NoError(t, os.WriteFile(inputPath, []byte(`{}`), 0o600))
+
+		results, err := ev.Evaluate(ctx, EvaluationTarget{Inputs: []string{inputPath}, Target: "image:latest"})
+		require.NoError(t, err)
+
+		var failures, exceptions []Result
+		for _, outcome := range results {
+			failures = append(failures, outcome.Failures...)
+			exceptions = append(exceptions, outcome.Exceptions...)
+		}
+		assert.Empty(t, failures, "excluded rule must not appear as failure")
+		require.Len(t, exceptions, 1)
+		assert.Equal(t, effectiveOn, exceptions[0].Metadata[metadataEffectiveOn])
+		assert.Equal(t, effectiveUntil, exceptions[0].Metadata[metadataEffectiveUntil])
+	})
+
+	t.Run("volatile exclusion without effective_until has no expiry stamped", func(t *testing.T) {
+		ev, tmpDir := makeEvaluator(t, ecc.Source{
+			VolatileConfig: &ecc.VolatileSourceConfig{
+				Exclude: []ecc.VolatileCriteria{{
+					Value:       "mypkg.always_fail",
+					EffectiveOn: effectiveOn,
+				}},
+			},
+		})
+		inputPath := filepath.Join(tmpDir, "input.json")
+		require.NoError(t, os.WriteFile(inputPath, []byte(`{}`), 0o600))
+
+		results, err := ev.Evaluate(ctx, EvaluationTarget{Inputs: []string{inputPath}, Target: "image:latest"})
+		require.NoError(t, err)
+
+		var exceptions []Result
+		for _, outcome := range results {
+			exceptions = append(exceptions, outcome.Exceptions...)
+		}
+		require.Len(t, exceptions, 1)
+		assert.Equal(t, effectiveOn, exceptions[0].Metadata[metadataEffectiveOn])
+		assert.NotContains(t, exceptions[0].Metadata, metadataEffectiveUntil)
+	})
+
+	t.Run("permanent config exclusion surfaces as exception with no time fields", func(t *testing.T) {
+		ev, tmpDir := makeEvaluator(t, ecc.Source{
+			Config: &ecc.SourceConfig{
+				Exclude: []string{"mypkg.always_fail"},
+			},
+		})
+		inputPath := filepath.Join(tmpDir, "input.json")
+		require.NoError(t, os.WriteFile(inputPath, []byte(`{}`), 0o600))
+
+		results, err := ev.Evaluate(ctx, EvaluationTarget{Inputs: []string{inputPath}, Target: "image:latest"})
+		require.NoError(t, err)
+
+		var failures, exceptions []Result
+		for _, outcome := range results {
+			failures = append(failures, outcome.Failures...)
+			exceptions = append(exceptions, outcome.Exceptions...)
+		}
+		assert.Empty(t, failures, "excluded rule must not appear as failure")
+		require.Len(t, exceptions, 1)
+		assert.NotContains(t, exceptions[0].Metadata, metadataEffectiveOn)
+		assert.NotContains(t, exceptions[0].Metadata, metadataEffectiveUntil)
 	})
 }

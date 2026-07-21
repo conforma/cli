@@ -1075,3 +1075,63 @@ func TestOriginalComponentName(t *testing.T) {
 		})
 	}
 }
+
+func TestAddItemWithMeta(t *testing.T) {
+	tests := []struct {
+		name       string
+		key        string
+		value      string
+		meta       criteriaItemMeta
+		expectMeta bool
+	}{
+		{
+			name:       "stores meta when effectiveOn is set",
+			key:        "",
+			value:      "pkg.rule",
+			meta:       criteriaItemMeta{effectiveOn: "2025-01-01T00:00:00Z"},
+			expectMeta: true,
+		},
+		{
+			name:       "stores meta when effectiveUntil is set",
+			key:        "",
+			value:      "pkg.rule",
+			meta:       criteriaItemMeta{effectiveUntil: "2025-12-31T23:59:59Z"},
+			expectMeta: true,
+		},
+		{
+			name:       "stores meta when both fields are set",
+			key:        "",
+			value:      "pkg.rule",
+			meta:       criteriaItemMeta{effectiveOn: "2025-01-01T00:00:00Z", effectiveUntil: "2025-12-31T23:59:59Z"},
+			expectMeta: true,
+		},
+		{
+			name:       "no meta stored when both fields are empty",
+			key:        "",
+			value:      "pkg.rule",
+			meta:       criteriaItemMeta{},
+			expectMeta: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Criteria{}
+			c.addItemWithMeta(tt.key, tt.value, tt.meta)
+			require.Contains(t, c.defaultItems, tt.value)
+			got := c.getMeta(tt.value)
+			if tt.expectMeta {
+				require.Equal(t, tt.meta, got)
+			} else {
+				require.Equal(t, criteriaItemMeta{}, got)
+			}
+		})
+	}
+}
+
+func TestGetMetaZeroForNonVolatile(t *testing.T) {
+	c := &Criteria{}
+	c.addItem("", "pkg.rule")
+	got := c.getMeta("pkg.rule")
+	require.Equal(t, criteriaItemMeta{}, got)
+}

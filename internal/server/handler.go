@@ -132,6 +132,7 @@ func (s *Server) evaluateAndBuildReport(ctx context.Context, inputPath string) (
 	}
 
 	inp.Violations = out.Violations()
+	inp.Exceptions = out.Exceptions()
 
 	warnings := out.Warnings()
 	if s.cfg.ShowWarnings {

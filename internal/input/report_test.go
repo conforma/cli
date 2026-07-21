@@ -284,6 +284,79 @@ func testInputsFor(filePaths []string) []Input {
 	return inputs
 }
 
+func Test_ReportJson_WithExceptions(t *testing.T) {
+	ctx := context.Background()
+	testPolicy := createTestPolicy(t, ctx)
+	testEffectiveTime := testPolicy.EffectiveTime().UTC().Format(time.RFC3339Nano)
+
+	inputs := []Input{
+		{
+			FilePath: "/path/to/file1.yaml",
+			Violations: []evaluator.Result{
+				{Message: "violation1"},
+			},
+			Exceptions: []evaluator.Result{
+				{
+					Message: "excepted rule",
+					Metadata: map[string]interface{}{
+						"code":            "some.rule",
+						"effective_on":    "2023-01-01T00:00:00Z",
+						"effective_until": "2025-12-31T23:59:59Z",
+					},
+				},
+			},
+			Success: false,
+		},
+	}
+
+	report, err := NewReport(inputs, testPolicy, nil, false, true, true)
+	assert.NoError(t, err)
+
+	expected := fmt.Sprintf(`
+	{
+		"success": false,
+		"filepaths": [
+		  {
+			"filepath": "/path/to/file1.yaml",
+			"violations": [{"msg": "violation1"}],
+			"warnings": null,
+			"successes": null,
+			"exceptions": [
+			  {
+				"msg": "excepted rule",
+				"metadata": {
+				  "code": "some.rule",
+				  "effective_on": "2023-01-01T00:00:00Z",
+				  "effective_until": "2025-12-31T23:59:59Z"
+				}
+			  }
+			],
+			"success": false,
+			"success-count": 0
+		  }
+		],
+		"policy": {
+		  "name": "Default",
+		  "description": "Stuff and things",
+		  "sources": [
+			{
+			  "name": "Default",
+			  "policy": ["github.com/org/repo//policy"],
+			  "data": ["github.com/org/repo//data"],
+			  "config": {"include": ["basic"]}
+			}
+		  ]
+		},
+		"ec-version": "development",
+		"effective-time": %q
+	  }
+	`, testEffectiveTime)
+
+	reportJson, err := report.toFormat(JSON)
+	assert.NoError(t, err)
+	assert.JSONEq(t, expected, string(reportJson))
+}
+
 func Test_ReportText(t *testing.T) {
 	inputs := []Input{
 		{

@@ -26,16 +26,24 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// criteriaItemMeta carries optional time metadata from volatile config CRD fields.
+type criteriaItemMeta struct {
+	effectiveOn    string
+	effectiveUntil string
+}
+
 // contains include/exclude items
 // digestItems stores include/exclude items that are specific with an imageRef
 // - the imageRef is the key, value is the policy to include/exclude.
 // componentItems stores include/exclude items that are specific to a component name
 // - the component name is the key, value is the policy to include/exclude.
 // defaultItems are include/exclude items without an imageRef
+// meta maps criteria value strings to their time metadata (volatile config only).
 type Criteria struct {
 	digestItems    map[string][]string
 	componentItems map[string][]string
 	defaultItems   []string
+	meta           map[string]criteriaItemMeta
 }
 
 func (c *Criteria) len() int {
@@ -69,6 +77,30 @@ func (c *Criteria) addArray(key string, values []string) {
 		}
 		c.digestItems[key] = append(c.digestItems[key], values...)
 	}
+}
+
+func (c *Criteria) addItemWithMeta(key, value string, m criteriaItemMeta) {
+	c.addItem(key, value)
+	c.storeMeta(value, m)
+}
+
+// storeMeta records time metadata for value without adding a new default item.
+// Use this for component-scoped criteria where the value is already registered
+// via addComponentItem but the meta map still needs to be populated.
+func (c *Criteria) storeMeta(value string, m criteriaItemMeta) {
+	if m.effectiveOn != "" || m.effectiveUntil != "" {
+		if c.meta == nil {
+			c.meta = make(map[string]criteriaItemMeta)
+		}
+		c.meta[value] = m
+	}
+}
+
+func (c *Criteria) getMeta(value string) criteriaItemMeta {
+	if c.meta == nil {
+		return criteriaItemMeta{}
+	}
+	return c.meta[value]
 }
 
 func (c *Criteria) addComponentItem(componentName, value string) {
@@ -194,19 +226,21 @@ func collectVolatileConfigItems(items *Criteria, volatileCriteria []ecc.Volatile
 			until = at
 		}
 		if until.Compare(at) >= 0 && from.Compare(at) <= 0 {
+			meta := criteriaItemMeta{effectiveOn: c.EffectiveOn, effectiveUntil: c.EffectiveUntil}
 			// DEPRECATED: use c.ImageDigest instead
 			if c.ImageRef != "" {
-				items.addItem(c.ImageRef, c.Value)
+				items.addItemWithMeta(c.ImageRef, c.Value, meta)
 			} else if c.ImageUrl != "" {
-				items.addItem(c.ImageUrl, c.Value)
+				items.addItemWithMeta(c.ImageUrl, c.Value, meta)
 			} else if c.ImageDigest != "" {
-				items.addItem(c.ImageDigest, c.Value)
+				items.addItemWithMeta(c.ImageDigest, c.Value, meta)
 			} else if len(c.ComponentNames) > 0 {
 				for _, componentName := range c.ComponentNames {
 					items.addComponentItem(string(componentName), c.Value)
 				}
+				items.storeMeta(c.Value, meta)
 			} else {
-				items.addItem("", c.Value)
+				items.addItemWithMeta("", c.Value, meta)
 			}
 		}
 	}

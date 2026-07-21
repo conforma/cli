@@ -67,8 +67,11 @@ func TestConftestEvaluatorIncludeExclude(t *testing.T) {
 					Warnings: []Result{
 						{Metadata: map[string]any{"code": "lunch.ham"}},
 					},
-					Skipped:    []Result{},
-					Exceptions: []Result{},
+					Skipped: []Result{},
+					Exceptions: []Result{
+						{Metadata: map[string]any{"code": "breakfast.ham"}},
+						{Metadata: map[string]any{"code": "breakfast.spam"}},
+					},
 				},
 			},
 		},
