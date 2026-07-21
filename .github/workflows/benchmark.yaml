@@ -31,8 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     env:
-      EC_STRESS_COMPONENTS: "10"
-      EC_STRESS_WORKERS: "5"
+      EC_STRESS_COMPONENTS: "40"
+      EC_STRESS_WORKERS: "10"
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # v2.15.1
