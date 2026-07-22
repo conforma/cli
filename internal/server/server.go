@@ -30,6 +30,7 @@ import (
 	"github.com/conforma/cli/internal/evaluation_target/input"
 	"github.com/conforma/cli/internal/evaluator"
 	"github.com/conforma/cli/internal/policy"
+	"github.com/conforma/cli/internal/version"
 )
 
 type Config struct {
@@ -69,6 +70,7 @@ func (s *Server) Start(ctx context.Context) error {
 		"address": s.cfg.Address,
 		"port":    s.cfg.Port,
 		"sources": len(s.cfg.Policy.Spec().Sources),
+		"version": version.Version,
 	}).Info("Starting server")
 
 	log.Info("Loading policy sources...")
