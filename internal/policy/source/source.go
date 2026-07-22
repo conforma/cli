@@ -74,6 +74,7 @@ type PolicyUrl struct {
 	Url     string
 	Kind    PolicyType
 	pinOnce sync.Once
+	urlMu   sync.RWMutex
 }
 
 // downloadCache is a concurrent map used to cache downloaded files.
@@ -171,7 +172,7 @@ func (p *PolicyUrl) GetPolicy(ctx context.Context, workDir string, showMsg bool)
 	if trace.IsEnabled() {
 		region := trace.StartRegion(ctx, "ec:get-policy")
 		defer region.End()
-		trace.Logf(ctx, "", "policy=%q", p.Url)
+		trace.Logf(ctx, "", "policy=%q", p.url())
 	}
 
 	dl := func(source string, dest string) (metadata.Metadata, error) {
@@ -189,8 +190,19 @@ func (p *PolicyUrl) GetPolicy(ctx context.Context, workDir string, showMsg bool)
 
 	var pinErr error
 	p.pinOnce.Do(func() {
+		originalUrl := p.url()
+		p.urlMu.Lock()
 		p.Url, pinErr = metadata.GetPinnedURL(p.Url)
-		log.Debug("Pinned URL: ", p.Url)
+		p.urlMu.Unlock()
+		log.Debug("Pinned URL: ", p.url())
+		// Register the cached download under the pinned URL too, so
+		// subsequent lookups (which use the now-mutated p.Url) still hit.
+		pinnedUrl := p.url()
+		if pinErr == nil && pinnedUrl != originalUrl {
+			if cached, ok := downloadCache.Load(originalUrl); ok {
+				downloadCache.LoadOrStore(pinnedUrl, cached)
+			}
+		}
 	})
 	if pinErr != nil {
 		return "", pinErr
@@ -199,8 +211,14 @@ func (p *PolicyUrl) GetPolicy(ctx context.Context, workDir string, showMsg bool)
 	return dest, nil
 }
 
-func (p *PolicyUrl) PolicyUrl() string {
+func (p *PolicyUrl) url() string {
+	p.urlMu.RLock()
+	defer p.urlMu.RUnlock()
 	return p.Url
+}
+
+func (p *PolicyUrl) PolicyUrl() string {
+	return p.url()
 }
 
 func (p *PolicyUrl) Subdir() string {
