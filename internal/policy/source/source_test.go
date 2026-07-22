@@ -26,7 +26,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"sync"
 	"testing"
 
 	ecc "github.com/conforma/crds/api/v1alpha1"
@@ -163,7 +162,7 @@ func TestInlineDataSource(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clear download cache for each test
 			t.Cleanup(func() {
-				downloadCache = sync.Map{}
+				ClearDownloadCache()
 			})
 
 			s := InlineData(tt.inputData)
@@ -276,7 +275,7 @@ func TestInlineDataGetPolicy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clear download cache for each test
 			t.Cleanup(func() {
-				downloadCache = sync.Map{}
+				ClearDownloadCache()
 			})
 
 			s := InlineData(tt.inputData)
@@ -539,7 +538,7 @@ func (m mockPolicySource) Type() PolicyType {
 func TestGetPolicyThroughCache(t *testing.T) {
 	test := func(t *testing.T, fs afero.Fs, expectedDownloads int) {
 		t.Cleanup(func() {
-			downloadCache = sync.Map{}
+			ClearDownloadCache()
 		})
 
 		ctx := utils.WithFS(context.Background(), fs)
@@ -604,7 +603,7 @@ func TestGetPolicyThroughCache(t *testing.T) {
 // causing Rego compile issue
 func TestDownloadCacheWorkdirMismatch(t *testing.T) {
 	t.Cleanup(func() {
-		downloadCache = sync.Map{}
+		ClearDownloadCache()
 	})
 	tmp := t.TempDir()
 
@@ -682,7 +681,7 @@ func TestGetPolicyPinnedURLCacheConsistency(t *testing.T) {
 // cached policy downloads to their individual work directories
 func TestConcurrentPolicyCachingRaceCondition(t *testing.T) {
 	t.Cleanup(func() {
-		downloadCache = sync.Map{}
+		ClearDownloadCache()
 	})
 
 	tmp := t.TempDir()
