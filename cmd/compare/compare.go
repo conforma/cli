@@ -26,15 +26,17 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
+	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/policy/equivalence"
 )
 
 var (
-	effectiveTime string
-	imageDigest   string
-	imageRef      string
-	imageURL      string
-	outputFormat  string
+	effectiveTime          string
+	allowPastEffectiveTime bool
+	imageDigest            string
+	imageRef               string
+	imageURL               string
+	outputFormat           string
 )
 
 var CompareCmd *cobra.Command
@@ -74,6 +76,7 @@ Examples:
 	}
 
 	compareCmd.Flags().StringVar(&effectiveTime, "effective-time", "now", "Effective time for policy evaluation (RFC3339 format, 'now')")
+	compareCmd.Flags().BoolVar(&allowPastEffectiveTime, "allow-past-effective-time", false, "Allow setting --effective-time to a date in the past")
 	compareCmd.Flags().StringVar(&imageDigest, "image-digest", "", "Image digest for volatile config matching")
 	compareCmd.Flags().StringVar(&imageRef, "image-ref", "", "Image reference for volatile config matching")
 	compareCmd.Flags().StringVar(&imageURL, "image-url", "", "Image URL for volatile config matching")
@@ -84,20 +87,12 @@ Examples:
 
 func runCompare(cmd *cobra.Command, args []string) error {
 
-	// Parse effective time
-	var effectiveTimeValue time.Time
-	switch effectiveTime {
-	case "now":
+	effectiveTimeValue, err := policy.ParseEffectiveTime(effectiveTime, allowPastEffectiveTime)
+	if err != nil {
+		return err
+	}
+	if effectiveTimeValue.IsZero() {
 		effectiveTimeValue = time.Now().UTC()
-	case "attestation":
-		// For now, use current time as default for attestation time
-		effectiveTimeValue = time.Now().UTC()
-	default:
-		var err error
-		effectiveTimeValue, err = time.Parse(time.RFC3339, effectiveTime)
-		if err != nil {
-			return fmt.Errorf("invalid effective time format: %w", err)
-		}
 	}
 
 	// Create image info if provided

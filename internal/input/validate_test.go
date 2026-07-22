@@ -146,7 +146,7 @@ func Test_ValidatePipeline(t *testing.T) {
 	errFile := afero.WriteFile(appFS, validFile, []byte("data"), 0o777)
 	assert.NoError(t, errFile)
 	ctx := utils.WithFS(context.Background(), appFS)
-	policy, err := policy.NewInputPolicy(ctx, "", "2023-01-01T00:00:00.00Z")
+	policy, err := policy.NewInputPolicy(ctx, "", "2023-01-01T00:00:00.00Z", true)
 	assert.NoError(t, err)
 
 	for _, tt := range tests {

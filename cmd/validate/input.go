@@ -43,20 +43,21 @@ type InputValidationFunc func(context.Context, string, policy.Policy, bool) (*ou
 
 func validateInputCmd(validate InputValidationFunc) *cobra.Command {
 	data := struct {
-		effectiveTime       string
-		filePaths           []string
-		forceColor          bool
-		info                bool
-		namespaces          []string
-		noColor             bool
-		output              []string
-		policy              policy.Policy
-		policyConfiguration string
-		strict              bool
-		workers             int
-		serverMode          bool
-		serverAddress       string
-		serverPort          int
+		effectiveTime          string
+		allowPastEffectiveTime bool
+		filePaths              []string
+		forceColor             bool
+		info                   bool
+		namespaces             []string
+		noColor                bool
+		output                 []string
+		policy                 policy.Policy
+		policyConfiguration    string
+		strict                 bool
+		workers                int
+		serverMode             bool
+		serverAddress          string
+		serverPort             int
 	}{
 		strict:        true,
 		workers:       5,
@@ -168,7 +169,7 @@ func validateInputCmd(validate InputValidationFunc) *cobra.Command {
 			}
 			data.policyConfiguration = policyConfiguration
 
-			if p, err := policy.NewInputPolicy(cmd.Context(), data.policyConfiguration, data.effectiveTime); err != nil {
+			if p, err := policy.NewInputPolicy(cmd.Context(), data.policyConfiguration, data.effectiveTime, data.allowPastEffectiveTime); err != nil {
 				allErrors = errors.Join(allErrors, err)
 			} else {
 				data.policy = p
@@ -348,6 +349,10 @@ func validateInputCmd(validate InputValidationFunc) *cobra.Command {
 		Run policy checks with the provided time. Useful for testing rules with
 		effective dates in the future. The value can be "now" (default) - for
 		current time, or a RFC3339 formatted value, e.g. 2022-11-18T00:00:00Z.`))
+
+	cmd.Flags().BoolVar(&data.allowPastEffectiveTime, "allow-past-effective-time", false, hd.Doc(`
+		Allow setting --effective-time to a date in the past. By default, dates
+		more than 5 minutes in the past are rejected.`))
 
 	cmd.Flags().BoolVar(&data.info, "info", data.info, hd.Doc(`
 		Include additional information on the failures. For instance for policy

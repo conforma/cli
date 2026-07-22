@@ -851,7 +851,7 @@ Feature: evaluate enterprise contract
       ]
     }
     """
-    When ec command is run with "validate image --image ${REGISTRY}/acceptance/image --policy acceptance/ec-policy --rekor-url ${REKOR} --public-key ${known_PUBLIC_KEY} --output=json --effective-time 2014-05-31 --show-successes"
+    When ec command is run with "validate image --image ${REGISTRY}/acceptance/image --policy acceptance/ec-policy --rekor-url ${REKOR} --public-key ${known_PUBLIC_KEY} --output=json --effective-time 2014-05-31 --allow-past-effective-time --show-successes"
     Then the exit status should be 0
     And the output should match the snapshot
 
