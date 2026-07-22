@@ -11,7 +11,7 @@ require (
 	github.com/tektoncd/cli v0.44.1
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	gotest.tools/gotestsum v1.12.1
-	helm.sh/helm/v3 v3.18.5
+	helm.sh/helm/v3 v3.20.2
 	k8s.io/kubernetes v1.34.2
 	sigs.k8s.io/kustomize/kustomize/v5 v5.8.1
 )
@@ -456,7 +456,7 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
-	github.com/rubenv/sql-migrate v1.8.0 // indirect
+	github.com/rubenv/sql-migrate v1.8.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/ryancurrah/gomodguard v1.4.1 // indirect
 	github.com/ryanrolds/sqlclosecheck v0.6.0 // indirect
