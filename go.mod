@@ -5,7 +5,7 @@ go 1.26.3
 require (
 	cuelang.org/go v0.16.0
 	github.com/CycloneDX/cyclonedx-go v0.10.0
-	github.com/MakeNowJust/heredoc v1.0.0
+	github.com/MakeNowJust/heredoc/v2 v2.0.1
 	github.com/Maldris/go-billy-afero v0.0.0-20200815120323-e9d3de59c99a
 	github.com/conforma/crds/api v0.1.7
 	github.com/conforma/go-gather v1.2.0
@@ -29,7 +29,7 @@ require (
 	github.com/open-policy-agent/opa v1.15.2
 	github.com/package-url/packageurl-go v0.1.3
 	github.com/qri-io/jsonpointer v0.1.1
-	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/secure-systems-lab/go-securesystemslib v0.11.0
 	github.com/sigstore/cosign/v3 v3.0.4
 	github.com/sigstore/rekor v1.5.3
@@ -63,9 +63,11 @@ require (
 replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry v0.21.8-0.20260626175242-ae5f0ae7a0b0
 
 require (
+	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/go-openapi/runtime v0.32.4
 	github.com/google/uuid v1.6.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
+	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	golang.org/x/text v0.38.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.36.0
