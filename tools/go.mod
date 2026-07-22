@@ -1,6 +1,6 @@
 module github.com/conforma/cli/tools
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/daixiang0/gci v0.13.7
@@ -272,7 +272,7 @@ require (
 	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
-	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/golangci/asciicheck v0.5.0 // indirect
@@ -286,7 +286,7 @@ require (
 	github.com/golangci/swaggoswag v0.0.0-20250504205917-77f2aca3143e // indirect
 	github.com/golangci/unconvert v0.0.0-20250410112200-a129a6e6413e // indirect
 	github.com/google/btree v1.1.3 // indirect
-	github.com/google/cel-go v0.28.0 // indirect
+	github.com/google/cel-go v0.28.1 // indirect
 	github.com/google/certificate-transparency-go v1.3.2 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
@@ -443,7 +443,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.67.5 // indirect
+	github.com/prometheus/common v0.69.0 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/protocolbuffers/txtpbfmt v0.0.0-20260217160748-a481f6a22f94 // indirect
@@ -497,7 +497,7 @@ require (
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spf13/viper v1.21.0 // indirect
-	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
+	github.com/spiffe/go-spiffe/v2 v2.8.1 // indirect
 	github.com/ssgreg/nlreturn/v2 v2.2.1 // indirect
 	github.com/stbenjam/no-sprintf-host-port v0.3.1 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
@@ -506,7 +506,7 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/tchap/go-patricia/v2 v2.3.3 // indirect
 	github.com/tektoncd/hub v1.23.6 // indirect
-	github.com/tektoncd/pipeline v1.12.0 // indirect
+	github.com/tektoncd/pipeline v1.14.0 // indirect
 	github.com/tektoncd/triggers v0.35.0 // indirect
 	github.com/tetafro/godot v1.5.4 // indirect
 	github.com/thales-e-security/pool v0.0.2 // indirect
@@ -606,7 +606,7 @@ require (
 	honnef.co/go/tools v0.7.0 // indirect
 	k8s.io/api v0.36.0 // indirect
 	k8s.io/apiextensions-apiserver v0.36.0 // indirect
-	k8s.io/apimachinery v0.36.0 // indirect
+	k8s.io/apimachinery v0.36.2 // indirect
 	k8s.io/apiserver v0.36.0 // indirect
 	k8s.io/cli-runtime v0.36.0 // indirect
 	k8s.io/client-go v0.36.0 // indirect
@@ -616,7 +616,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20260319004828-5883c5ee87b9 // indirect
 	k8s.io/kubectl v0.36.0 // indirect
 	k8s.io/metrics v0.36.0 // indirect
-	k8s.io/streaming v0.36.0 // indirect
+	k8s.io/streaming v0.36.2 // indirect
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
 	knative.dev/eventing v0.49.2 // indirect
 	knative.dev/pkg v0.0.0-20260531000007-52dbd5ece63f // indirect
