@@ -188,9 +188,17 @@ func (p *PolicyUrl) GetPolicy(ctx context.Context, workDir string, showMsg bool)
 	}
 
 	var pinErr error
+	originalUrl := p.Url
 	p.pinOnce.Do(func() {
 		p.Url, pinErr = metadata.GetPinnedURL(p.Url)
 		log.Debug("Pinned URL: ", p.Url)
+		// Register the cached download under the pinned URL too, so
+		// subsequent lookups (which use the now-mutated p.Url) still hit.
+		if pinErr == nil && p.Url != originalUrl {
+			if cached, ok := downloadCache.Load(originalUrl); ok {
+				downloadCache.LoadOrStore(p.Url, cached)
+			}
+		}
 	})
 	if pinErr != nil {
 		return "", pinErr

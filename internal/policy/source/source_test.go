@@ -634,6 +634,49 @@ func TestDownloadCacheWorkdirMismatch(t *testing.T) {
 	assert.Equal(t, destination1, destination2)
 }
 
+// TestGetPolicyPinnedURLCacheConsistency verifies that URL pinning doesn't
+// cause duplicate policy directories. After the first GetPolicy call, the URL
+// is pinned (e.g. github.com/org/repo -> git::github.com/org/repo?ref=abc123),
+// which changes the cache key. Without the fix, the second call would miss the
+// cache and re-download into a new directory, causing OPA duplicate package errors.
+func TestGetPolicyPinnedURLCacheConsistency(t *testing.T) {
+	t.Cleanup(ClearDownloadCache)
+
+	workDir := t.TempDir()
+	policyDir := filepath.Join(workDir, "policy")
+	require.NoError(t, os.MkdirAll(policyDir, 0o755))
+
+	originalUrl := "github.com/org/repo//policy"
+	p := &PolicyUrl{Url: originalUrl, Kind: PolicyKind}
+
+	dl := &mockDownloader{}
+	dl.On("Download", mock.Anything, mock.Anything, originalUrl, false).
+		Run(func(args mock.Arguments) {
+			dest := args.String(1)
+			require.NoError(t, os.MkdirAll(dest, 0o755))
+		}).
+		Return(&gitMetadata.GitMetadata{LatestCommit: "abc123def456"}, nil)
+
+	ctx := usingDownloader(context.TODO(), dl)
+
+	// First call: downloads and pins URL
+	dest1, err := p.GetPolicy(ctx, workDir, false)
+	require.NoError(t, err)
+	assert.NotEqual(t, originalUrl, p.Url, "URL should be pinned after first call")
+
+	// Second call: should hit cache despite pinned URL
+	dest2, err := p.GetPolicy(ctx, workDir, false)
+	require.NoError(t, err)
+	assert.Equal(t, dest1, dest2, "second call should return same directory")
+
+	// Verify only one directory exists under policy/
+	entries, err := os.ReadDir(policyDir)
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "only one policy directory should exist, not a duplicate from pinned URL")
+
+	dl.AssertNumberOfCalls(t, "Download", 1)
+}
+
 // TestConcurrentPolicyCachingRaceCondition reproduces the "file exists" error
 // that occurs when multiple workers simultaneously try to create symlinks from
 // cached policy downloads to their individual work directories
