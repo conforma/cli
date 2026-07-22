@@ -28,7 +28,7 @@ permissions:
 
 jobs:
 
-  Stress:
+  stress:
     runs-on: ubuntu-latest
     continue-on-error: true
     env:
@@ -66,11 +66,20 @@ jobs:
       - name: Run stress benchmark
         run: |
           cd benchmark/stress
-          ./stress 2>/dev/null | tee benchmark-output.txt
+          ./stress 2>benchmark-stderr.txt | tee benchmark-output.txt
 
       - name: Write job summary
         if: always()
         run: |
+          if [[ -s benchmark/stress/benchmark-stderr.txt ]]; then
+            {
+              echo "### Stderr"
+              echo '```'
+              tail -50 benchmark/stress/benchmark-stderr.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           if [[ ! -f benchmark/stress/benchmark-output.txt ]]; then
             echo "## Stress Benchmark" >> "$GITHUB_STEP_SUMMARY"
             echo "Benchmark did not produce output." >> "$GITHUB_STEP_SUMMARY"
