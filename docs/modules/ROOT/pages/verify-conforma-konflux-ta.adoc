@@ -64,7 +64,7 @@ paths can be provided by using the `:` separator.
 *WORKERS* (`string`):: Number of parallel workers to use for policy evaluation.
 
 +
-*Default*: `4`
+*Default*: `5`
 *EC_USE_OPA* (`string`):: Use the OPA evaluator instead of the default conftest evaluator. Set to "1" to enable.
 *SINGLE_COMPONENT* (`string`):: Reduce the Snapshot to only the component whose build caused the Snapshot to be created
 +

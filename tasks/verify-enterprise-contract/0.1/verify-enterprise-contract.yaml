@@ -183,7 +183,7 @@ spec:
     - name: WORKERS
       type: string
       description: Number of parallel workers to use for policy evaluation.
-      default: "1"
+      default: "2"
 
     - name: EC_USE_OPA
       type: string
