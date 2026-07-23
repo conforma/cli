@@ -227,8 +227,8 @@ k8s.io/kube-openapi v0.0.0-20260319004828-5883c5ee87b9 h1:Sztf7ESG9tAXRW/ACJZjrj
 k8s.io/kube-openapi v0.0.0-20260319004828-5883c5ee87b9/go.mod h1:uGBT7iTA6c6MvqUvSXIaYZo9ukscABYi2btjhvgKGZ0=
 k8s.io/kubectl v0.36.0 h1:hEGr8NvIm2Wjqs2Xy48Uzmvo6lpHdGKlLyMvau2gTms=
 k8s.io/kubectl v0.36.0/go.mod h1:iDe8aV5BEi45W8k+5n71I2pJ/nwE0PHDu+/2cejzYoo=
-k8s.io/kubernetes v1.34.3 h1:0TfljWbhEF5DBks+WFMSrvKfxBLo4vnZuqORjLMiyT4=
-k8s.io/kubernetes v1.34.3/go.mod h1:m6pZk6a179pRo2wsTiCPORJ86iOEQmfIzUvtyEF8BwA=
+k8s.io/kubernetes v1.34.10 h1:mB1KE7E2BonfpnGyim/+csCR5JMAoLsXt2xPXL5+DdY=
+k8s.io/kubernetes v1.34.10/go.mod h1:h4QgWn/cK8lmmFKKyEclTVjjv8Up6d5pRyOLuuiOBLI=
 k8s.io/metrics v0.36.0 h1:VF41Mv9ZWKKQ4jEiJ0n3Tp6jdyO+oM6dbKcJn6Y/DVg=
 k8s.io/metrics v0.36.0/go.mod h1:FY1dgPJZqnSfnOYbVdBEdRNUdy0n1nUCU6yxSMUrVG4=
 k8s.io/streaming v0.36.0 h1:agnTxU+NFulUrtYzXUGKO3ndEa8jKwht1Kwn9nu9x+4=
