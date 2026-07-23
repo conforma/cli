@@ -400,7 +400,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 			results := make(chan validate_utils.Result, numComponents)
 			// Initialize each worker. They will wait patiently until a job is sent to the jobs
 			// channel, or the jobs channel is closed.
-			for i := 0; i <= numWorkers; i++ {
+			for i := 0; i < numWorkers; i++ {
 				go worker(i, jobs, results)
 			}
 			// Initialize all the jobs. Each worker will pick a job from the channel when the worker
