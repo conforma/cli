@@ -16,11 +16,11 @@ ec validate image --debug ...
 # or
 EC_DEBUG=1 ec validate image ...
 
-# Acceptance: keep containers running after failure
-make acceptance -- -persist
+# Acceptance: keep containers running after failure (must use go test, not make)
+cd acceptance && go test ./acceptance -args -persist
 
 # Reattach to persisted containers later
-make acceptance -- -restore
+cd acceptance && go test ./acceptance -args -restore
 ```
 
 ## Step 2: Read the Output

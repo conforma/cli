@@ -43,12 +43,17 @@ make focus-acceptance
 
 ## Acceptance Test Options
 
+Note: `-persist`/`-restore` require `go test` directly (not `make`), and use `./acceptance` not `./...`:
+
 ```bash
 # Keep test containers running after failure for debugging
-make acceptance -- -persist
+cd acceptance && go test ./acceptance -args -persist
 
 # Reattach to persisted containers
-make acceptance -- -restore
+cd acceptance && go test ./acceptance -args -restore
+
+# Run with specific tags
+cd acceptance && go test ./acceptance -args -tags=@focus
 
 # Update snapshot files
 UPDATE_SNAPS=true make acceptance
