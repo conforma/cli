@@ -286,7 +286,7 @@ require (
 	github.com/golangci/swaggoswag v0.0.0-20250504205917-77f2aca3143e // indirect
 	github.com/golangci/unconvert v0.0.0-20250410112200-a129a6e6413e // indirect
 	github.com/google/btree v1.1.3 // indirect
-	github.com/google/cel-go v0.28.0 // indirect
+	github.com/google/cel-go v0.28.1 // indirect
 	github.com/google/certificate-transparency-go v1.3.2 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
@@ -506,7 +506,7 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/tchap/go-patricia/v2 v2.3.3 // indirect
 	github.com/tektoncd/hub v1.23.6 // indirect
-	github.com/tektoncd/pipeline v1.12.0 // indirect
+	github.com/tektoncd/pipeline v1.12.2 // indirect
 	github.com/tektoncd/triggers v0.35.0 // indirect
 	github.com/tetafro/godot v1.5.4 // indirect
 	github.com/thales-e-security/pool v0.0.2 // indirect
