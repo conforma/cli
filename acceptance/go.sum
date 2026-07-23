@@ -321,8 +321,8 @@ github.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6
 github.com/golang/snappy v0.0.4/go.mod h1:/XxbfmMg8lxefKM7IXC3fBNl/7bRcc72aCRzEWrmP2Q=
 github.com/golang/snappy v1.0.0 h1:Oy607GVXHs7RtbggtPBnr2RmDArIsAefDwvrdWvRhGs=
 github.com/golang/snappy v1.0.0/go.mod h1:/XxbfmMg8lxefKM7IXC3fBNl/7bRcc72aCRzEWrmP2Q=
-github.com/google/cel-go v0.28.0 h1:KjSWstCpz/MN5t4a8gnGJNIYUsJRpdi/r97xWDphIQc=
-github.com/google/cel-go v0.28.0/go.mod h1:X0bD6iVNR8pkROSOoHVdgTkzmRcosof7WQqCD6wcMc8=
+github.com/google/cel-go v0.28.1 h1:YWIwi77J4xIsYUwAF/iIuS6haffzIHS8yWI8glSbLWM=
+github.com/google/cel-go v0.28.1/go.mod h1:X0bD6iVNR8pkROSOoHVdgTkzmRcosof7WQqCD6wcMc8=
 github.com/google/certificate-transparency-go v1.3.2 h1:9ahSNZF2o7SYMaKaXhAumVEzXB2QaayzII9C8rv7v+A=
 github.com/google/certificate-transparency-go v1.3.2/go.mod h1:H5FpMUaGa5Ab2+KCYsxg6sELw3Flkl7pGZzWdBoYLXs=
 github.com/google/gnostic-models v0.7.0 h1:qwTtogB15McXDaNqTZdzPJRHvaVJlAl+HVQnLmJEJxo=
@@ -645,8 +645,8 @@ github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d h1:vfofYNRScrDd
 github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d/go.mod h1:RRCYJbIwD5jmqPI9XoAFR0OcDxqUctll6zUj/+B4S48=
 github.com/tektoncd/cli v0.44.1 h1:UMI2xFt7MLTJdLuopzjAUTon8b1Ni4qbyboi2b4KWmQ=
 github.com/tektoncd/cli v0.44.1/go.mod h1:q8IZV/HuGh/D4kbID0YVTfqkbV7dMX+T687I/hPIBL8=
-github.com/tektoncd/pipeline v1.12.0 h1:/a2ENIZYLwvvApWU8KHL5CWCj/fNjiGU/aTUu3up2YQ=
-github.com/tektoncd/pipeline v1.12.0/go.mod h1:FaS4+AjlUmMOqkzLtdjaY40iLGbCiLkal/BsJ102FLI=
+github.com/tektoncd/pipeline v1.12.2 h1:pVip2g/FIMpB7cdrh4M2d/eXD8JhgzKc9yEtxSEqqAY=
+github.com/tektoncd/pipeline v1.12.2/go.mod h1:cj7Z+1WuF/fcHSL3db8BWwsOQYl4Sv9WOgvow3nVt0E=
 github.com/tektoncd/triggers v0.35.0 h1:9Z5Cqn7RZTgyspWgWYFHz6AtWUUhd/awJeaisjZdF98=
 github.com/tektoncd/triggers v0.35.0/go.mod h1:te1wPij1VJ/59wqpVKfwxZHRS/FOZSCMSbBTpKtLfz4=
 github.com/testcontainers/testcontainers-go v0.34.0 h1:5fbgF0vIN5u+nD3IWabQwRybuB4GY8G2HHgCkbMzMHo=
