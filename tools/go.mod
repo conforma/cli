@@ -7,12 +7,12 @@ require (
 	github.com/golangci/golangci-lint/v2 v2.11.4
 	github.com/google/addlicense v1.2.0
 	github.com/open-policy-agent/conftest v0.68.2
-	github.com/tektoncd/chains v0.26.2
-	github.com/tektoncd/cli v0.44.1
+	github.com/tektoncd/chains v0.26.6
+	github.com/tektoncd/cli v0.44.2
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
-	gotest.tools/gotestsum v1.12.1
+	gotest.tools/gotestsum v1.12.3
 	helm.sh/helm/v3 v3.18.5
-	k8s.io/kubernetes v1.34.2
+	k8s.io/kubernetes v1.34.10
 	sigs.k8s.io/kustomize/kustomize/v5 v5.8.1
 )
 
@@ -333,8 +333,8 @@ require (
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/in-toto/archivista v0.10.0 // indirect
 	github.com/in-toto/attestation v1.1.2 // indirect
-	github.com/in-toto/go-witness v0.9.1 // indirect
-	github.com/in-toto/in-toto-golang v0.10.0 // indirect
+	github.com/in-toto/go-witness v0.9.2 // indirect
+	github.com/in-toto/in-toto-golang v0.11.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
 	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect
@@ -474,7 +474,7 @@ require (
 	github.com/shibumi/go-pathspec v1.3.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/shteou/go-ignore v0.3.1 // indirect
-	github.com/sigstore/cosign/v2 v2.6.2 // indirect
+	github.com/sigstore/cosign/v2 v2.6.3 // indirect
 	github.com/sigstore/fulcio v1.8.5 // indirect
 	github.com/sigstore/protobuf-specs v0.5.1 // indirect
 	github.com/sigstore/rekor v1.5.3 // indirect
@@ -485,7 +485,7 @@ require (
 	github.com/sigstore/sigstore/pkg/signature/kms/azure v1.10.8 // indirect
 	github.com/sigstore/sigstore/pkg/signature/kms/gcp v1.10.8 // indirect
 	github.com/sigstore/sigstore/pkg/signature/kms/hashivault v1.10.8 // indirect
-	github.com/sigstore/timestamp-authority/v2 v2.0.3 // indirect
+	github.com/sigstore/timestamp-authority/v2 v2.0.6 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/sivchari/containedctx v1.0.3 // indirect
 	github.com/sonatard/noctx v0.5.1 // indirect
