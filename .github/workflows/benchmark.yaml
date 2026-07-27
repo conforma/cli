@@ -32,7 +32,7 @@ jobs:
     name: Stress Benchmark
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    continue-on-error: true
+    continue-on-error: false
     env:
       # Tuned for 4 vCPU / 16 GB CI runners to complete within 5 minutes.
       # Code defaults are 10 components / 35 workers.
@@ -78,6 +78,16 @@ jobs:
           cd benchmark/stress
           ./stress 2>benchmark-stderr.txt | tee benchmark-output.txt
 
+      - name: Compare against baseline
+        id: compare
+        run: |
+          cd benchmark/stress
+          if [[ -f baseline.json ]]; then
+            ./compare.sh benchmark-output.txt
+          else
+            echo "No baseline found, skipping comparison."
+          fi
+
       - name: Write job summary
         if: always()
         run: |
@@ -113,15 +123,41 @@ jobs:
           alloc_mb=$(awk -v val="${alloc:-0}" 'BEGIN {printf "%.0f", val / 1048576}')
           heap_mb=$(awk -v val="${heap:-0}" 'BEGIN {printf "%.0f", val / 1048576}')
 
+          has_baseline=false
+          if [[ -f benchmark/stress/baseline.json ]]; then
+            has_baseline=true
+            bl_rss=$(python3 -c "import json; print(json.load(open('benchmark/stress/baseline.json'))['peak_rss_bytes'])")
+            bl_ns=$(python3 -c "import json; print(json.load(open('benchmark/stress/baseline.json'))['execution_time_ns'])")
+            bl_rss_mb=$(awk -v val="$bl_rss" 'BEGIN {printf "%.0f", val / 1048576}')
+            bl_secs=$(awk -v val="$bl_ns" 'BEGIN {printf "%.1f", val / 1000000000}')
+            rss_change=$(awk -v cur="$peak_rss" -v base="$bl_rss" 'BEGIN {printf "%+.1f", ((cur - base) / base) * 100}')
+            time_change=$(awk -v cur="$ns_op" -v base="$bl_ns" 'BEGIN {printf "%+.1f", ((cur - base) / base) * 100}')
+          fi
+
           {
             echo "## Stress Benchmark"
             echo ""
-            echo "| Metric | Value | Description |"
-            echo "|--------|-------|-------------|"
-            echo "| Components | ${EC_STRESS_COMPONENTS} | Snapshot components validated |"
-            echo "| Workers | ${EC_STRESS_WORKERS} | Parallel validation workers |"
-            echo "| Execution time | ${secs}s | Wall-clock time per iteration |"
-            echo "| Peak RSS | ${rss_mb} MB | Max physical memory used |"
-            echo "| Allocated memory | ${alloc_mb} MB | Total Go heap allocations |"
-            echo "| Heap from system | ${heap_mb} MB | Heap memory requested from OS |"
+            if [[ "$has_baseline" == "true" ]]; then
+              echo "| Metric | Current | Baseline | Change | Description |"
+              echo "|--------|---------|----------|--------|-------------|"
+              echo "| Components | ${EC_STRESS_COMPONENTS} | | | Snapshot components validated |"
+              echo "| Workers | ${EC_STRESS_WORKERS} | | | Parallel validation workers |"
+              echo "| Execution time | ${secs}s | ${bl_secs}s | ${time_change}% | Wall-clock time per iteration |"
+              echo "| Peak RSS | ${rss_mb} MB | ${bl_rss_mb} MB | ${rss_change}% | Max physical memory used |"
+              echo "| Allocated memory | ${alloc_mb} MB | | | Total Go heap allocations |"
+              echo "| Heap from system | ${heap_mb} MB | | | Heap memory requested from OS |"
+            else
+              echo "| Metric | Value | Description |"
+              echo "|--------|-------|-------------|"
+              echo "| Components | ${EC_STRESS_COMPONENTS} | Snapshot components validated |"
+              echo "| Workers | ${EC_STRESS_WORKERS} | Parallel validation workers |"
+              echo "| Execution time | ${secs}s | Wall-clock time per iteration |"
+              echo "| Peak RSS | ${rss_mb} MB | Max physical memory used |"
+              echo "| Allocated memory | ${alloc_mb} MB | Total Go heap allocations |"
+              echo "| Heap from system | ${heap_mb} MB | Heap memory requested from OS |"
+            fi
+            if [[ "${{ steps.compare.outcome }}" == "failure" ]]; then
+              echo ""
+              echo "> **⚠️ Performance regression detected.** Update the baseline with \`make benchmark_baseline\` if this is expected."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
