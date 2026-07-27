@@ -31,6 +31,7 @@ jobs:
   stress:
     name: Stress Benchmark
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     continue-on-error: true
     env:
       # Tuned for 4 vCPU / 16 GB CI runners to complete within 6-8 minutes.
