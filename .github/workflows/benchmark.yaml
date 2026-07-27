@@ -72,6 +72,7 @@ jobs:
         run: go build -o benchmark/stress/stress ./benchmark/stress
 
       - name: Run stress benchmark
+        id: bench
         run: |
           set -o pipefail
           cd benchmark/stress
@@ -80,7 +81,7 @@ jobs:
       - name: Write job summary
         if: always()
         run: |
-          if [[ -s benchmark/stress/benchmark-stderr.txt ]]; then
+          if [[ "${{ steps.bench.outcome }}" == "failure" && -s benchmark/stress/benchmark-stderr.txt ]]; then
             {
               echo "### Stderr"
               echo '```'
