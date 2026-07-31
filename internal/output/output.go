@@ -218,11 +218,22 @@ func keepSomeMetadata(results []evaluator.Result) {
 
 func keepSomeMetadataSingle(result evaluator.Result) {
 	for key := range result.Metadata {
-		if key == "code" || key == "effective_on" || key == "term" {
+		if key == "code" || key == "effective_on" || key == "effective_until" || key == "term" {
 			continue
 		}
 		delete(result.Metadata, key)
 	}
+}
+
+// Exceptions aggregates and returns all exceptions.
+func (o Output) Exceptions() []evaluator.Result {
+	exceptions := make([]evaluator.Result, 0, 10)
+	for _, result := range o.PolicyCheck {
+		exceptions = append(exceptions, result.Exceptions...)
+	}
+
+	exceptions = sortResults(exceptions)
+	return exceptions
 }
 
 // addCheckResultsToViolations appends the Failures from CheckResult to the violations slice.

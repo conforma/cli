@@ -176,8 +176,9 @@ const (
 	metadataDependsOn   = "depends_on"
 	metadataDescription = "description"
 	metadataSeverity    = "severity"
-	metadataEffectiveOn = "effective_on"
-	metadataSolution    = "solution"
+	metadataEffectiveOn    = "effective_on"
+	metadataEffectiveUntil = "effective_until"
+	metadataSolution       = "solution"
 	metadataTerm        = "term"
 	metadataTitle       = "title"
 )
@@ -613,8 +614,10 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 	ctx = context.WithValue(ctx, effectiveTimeKey, effectiveTime)
 
 	// Track how many rules have been processed. This is used later on to determine if anything
-	// at all was processed.
+	// at all was processed. Exceptions are not counted because an all-excluded policy would
+	// otherwise falsely report success with no real checks performed.
 	totalRules := 0
+	allExceptions := 0
 
 	// Populate a list with all the include directives specified in the
 	// policy config.
@@ -650,25 +653,26 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 		}
 
 		// Filter results using the unified filter
-		filteredResults, updatedMissingIncludes := unifiedFilter.FilterResults(
+		filteredResults, updatedMissingIncludes, configExceptions := unifiedFilter.FilterResults(
 			allResults, allRules, target.Target, target.ComponentName, missingIncludes, effectiveTime)
 
 		// Update missing includes
 		missingIncludes = updatedMissingIncludes
 
 		// Categorize results using the unified filter
-		warnings, failures, exceptions, skipped := unifiedFilter.CategorizeResults(
+		warnings, failures, _, skipped := unifiedFilter.CategorizeResults(
 			filteredResults, result, effectiveTime)
 
 		result.Warnings = warnings
 		result.Failures = failures
-		result.Exceptions = exceptions
+		result.Exceptions = ensureNonNilSlice(configExceptions)
 		result.Skipped = skipped
 
 		// Replace the placeholder successes slice with the actual successes.
 		result.Successes = c.computeSuccesses(result, rules, target.Target, target.ComponentName, missingIncludes, unifiedFilter, effectiveTime)
 
 		totalRules += len(result.Warnings) + len(result.Failures) + len(result.Successes)
+		allExceptions += len(configExceptions)
 
 		results = append(results, result)
 	}
@@ -688,6 +692,12 @@ func (c conftestEvaluator) Evaluate(ctx context.Context, target EvaluationTarget
 	// If no rules were checked, then we have effectively failed, because no tests were actually
 	// ran due to input error, etc.
 	if totalRules == 0 {
+		if allExceptions > 0 {
+			// All rules were excluded by policy config: warn but return the exceptions so
+			// downstream consumers (e.g. SVR generators) can represent the waivers.
+			log.Warn("all rules were excluded by policy config; no policy checks were performed")
+			return results, nil
+		}
 		log.Error("no successes, warnings, or failures, check input")
 		return nil, fmt.Errorf("no successes, warnings, or failures, check input")
 	}
@@ -863,7 +873,7 @@ func (c conftestEvaluator) computeSuccesses(
 		// Use unified filtering approach for consistency
 		if unifiedFilter != nil {
 			// Use the unified filter to check if this success should be included
-			filteredResults, _ := unifiedFilter.FilterResults(
+			filteredResults, _, _ := unifiedFilter.FilterResults(
 				[]Result{success}, rules, imageRef, componentName, missingIncludes, effectiveTime)
 
 			if len(filteredResults) == 0 {

@@ -625,7 +625,7 @@ func TestUnifiedPostEvaluationFilter(t *testing.T) {
 			"@redhat": true,
 		}
 
-		filteredResults, updatedMissingIncludes := filter.FilterResults(
+		filteredResults, updatedMissingIncludes, _ := filter.FilterResults(
 			results, rules, "test-target", "", missingIncludes, time.Now())
 
 		// Should include cve.high_severity and tasks.build_task, exclude test.test_data_found
@@ -694,7 +694,7 @@ func TestUnifiedPostEvaluationFilter(t *testing.T) {
 			"*": true,
 		}
 
-		filteredResults, updatedMissingIncludes := filter.FilterResults(
+		filteredResults, updatedMissingIncludes, _ := filter.FilterResults(
 			results, rules, "test-target", "", missingIncludes, time.Now())
 
 		// Should only include release.security_check (matches pipeline intention)
@@ -745,7 +745,7 @@ func TestUnifiedPostEvaluationFilter(t *testing.T) {
 			"cve":                 true,
 		}
 
-		filteredResults, updatedMissingIncludes := filter.FilterResults(
+		filteredResults, updatedMissingIncludes, _ := filter.FilterResults(
 			results, rules, "test-target", "", missingIncludes, time.Now())
 
 		// Should include the CVE result
@@ -872,7 +872,7 @@ func TestUnifiedPostEvaluationFilterVsLegacy(t *testing.T) {
 			"@redhat":    true,
 			"security.*": true,
 		}
-		newFilteredResults, newUpdatedMissingIncludes := newFilter.FilterResults(
+		newFilteredResults, newUpdatedMissingIncludes, _ := newFilter.FilterResults(
 			results, rules, "test-target", "", newMissingIncludes, time.Now())
 
 		// Test the legacy approach using the standalone functions
@@ -1796,3 +1796,127 @@ func TestPipelineIntentionWithMultipleValues(t *testing.T) {
 			"security package should be included (has included rules)")
 	})
 }
+
+func TestConfigExceptionsInFilterResults(t *testing.T) {
+	now := time.Now()
+	effectiveOn := now.Add(-time.Hour).Format(time.RFC3339)
+	effectiveUntil := now.Add(time.Hour).Format(time.RFC3339)
+
+	makeProvider := func() ConfigProvider {
+		return &simpleConfigProvider{effectiveTime: now}
+	}
+
+	makeRules := func() policyRules {
+		return policyRules{
+			"pkg.rule": rule.Info{Code: "pkg.rule", Package: "pkg", ShortName: "rule"},
+		}
+	}
+
+	t.Run("volatile-excluded result surfaces as exception", func(t *testing.T) {
+		src := ecc.Source{
+			VolatileConfig: &ecc.VolatileSourceConfig{
+				Exclude: []ecc.VolatileCriteria{
+					{Value: "pkg.rule", EffectiveOn: effectiveOn, EffectiveUntil: effectiveUntil},
+				},
+			},
+		}
+		filter := NewUnifiedPostEvaluationFilter(NewECPolicyResolver(src, makeProvider()))
+
+		results := []Result{{
+			Message:  "test failure",
+			Metadata: map[string]interface{}{metadataCode: "pkg.rule"},
+		}}
+
+		filtered, _, exceptions := filter.FilterResults(results, makeRules(), "", "", map[string]bool{}, now)
+
+		assert.Empty(t, filtered)
+		require.Len(t, exceptions, 1)
+	})
+
+	t.Run("volatile-excluded result with EffectiveUntil gets effective_until stamped", func(t *testing.T) {
+		src := ecc.Source{
+			VolatileConfig: &ecc.VolatileSourceConfig{
+				Exclude: []ecc.VolatileCriteria{
+					{Value: "pkg.rule", EffectiveOn: effectiveOn, EffectiveUntil: effectiveUntil},
+				},
+			},
+		}
+		filter := NewUnifiedPostEvaluationFilter(NewECPolicyResolver(src, makeProvider()))
+
+		results := []Result{{
+			Message:  "test failure",
+			Metadata: map[string]interface{}{metadataCode: "pkg.rule"},
+		}}
+
+		_, _, exceptions := filter.FilterResults(results, makeRules(), "", "", map[string]bool{}, now)
+
+		require.Len(t, exceptions, 1)
+		assert.Equal(t, effectiveUntil, exceptions[0].Metadata[metadataEffectiveUntil])
+		assert.Equal(t, effectiveOn, exceptions[0].Metadata[metadataEffectiveOn])
+	})
+
+	t.Run("volatile-excluded result without EffectiveUntil does not get effective_until stamped", func(t *testing.T) {
+		src := ecc.Source{
+			VolatileConfig: &ecc.VolatileSourceConfig{
+				Exclude: []ecc.VolatileCriteria{
+					{Value: "pkg.rule", EffectiveOn: effectiveOn},
+				},
+			},
+		}
+		filter := NewUnifiedPostEvaluationFilter(NewECPolicyResolver(src, makeProvider()))
+
+		results := []Result{{
+			Message:  "test failure",
+			Metadata: map[string]interface{}{metadataCode: "pkg.rule"},
+		}}
+
+		_, _, exceptions := filter.FilterResults(results, makeRules(), "", "", map[string]bool{}, now)
+
+		require.Len(t, exceptions, 1)
+		assert.NotContains(t, exceptions[0].Metadata, metadataEffectiveUntil)
+		assert.Equal(t, effectiveOn, exceptions[0].Metadata[metadataEffectiveOn])
+	})
+
+	t.Run("volatile-excluded result with EffectiveUntil only has effective_until stamped but not effective_on", func(t *testing.T) {
+		src := ecc.Source{
+			VolatileConfig: &ecc.VolatileSourceConfig{
+				Exclude: []ecc.VolatileCriteria{
+					{Value: "pkg.rule", EffectiveUntil: effectiveUntil},
+				},
+			},
+		}
+		filter := NewUnifiedPostEvaluationFilter(NewECPolicyResolver(src, makeProvider()))
+
+		results := []Result{{
+			Message:  "test failure",
+			Metadata: map[string]interface{}{metadataCode: "pkg.rule"},
+		}}
+
+		_, _, exceptions := filter.FilterResults(results, makeRules(), "", "", map[string]bool{}, now)
+
+		require.Len(t, exceptions, 1)
+		assert.Equal(t, effectiveUntil, exceptions[0].Metadata[metadataEffectiveUntil])
+		assert.NotContains(t, exceptions[0].Metadata, metadataEffectiveOn)
+	})
+
+	t.Run("permanent-excluded result has no time fields", func(t *testing.T) {
+		src := ecc.Source{
+			Config: &ecc.SourceConfig{
+				Exclude: []string{"pkg.rule"},
+			},
+		}
+		filter := NewUnifiedPostEvaluationFilter(NewECPolicyResolver(src, makeProvider()))
+
+		results := []Result{{
+			Message:  "test failure",
+			Metadata: map[string]interface{}{metadataCode: "pkg.rule"},
+		}}
+
+		_, _, exceptions := filter.FilterResults(results, makeRules(), "", "", map[string]bool{}, now)
+
+		require.Len(t, exceptions, 1)
+		assert.NotContains(t, exceptions[0].Metadata, metadataEffectiveOn)
+		assert.NotContains(t, exceptions[0].Metadata, metadataEffectiveUntil)
+	})
+}
+

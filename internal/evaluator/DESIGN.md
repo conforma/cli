@@ -26,6 +26,30 @@ The key insight: terms (+100pts) and specific rules (+100pts) always override co
 (10pts) or wildcard (1pt) patterns. This lets operators exclude a broad category while
 including specific exceptions, or vice versa.
 
+## Config-Based Exclusions Surface as Exceptions
+
+`Config.Exclude` and `VolatileConfig.Exclude` entries cause matching rules to appear in
+`Outcome.Exceptions` rather than being silently dropped. This lets callers distinguish
+"rule ran and failed" from "rule was excluded by policy".
+
+`VolatileConfig.Exclude` entries may carry `EffectiveOn` and `EffectiveUntil` CRD fields.
+When present, these are stamped onto the exception result as `effective_on` / `effective_until`
+metadata. Presence of `effective_until` distinguishes a time-bounded exception from a
+permanent one — permanent (Config.Exclude) exceptions carry neither field.
+
+**Rego-native exceptions are intentionally excluded from `Outcome.Exceptions`.** The conftest
+evaluation path supports a `data.<namespace>.exception` query that lets Rego policy authors
+suppress deny results. These are implementation details of specific policies — structural
+"not applicable" decisions baked into the policy itself, not operator-level waivers. No
+production Conforma policies use this mechanism; it exists for conftest compatibility.
+Only config-sourced exclusions (from `Config.Exclude` / `VolatileConfig.Exclude`) surface
+in `Outcome.Exceptions`.
+
+**Implementation note**: criteria metadata is keyed by the raw criteria value (e.g. `"pkg"`,
+`"pkg.*"`, `"@collection"`), not by the resolved rule ID (`"pkg.rule"`). When a rule is
+excluded, `PolicyResolutionResult.MatchingExcludeCriteria` records which raw pattern matched,
+so `FilterResults` can retrieve the correct metadata via `getMeta(criteriaValue)`.
+
 ## Adding a New Filter
 
 Follow the pattern in `IncludeExcludePolicyResolver`: embed `basePolicyResolver`, implement

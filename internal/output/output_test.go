@@ -1085,6 +1085,24 @@ func TestKeepSomeMetadataSingle(t *testing.T) {
 				"effective_on": "2023-01-01",
 			},
 		},
+		{
+			name: "preserves effective_until on exception results",
+			input: evaluator.Result{
+				Message: "Test exception",
+				Metadata: map[string]interface{}{
+					"code":            "test.rule",
+					"effective_on":    "2023-01-01T00:00:00Z",
+					"effective_until": "2025-12-31T23:59:59Z",
+					"title":           "Test Rule Title",
+					"description":     "should be removed",
+				},
+			},
+			expectedMetadata: map[string]interface{}{
+				"code":            "test.rule",
+				"effective_on":    "2023-01-01T00:00:00Z",
+				"effective_until": "2025-12-31T23:59:59Z",
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -1103,6 +1121,76 @@ func TestKeepSomeMetadataSingle(t *testing.T) {
 
 			// Verify the result
 			assert.Equal(t, tc.expectedMetadata, result.Metadata)
+		})
+	}
+}
+
+func Test_Exceptions(t *testing.T) {
+	cases := []struct {
+		name     string
+		output   Output
+		expected []evaluator.Result
+	}{
+		{
+			name:     "no-exceptions",
+			output:   Output{},
+			expected: []evaluator.Result{},
+		},
+		{
+			name: "single exception",
+			output: Output{
+				PolicyCheck: []evaluator.Outcome{
+					{
+						Exceptions: []evaluator.Result{
+							{
+								Message: "excepted rule",
+								Metadata: map[string]interface{}{
+									"code":            "some.rule",
+									"effective_on":    "2023-01-01T00:00:00Z",
+									"effective_until": "2025-12-31T23:59:59Z",
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []evaluator.Result{
+				{
+					Message: "excepted rule",
+					Metadata: map[string]interface{}{
+						"code":            "some.rule",
+						"effective_on":    "2023-01-01T00:00:00Z",
+						"effective_until": "2025-12-31T23:59:59Z",
+					},
+				},
+			},
+		},
+		{
+			name: "multiple exceptions across outcomes",
+			output: Output{
+				PolicyCheck: []evaluator.Outcome{
+					{
+						Exceptions: []evaluator.Result{
+							{Message: "exception b", Metadata: map[string]interface{}{"code": "pkg.rule_b"}},
+						},
+					},
+					{
+						Exceptions: []evaluator.Result{
+							{Message: "exception a", Metadata: map[string]interface{}{"code": "pkg.rule_a"}},
+						},
+					},
+				},
+			},
+			expected: []evaluator.Result{
+				{Message: "exception a", Metadata: map[string]interface{}{"code": "pkg.rule_a"}},
+				{Message: "exception b", Metadata: map[string]interface{}{"code": "pkg.rule_b"}},
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.expected, c.output.Exceptions())
 		})
 	}
 }

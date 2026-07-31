@@ -244,6 +244,7 @@ func validateInputCmd(validate InputValidationFunc) *cobra.Command {
 
 					if err == nil {
 						res.input.Violations = out.Violations()
+						res.input.Exceptions = out.Exceptions()
 
 						warnings := out.Warnings()
 						if showWarnings {
