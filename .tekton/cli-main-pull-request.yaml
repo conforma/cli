@@ -579,6 +579,28 @@ spec:
         operator: in
         values:
         - "false"
+    - name: roxctl-scan
+      params:
+      - name: image-url
+        value: $(tasks.build-image-index.results.IMAGE_URL)
+      - name: image-digest
+        value: $(tasks.build-image-index.results.IMAGE_DIGEST)
+      runAfter:
+      - build-image-index
+      taskRef:
+        params:
+        - name: name
+          value: roxctl-scan
+        - name: bundle
+          value: quay.io/konflux-ci/tekton-catalog/task-roxctl-scan:0.1@sha256:63614a21526f2b3e00d2e795be797b4db6fe124184a58e9c8b2e507addebe9fb
+        - name: kind
+          value: task
+        resolver: bundles
+      when:
+      - input: $(params.skip-checks)
+        operator: in
+        values:
+        - "false"
     workspaces:
     - name: git-auth
       optional: true
