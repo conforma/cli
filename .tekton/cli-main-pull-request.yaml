@@ -589,13 +589,13 @@ spec:
       - build-image-index
       taskRef:
         params:
-        - name: name
-          value: roxctl-scan
-        - name: bundle
-          value: quay.io/konflux-ci/tekton-catalog/task-roxctl-scan:0.1@sha256:63614a21526f2b3e00d2e795be797b4db6fe124184a58e9c8b2e507addebe9fb
-        - name: kind
-          value: task
-        resolver: bundles
+        - name: url
+          value: https://github.com/cuipinghuo/konflux-test-tasks
+        - name: revision
+          value: stoneintg-1755-fix-roxctl-oci-attach
+        - name: pathInRepo
+          value: task/roxctl-scan/0.1/roxctl-scan.yaml
+        resolver: git
       when:
       - input: $(params.skip-checks)
         operator: in
