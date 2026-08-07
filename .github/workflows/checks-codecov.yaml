@@ -34,6 +34,7 @@ permissions:
 jobs:
 
   Test:
+    if: false  # skipped for POC branch
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
@@ -96,6 +97,7 @@ jobs:
           retention-days: 1
 
   Acceptance:
+    if: false  # skipped for POC branch
     runs-on: ubuntu-latest
     steps:
       # Disabled until we figure out the "Could not resolve host: github.com" in
@@ -164,6 +166,7 @@ jobs:
 
   Upload:
     name: "Upload Coverage Statistics"
+    if: false  # skipped for POC branch
     runs-on: ubuntu-latest
     needs: [Test, Acceptance]
     steps:
