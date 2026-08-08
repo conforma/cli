@@ -3,5 +3,18 @@
   "extends": [
     "github>conforma/.github//config/renovate/renovate.json",
     "helpers:pinGitHubActionDigests"
-  ]
+  ],
+  "packageRules": [
+    {
+      "description": "Keep vulnerability/security PRs standalone so they are not grouped with stalled patch bundles",
+      "matchManagers": ["gomod"],
+      "isVulnerabilityAlert": true,
+      "groupName": null,
+      "groupSlug": null
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "labels": ["security", "renovate"],
+    "schedule": ["at any time"]
+  }
 }
