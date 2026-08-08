@@ -61,7 +61,7 @@ jobs:
           cache: false
 
       - name: Check go versions
-        uses: conforma/github-workflows/golang-version-check@main
+        uses: conforma/github-workflows/golang-version-check@e049ae95d6a78c4665e88efa667981184394e913 # main
 
       - name: Show git sha and commit subject
         run: git log --oneline -n1
