@@ -1,0 +1,169 @@
+# Copyright The Conforma Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  labels:
+    app.kubernetes.io/version: "0.1"
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.12.1"
+    tekton.dev/tags: "konflux"
+  name: dummy-check
+spec:
+  description: >-
+    A dummy task for testing purposes. Instead of performing a real check, it
+    produces a pass, fail, or warn result based on the RESULT param. Mimics the
+    output format of real SAST tasks (e.g. sast-snyk-check) so it can be used
+    as a stand-in during pipeline development and testing.
+  results:
+    - description: Tekton task test output.
+      name: TEST_OUTPUT
+    - name: TEST_OUTPUT_ARTIFACT_OUTPUTS
+      description: >-
+        JSON object with uri and digest referencing the pushed attestation.
+        Tekton Chains uses this for SLSA provenance.
+      type: object
+      properties:
+        uri: {}
+        digest: {}
+  params:
+    - name: RESULT
+      type: string
+      description: >-
+        The desired result of this dummy check. Must be one of: SUCCESS,
+        FAILURE, WARNING, ERROR, or SKIPPED.
+      default: "SUCCESS"
+    - name: NOTE
+      type: string
+      description: >-
+        Optional note to include in the test output. If not provided, a default
+        message is generated based on the RESULT value.
+      default: ""
+    - name: SUCCESSES
+      type: string
+      description: Number of successes to report in the test output.
+      default: "1"
+    - name: FAILURES
+      type: string
+      description: Number of failures to report in the test output.
+      default: "0"
+    - name: WARNINGS
+      type: string
+      description: Number of warnings to report in the test output.
+      default: "0"
+    - name: image-url
+      description: Image URL.
+      type: string
+      default: ""
+    - name: image-digest
+      description: Digest of the image.
+      type: string
+      default: ""
+  steps:
+    - name: dummy-check
+      results:
+        - name: TEST_OUTPUT
+          description: JSON test results for consumption by subsequent steps.
+      image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+      env:
+        - name: RESULT
+          value: $(params.RESULT)
+        - name: NOTE
+          value: $(params.NOTE)
+        - name: SUCCESSES
+          value: $(params.SUCCESSES)
+        - name: FAILURES
+          value: $(params.FAILURES)
+        - name: WARNINGS
+          value: $(params.WARNINGS)
+      computeResources:
+        limits:
+          memory: 256Mi
+        requests:
+          cpu: 100m
+          memory: 128Mi
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        VALID_RESULTS="SUCCESS FAILURE WARNING ERROR SKIPPED"
+        if ! echo "${VALID_RESULTS}" | grep -qw "${RESULT}"; then
+          echo "ERROR: Invalid RESULT '${RESULT}'. Must be one of: ${VALID_RESULTS}" >&2
+          exit 1
+        fi
+
+        if [[ -z "${NOTE}" ]]; then
+          case "${RESULT}" in
+            SUCCESS)  NOTE="Task $(context.task.name) completed successfully. This is a dummy check." ;;
+            FAILURE)  NOTE="Task $(context.task.name) failed. This is a dummy check." ;;
+            WARNING)  NOTE="Task $(context.task.name) produced warnings. This is a dummy check." ;;
+            ERROR)    NOTE="Task $(context.task.name) encountered an error. This is a dummy check." ;;
+            SKIPPED)  NOTE="Task $(context.task.name) was skipped. This is a dummy check." ;;
+          esac
+        fi
+
+        # Adjust counts based on RESULT if user left defaults
+        case "${RESULT}" in
+          FAILURE)
+            if [[ "${FAILURES}" == "0" ]]; then FAILURES="1"; fi
+            if [[ "${SUCCESSES}" == "1" ]]; then SUCCESSES="0"; fi
+            ;;
+          WARNING)
+            if [[ "${WARNINGS}" == "0" ]]; then WARNINGS="1"; fi
+            ;;
+          ERROR|SKIPPED)
+            SUCCESSES="0"
+            FAILURES="0"
+            WARNINGS="0"
+            ;;
+        esac
+
+        TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S")
+
+        TEST_OUTPUT=$(printf '{
+          "result": "%s",
+          "timestamp": "%s",
+          "note": "%s",
+          "namespace": "default",
+          "successes": %d,
+          "failures": %d,
+          "warnings": %d
+        }' "${RESULT}" "${TIMESTAMP}" "${NOTE}" "${SUCCESSES}" "${FAILURES}" "${WARNINGS}")
+
+        echo "Dummy check result: ${RESULT}"
+        echo "${TEST_OUTPUT}" | tee "$(results.TEST_OUTPUT.path)"
+        echo -n "${TEST_OUTPUT}" > "$(step.results.TEST_OUTPUT.path)"
+    - name: create-test-result-attestation
+      ref:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/simonbaird/step-actions
+          - name: revision
+            value: runner-image-fix
+          - name: pathInRepo
+            value: stepactions/attest-test-result/0.1/attest-test-result.yaml
+      params:
+        - name: image-url
+          value: $(params.image-url)
+        - name: image-digest
+          value: $(params.image-digest)
+        - name: test-name
+          value: $(context.task.name)
+        - name: test-output
+          value: $(steps.dummy-check.results.TEST_OUTPUT)
