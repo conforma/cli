@@ -18,7 +18,7 @@
 package fetch
 
 import (
-	hd "github.com/MakeNowJust/heredoc"
+	hd "github.com/MakeNowJust/heredoc/v2"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"

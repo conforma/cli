@@ -34,7 +34,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MakeNowJust/heredoc"
+	"github.com/MakeNowJust/heredoc/v2"
 	ecc "github.com/conforma/crds/api/v1alpha1"
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/stretchr/testify/assert"
