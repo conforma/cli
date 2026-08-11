@@ -200,16 +200,16 @@ benchmark: benchmark_simple ## Run benchmarks
 .PHONY: benchmark_baseline
 benchmark_baseline: benchmark/stress/data.tar.gz ## Generate stress benchmark baseline
 	@cd benchmark/stress && \
-	go run . 2>/dev/null | tee benchmark-output.txt && \
+	go run . 2>benchmark-stderr.txt | tee benchmark-output.txt && \
 	line=$$(grep '^BenchmarkStress' benchmark-output.txt) && \
 	ns_op=$$(echo "$$line" | grep -oP '[\d.]+ ns/op' | awk '{print $$1}') && \
 	peak_rss=$$(echo "$$line" | grep -oP '[\d.]+ peak-RSS-bytes' | awk '{print $$1}') && \
 	printf '{\n  "peak_rss_bytes": %s,\n  "execution_time_ns": %s,\n  "components": %s,\n  "workers": %s,\n  "commit": "%s",\n  "date": "%s",\n  "go_version": "%s"\n}\n' \
 		"$$peak_rss" "$$ns_op" \
-		"$${EC_STRESS_COMPONENTS:-10}" "$${EC_STRESS_WORKERS:-35}" \
+		"$${EC_STRESS_COMPONENTS:-10}" "$${EC_STRESS_WORKERS:-10}" \
 		"$$(git rev-parse --short HEAD)" "$$(date -u +%Y-%m-%d)" "$$(go env GOVERSION | sed 's/^go//')" \
 		> baseline.json && \
-	rm -f benchmark-output.txt && \
+	rm -f benchmark-output.txt benchmark-stderr.txt && \
 	echo "Baseline written to benchmark/stress/baseline.json"
 
 .PHONY: tools-ci
