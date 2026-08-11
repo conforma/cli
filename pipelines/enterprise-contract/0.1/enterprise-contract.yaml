@@ -110,7 +110,7 @@ spec:
         resolver: bundles
         params:
           - name: bundle
-            value: quay.io/conforma/tekton-task:konflux
+            value: quay.io/conforma/tekton-task:konflux@sha256:13375ed6d012614f030d36fa6485c16db1ab1e82d6077d5055c0eb1bfb90b644
           - name: name
             value: collect-keyless-params
           - name: kind
@@ -164,7 +164,7 @@ spec:
         resolver: bundles
         params:
           - name: bundle
-            value: quay.io/conforma/tekton-task:konflux
+            value: quay.io/conforma/tekton-task:konflux@sha256:13375ed6d012614f030d36fa6485c16db1ab1e82d6077d5055c0eb1bfb90b644
           - name: name
             value: verify-enterprise-contract
           - name: kind
