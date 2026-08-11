@@ -80,6 +80,7 @@ jobs:
 
       - name: Compare against baseline
         id: compare
+        if: steps.bench.outcome == 'success'
         run: |
           cd benchmark/stress
           if [[ -f baseline.json ]]; then
@@ -113,9 +114,9 @@ jobs:
             exit 0
           fi
 
-          read -r ns_op peak_rss alloc heap < <(python3 -c "
-          import re
-          line = '''$line'''
+          read -r ns_op peak_rss alloc heap < <(BENCH_LINE="$line" python3 -c "
+          import os, re
+          line = os.environ['BENCH_LINE']
           def val(p):
               m = re.search(p, line)
               return m.group(1) if m else '0'
@@ -162,6 +163,6 @@ jobs:
             fi
             if [[ "${{ steps.compare.outcome }}" == "failure" ]]; then
               echo ""
-              echo "> **⚠️ Performance regression detected.** Update the baseline with \`make generate_baseline\` if this is expected."
+              echo "> **⚠️ Performance regression detected.** Update the baseline with \`make generate-baseline\` if this is expected."
             fi
           } >> "$GITHUB_STEP_SUMMARY"

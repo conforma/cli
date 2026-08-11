@@ -29,7 +29,7 @@ exceeds its threshold.
 To regenerate the baseline after an intentional change:
 
 ```
-make generate_baseline
+make generate-baseline
 ```
 
 This runs the stress benchmark locally, parses the results, and writes a
