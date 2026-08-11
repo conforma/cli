@@ -47,13 +47,23 @@ if [[ -z "$line" ]]; then
     exit 1
 fi
 
-current_ns=$(echo "$line" | grep -oP '[\d.]+ ns/op' | awk '{print $1}')
-current_rss=$(echo "$line" | grep -oP '[\d.]+ peak-RSS-bytes' | awk '{print $1}')
-
-baseline_ns=$(python3 -c "import json; print(json.load(open('${BASELINE}'))['execution_time_ns'])")
-baseline_rss=$(python3 -c "import json; print(json.load(open('${BASELINE}'))['peak_rss_bytes'])")
-threshold_rss=$(python3 -c "import json; print(json.load(open('${THRESHOLDS}'))['peak_rss_percent'])")
-threshold_time=$(python3 -c "import json; print(json.load(open('${THRESHOLDS}'))['execution_time_percent'])")
+read -r current_ns current_rss baseline_ns baseline_rss threshold_rss threshold_time < <(
+    python3 -c "
+import json, re, sys
+line = '''${line}'''
+def extract(pattern):
+    m = re.search(pattern, line)
+    return m.group(1) if m else ''
+ns = extract(r'([\d.]+)\s+ns/op')
+rss = extract(r'([\d.]+)\s+peak-RSS-bytes')
+if not ns or not rss:
+    print('Failed to parse benchmark metrics from output.', file=sys.stderr)
+    sys.exit(1)
+b = json.load(open('${BASELINE}'))
+t = json.load(open('${THRESHOLDS}'))
+print(ns, rss, b['ns_per_op'], b['peak_rss_bytes'], t['peak_rss_percent'], t['ns_per_op_percent'])
+"
+)
 
 rss_change=$(awk -v cur="$current_rss" -v base="$baseline_rss" 'BEGIN {printf "%.1f", ((cur - base) / base) * 100}')
 time_change=$(awk -v cur="$current_ns" -v base="$baseline_ns" 'BEGIN {printf "%.1f", ((cur - base) / base) * 100}')

@@ -197,18 +197,25 @@ benchmark_data: benchmark/simple/data.tar.gz ## Prepare data for benchmark
 .PHONY: benchmark
 benchmark: benchmark_simple ## Run benchmarks
 
-.PHONY: benchmark_baseline
-benchmark_baseline: benchmark/stress/data.tar.gz ## Generate stress benchmark baseline
+.PHONY: generate_baseline
+generate_baseline: benchmark/stress/data.tar.gz ## Generate stress benchmark baseline
 	@cd benchmark/stress && \
 	go run . 2>benchmark-stderr.txt | tee benchmark-output.txt && \
-	line=$$(grep '^BenchmarkStress' benchmark-output.txt) && \
-	ns_op=$$(echo "$$line" | grep -oP '[\d.]+ ns/op' | awk '{print $$1}') && \
-	peak_rss=$$(echo "$$line" | grep -oP '[\d.]+ peak-RSS-bytes' | awk '{print $$1}') && \
-	printf '{\n  "peak_rss_bytes": %s,\n  "execution_time_ns": %s,\n  "components": %s,\n  "workers": %s,\n  "commit": "%s",\n  "date": "%s",\n  "go_version": "%s"\n}\n' \
-		"$$peak_rss" "$$ns_op" \
-		"$${EC_STRESS_COMPONENTS:-10}" "$${EC_STRESS_WORKERS:-10}" \
-		"$$(git rev-parse --short HEAD)" "$$(date -u +%Y-%m-%d)" "$$(go env GOVERSION | sed 's/^go//')" \
-		> baseline.json && \
+	python3 -c "\
+	import re, json, sys; \
+	line = [l for l in open('benchmark-output.txt') if l.startswith('BenchmarkStress')]; \
+	line or sys.exit('No BenchmarkStress results found'); \
+	line = line[0]; \
+	def val(p): \
+	    m = re.search(p, line); \
+	    return m.group(1) if m else ''; \
+	ns = val(r'([\d.]+)\s+ns/op'); rss = val(r'([\d.]+)\s+peak-RSS-bytes'); \
+	(ns and rss) or sys.exit('Failed to parse benchmark metrics'); \
+	json.dump({'peak_rss_bytes': int(float(rss)), 'ns_per_op': int(float(ns)), \
+	  'components': int('$${EC_STRESS_COMPONENTS:-10}'), 'workers': int('$${EC_STRESS_WORKERS:-10}'), \
+	  'commit': '$(shell git rev-parse --short HEAD)', 'date': '$(shell date -u +%Y-%m-%d)', \
+	  'go_version': '$(shell go env GOVERSION | sed "s/^go//")' \
+	}, open('baseline.json','w'), indent=2); print()" && \
 	rm -f benchmark-output.txt benchmark-stderr.txt && \
 	echo "Baseline written to benchmark/stress/baseline.json"
 
