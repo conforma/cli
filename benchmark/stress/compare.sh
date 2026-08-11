@@ -48,9 +48,9 @@ if [[ -z "$line" ]]; then
 fi
 
 read -r current_ns current_rss baseline_ns baseline_rss threshold_rss threshold_time < <(
-    python3 -c "
-import json, re, sys
-line = '''${line}'''
+    BENCH_LINE="${line}" BASELINE_PATH="${BASELINE}" THRESHOLDS_PATH="${THRESHOLDS}" python3 -c "
+import json, os, re, sys
+line = os.environ['BENCH_LINE']
 def extract(pattern):
     m = re.search(pattern, line)
     return m.group(1) if m else ''
@@ -59,11 +59,16 @@ rss = extract(r'([\d.]+)\s+peak-RSS-bytes')
 if not ns or not rss:
     print('Failed to parse benchmark metrics from output.', file=sys.stderr)
     sys.exit(1)
-b = json.load(open('${BASELINE}'))
-t = json.load(open('${THRESHOLDS}'))
+b = json.load(open(os.environ['BASELINE_PATH']))
+t = json.load(open(os.environ['THRESHOLDS_PATH']))
 print(ns, rss, b['ns_per_op'], b['peak_rss_bytes'], t['peak_rss_percent'], t['ns_per_op_percent'])
 "
 )
+
+if awk -v b="$baseline_rss" -v t="$baseline_ns" 'BEGIN {exit !(b==0 || t==0)}'; then
+    echo "Baseline contains zero values, cannot compute regression."
+    exit 1
+fi
 
 rss_change=$(awk -v cur="$current_rss" -v base="$baseline_rss" 'BEGIN {printf "%.1f", ((cur - base) / base) * 100}')
 time_change=$(awk -v cur="$current_ns" -v base="$baseline_ns" 'BEGIN {printf "%.1f", ((cur - base) / base) * 100}')

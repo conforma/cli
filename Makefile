@@ -197,8 +197,8 @@ benchmark_data: benchmark/simple/data.tar.gz ## Prepare data for benchmark
 .PHONY: benchmark
 benchmark: benchmark_simple ## Run benchmarks
 
-.PHONY: generate_baseline
-generate_baseline: benchmark/stress/data.tar.gz ## Generate stress benchmark baseline
+.PHONY: generate-baseline
+generate-baseline: benchmark/stress/data.tar.gz ## Generate stress benchmark baseline
 	@cd benchmark/stress && \
 	go run . 2>benchmark-stderr.txt | tee benchmark-output.txt && \
 	python3 -c "\
