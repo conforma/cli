@@ -59,6 +59,26 @@ Acceptance tests require `/etc/hosts` entries:
 127.0.0.1 rekor.localhost
 ```
 
+## Benchmarks
+
+Two benchmarks live under `benchmark/`:
+
+- **simple/** — Single-component validation against the `@redhat` policy collection.
+- **stress/** — Multi-component validation with configurable parallelism
+  (`EC_STRESS_COMPONENTS`, `EC_STRESS_WORKERS`).
+
+```bash
+make benchmark              # Run simple benchmark
+make benchmark_stress       # Run stress benchmark (via pattern rule)
+make generate-baseline      # Run stress benchmark and write baseline.json
+```
+
+The stress benchmark has regression detection: `benchmark/stress/baseline.json` stores
+reference metrics (peak RSS, ns/op) and `benchmark/stress/thresholds.json` defines
+percentage thresholds. CI runs `benchmark/stress/compare.sh` to compare each run
+against the baseline and fails the check on regression. Update the baseline with
+`make generate-baseline` after intentional performance changes.
+
 ## Single-File Verification
 
 ```bash
