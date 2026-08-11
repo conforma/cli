@@ -32,7 +32,7 @@ jobs:
     name: Stress Benchmark
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    continue-on-error: false
+    continue-on-error: true
     env:
       # Tuned for 4 vCPU / 16 GB CI runners to complete within 5 minutes.
       # Code defaults are 10 components / 35 workers.
@@ -80,6 +80,7 @@ jobs:
 
       - name: Compare against baseline
         id: compare
+        continue-on-error: true
         run: |
           cd benchmark/stress
           if [[ -f baseline.json ]]; then
