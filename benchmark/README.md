@@ -17,3 +17,25 @@ times.
 - **stress/** — Multi-component validation with configurable parallelism. Set
   `EC_STRESS_COMPONENTS` (default 10) and `EC_STRESS_WORKERS` (default 35) to
   control the workload.
+
+## Baseline and regression detection
+
+The stress benchmark stores a performance baseline in
+`stress/baseline.json` (peak RSS and ns/op) along with configurable
+regression thresholds in `stress/thresholds.json`. The CI workflow
+compares each run against the baseline and fails the check when a metric
+exceeds its threshold.
+
+To regenerate the baseline after an intentional change:
+
+```
+make generate_baseline
+```
+
+This runs the stress benchmark locally, parses the results, and writes a
+new `baseline.json` with the current commit SHA, date, Go version, and
+worker/component counts.
+
+Thresholds are expressed as percentages (e.g., 15 means a 15% increase
+triggers a failure). Adjust them in `stress/thresholds.json` as
+optimizations land.

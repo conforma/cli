@@ -1,6 +1,6 @@
 {
   "peak_rss_bytes": 2250485760,
-  "execution_time_ns": 2567888013,
+  "ns_per_op": 2567888013,
   "components": 10,
   "workers": 10,
   "commit": "fc37eb13",
