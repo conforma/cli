@@ -164,5 +164,8 @@ jobs:
             if [[ "${{ steps.compare.outcome }}" == "failure" ]]; then
               echo ""
               echo "> **⚠️ Performance regression detected.** Update the baseline with \`make generate-baseline\` if this is expected."
+            elif [[ "${{ steps.compare.outcome }}" == "skipped" ]]; then
+              echo ""
+              echo "> **ℹ️ Baseline comparison skipped** because the benchmark step failed."
             fi
           } >> "$GITHUB_STEP_SUMMARY"

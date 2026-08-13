@@ -65,7 +65,7 @@ print(ns, rss, b['ns_per_op'], b['peak_rss_bytes'], t['peak_rss_percent'], t['ns
 "
 )
 
-if awk -v b="$baseline_rss" -v t="$baseline_ns" 'BEGIN {exit !(b==0 || t==0)}'; then
+if awk -v rss="$baseline_rss" -v ns="$baseline_ns" 'BEGIN {exit !(rss==0 || ns==0)}'; then
     echo "Baseline contains zero values, cannot compute regression."
     exit 1
 fi
