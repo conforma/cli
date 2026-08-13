@@ -200,6 +200,7 @@ benchmark: benchmark_simple ## Run benchmarks
 .PHONY: generate-baseline
 generate-baseline: benchmark/stress/data.tar.gz ## Generate stress benchmark baseline
 	@cd benchmark/stress && \
+	EC_STRESS_COMPONENTS=$${EC_STRESS_COMPONENTS:-10} EC_STRESS_WORKERS=$${EC_STRESS_WORKERS:-10} \
 	go run . 2>benchmark-stderr.txt | tee benchmark-output.txt && \
 	python3 -c "\
 	import re, json, sys; \
