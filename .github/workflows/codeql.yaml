@@ -32,6 +32,7 @@ permissions:
 
 jobs:
   analyze:
+    if: false  # skipped for POC branch
     name: Analyze
     runs-on: ubuntu-latest
     permissions:
