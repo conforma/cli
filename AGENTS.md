@@ -48,6 +48,35 @@ Tests use build tags with different timeouts:
   compatibility (e.g., `quay.io/enterprise-contract/ec-cli`, Tekton parameter names) must be
   preserved as-is.
 
+## hack/ Directory Conventions
+
+Scripts in `hack/` are **attended developer utilities** intended for the development team, not
+production runtime code. They automate tasks like dependency bumps, release branch management,
+environment setup, and demo workflows. Developers run them interactively at a terminal.
+
+**Target environment:** RHEL 8+ / Fedora workstations (Bash 4.4+ guaranteed). Backward
+compatibility with older Bash versions (e.g., Bash 3.x on macOS default shell) is explicitly
+not required.
+
+**Accepted trade-offs for attended usage:**
+
+- Unescaped dots in sed/grep patterns operating on controlled, predictable inputs
+- Hardcoded branch lists that change infrequently and are updated manually
+- `git add -A` or broad staging when the script controls the entire working tree context
+- Reliance on modern Bash features (associative arrays, `readarray`, `${var,,}`, etc.)
+
+**Reviewer guidance:** Robustness and portability findings at Low severity should be suppressed
+for `hack/` scripts unless they affect correctness in the target environment (RHEL 8+ / Fedora).
+Focus review on:
+
+- **Logic errors** that produce wrong results
+- **Data loss risks** (e.g., unsafe `rm -rf`, force-pushing to protected branches)
+- **Git safety issues** (e.g., destructive operations without confirmation)
+- **Security concerns** (e.g., credential handling, injection vulnerabilities)
+
+Do not flag: Bash <4.4 compatibility, regex dot escaping on controlled inputs, broad `git add`
+in scripts that manage their own working tree, or hardcoded values that are intentionally static.
+
 ## CGO and DNS Resolution
 
 Binaries are built with `CGO_ENABLED=0` for portability. This uses Go's native DNS resolver,
