@@ -5,7 +5,7 @@ go 1.26.4
 require (
 	cuelang.org/go v0.16.0
 	github.com/CycloneDX/cyclonedx-go v0.10.0
-	github.com/MakeNowJust/heredoc v1.0.0
+	github.com/MakeNowJust/heredoc/v2 v2.0.1
 	github.com/Maldris/go-billy-afero v0.0.0-20200815120323-e9d3de59c99a
 	github.com/conforma/go-gather v1.0.2
 	github.com/docker/docker v28.5.2+incompatible
@@ -29,9 +29,9 @@ require (
 	github.com/open-policy-agent/opa v1.15.2
 	github.com/package-url/packageurl-go v0.1.3
 	github.com/qri-io/jsonpointer v0.1.1
-	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/secure-systems-lab/go-securesystemslib v0.11.0
-	github.com/sigstore/cosign/v2 v2.4.1
+	github.com/sigstore/cosign/v3 v3.1.3
 	github.com/sigstore/rekor v1.5.3
 	github.com/sigstore/sigstore v1.10.8
 	github.com/sirupsen/logrus v1.9.4
@@ -52,7 +52,7 @@ require (
 	golang.org/x/sync v0.22.0
 	k8s.io/apiextensions-apiserver v0.35.4
 	k8s.io/apimachinery v0.36.0
-	k8s.io/client-go v0.36.0
+	k8s.io/client-go v1.5.2
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/kube-openapi v0.0.0-20260319004828-5883c5ee87b9
 	oras.land/oras-go/v2 v2.6.2
