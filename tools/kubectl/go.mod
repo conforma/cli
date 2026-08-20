@@ -2,7 +2,7 @@ module github.com/conforma/cli/tools/kubectl
 
 go 1.26.4
 
-require k8s.io/kubernetes v1.34.3
+require k8s.io/kubernetes v1.34.10
 
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
