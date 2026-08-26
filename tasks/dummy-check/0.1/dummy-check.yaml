@@ -153,10 +153,12 @@ spec:
       ref:
         resolver: git
         params:
+          # Fork branch while iterating; the ARTIFACT_URI/ARTIFACT_DIGEST plain
+          # string results aren't on conforma/step-actions main yet.
           - name: url
-            value: https://github.com/conforma/step-actions
+            value: https://github.com/simonbaird/step-actions
           - name: revision
-            value: main
+            value: fix-chains-artifact-result
           - name: pathInRepo
             value: stepactions/attest-test-result/0.1/attest-test-result.yaml
       params:
