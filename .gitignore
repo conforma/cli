@@ -170,6 +170,17 @@ tags
 # Persistent undo
 [._]*.un~
 
+# Go coverage output
+cover.out
+coverage.txt
+
+# Vim swap files (explicit patterns for tooling detection)
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+
 # Last persisted acceptance test run information
 acceptance/.persisted
 

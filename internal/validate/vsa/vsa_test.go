@@ -82,11 +82,11 @@ OURRVjNQMk9ndDFDaVFHeGg1VXhUZytGc3c9PSJ9
 	// Write test files
 	vsaPath := "/test.vsa.json"
 	data, _ := json.Marshal(pred)
-	err := afero.WriteFile(fs, vsaPath, data, 0600)
+	err := afero.WriteFile(fs, vsaPath, data, 0o600)
 	assert.NoError(t, err)
 
 	keyPath := "/test.key"
-	err = afero.WriteFile(fs, keyPath, []byte(testKey), 0600)
+	err = afero.WriteFile(fs, keyPath, []byte(testKey), 0o600)
 	assert.NoError(t, err)
 
 	// Test successful signing
@@ -650,7 +650,7 @@ OURRVjNQMk9ndDFDaVFHeGg1VXhUZytGc3c9PSJ9
 	// Set up test filesystem
 	fs := afero.NewMemMapFs()
 	keyPath := "/test.key"
-	err := afero.WriteFile(fs, keyPath, []byte(testKey), 0600)
+	err := afero.WriteFile(fs, keyPath, []byte(testKey), 0o600)
 	require.NoError(t, err)
 
 	t.Run("successful signer creation", func(t *testing.T) {
@@ -677,7 +677,7 @@ OURRVjNQMk9ndDFDaVFHeGg1VXhUZytGc3c9PSJ9
 	t.Run("invalid key content", func(t *testing.T) {
 		ctx := context.Background()
 		invalidKeyPath := "/invalid.key"
-		err := afero.WriteFile(fs, invalidKeyPath, []byte("invalid key content"), 0600)
+		err := afero.WriteFile(fs, invalidKeyPath, []byte("invalid key content"), 0o600)
 		require.NoError(t, err)
 
 		signer, err := NewSigner(ctx, invalidKeyPath, fs)
@@ -707,7 +707,7 @@ dXdrWDBYL1phY0RUTERGaUxyc1laMWVMMmlqMGU1MVRpZmVQNTl4WXNPK1FnM1Jv
 OURRVjNQMk9ndDFDaVFHeGg1VXhUZytGc3c9PSJ9
 -----END ENCRYPTED SIGSTORE PRIVATE KEY-----`
 
-	err := afero.WriteFile(fs, keyPath, []byte(testKey), 0600)
+	err := afero.WriteFile(fs, keyPath, []byte(testKey), 0o600)
 	require.NoError(t, err)
 
 	ctx := context.Background()

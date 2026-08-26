@@ -107,6 +107,7 @@ func ec(dir string) func() {
 			"--ignore-rekor",
 			"--effective-time",
 			"2024-12-10T00:00:00Z",
+			"--allow-past-effective-time",
 		}); err != nil {
 			panic(err)
 		}

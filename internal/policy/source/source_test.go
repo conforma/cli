@@ -26,7 +26,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"sync"
 	"testing"
 
 	ecc "github.com/conforma/crds/api/v1alpha1"
@@ -163,7 +162,7 @@ func TestInlineDataSource(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clear download cache for each test
 			t.Cleanup(func() {
-				downloadCache = sync.Map{}
+				ClearDownloadCache()
 			})
 
 			s := InlineData(tt.inputData)
@@ -196,7 +195,7 @@ func TestInlineDataSource(t *testing.T) {
 			// Verify file permissions
 			stat, err := fs.Stat(file)
 			require.NoError(t, err)
-			assert.Equal(t, os.FileMode(0400), stat.Mode().Perm())
+			assert.Equal(t, os.FileMode(0o400), stat.Mode().Perm())
 		})
 	}
 }
@@ -276,7 +275,7 @@ func TestInlineDataGetPolicy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clear download cache for each test
 			t.Cleanup(func() {
-				downloadCache = sync.Map{}
+				ClearDownloadCache()
 			})
 
 			s := InlineData(tt.inputData)
@@ -315,7 +314,7 @@ func TestInlineDataGetPolicy(t *testing.T) {
 			// Verify file permissions are read-only
 			stat, err := fs.Stat(ruleDataFile)
 			require.NoError(t, err)
-			assert.Equal(t, os.FileMode(0400), stat.Mode().Perm(), "file should have read-only permissions")
+			assert.Equal(t, os.FileMode(0o400), stat.Mode().Perm(), "file should have read-only permissions")
 
 			// Verify cache functionality - second call should return same result
 			dest2, err2 := s.GetPolicy(ctx, tt.workDir, tt.showMsg)
@@ -539,7 +538,7 @@ func (m mockPolicySource) Type() PolicyType {
 func TestGetPolicyThroughCache(t *testing.T) {
 	test := func(t *testing.T, fs afero.Fs, expectedDownloads int) {
 		t.Cleanup(func() {
-			downloadCache = sync.Map{}
+			ClearDownloadCache()
 		})
 
 		ctx := utils.WithFS(context.Background(), fs)
@@ -548,11 +547,11 @@ func TestGetPolicyThroughCache(t *testing.T) {
 		data := []byte("hello")
 		dl := func(source, dest string) (metadata.Metadata, error) {
 			invocations++
-			if err := fs.MkdirAll(dest, 0755); err != nil {
+			if err := fs.MkdirAll(dest, 0o755); err != nil {
 				return nil, err
 			}
 
-			return nil, afero.WriteFile(fs, filepath.Join(dest, "data.json"), data, 0400)
+			return nil, afero.WriteFile(fs, filepath.Join(dest, "data.json"), data, 0o400)
 		}
 
 		source := &mockPolicySource{&mock.Mock{}}
@@ -604,7 +603,7 @@ func TestGetPolicyThroughCache(t *testing.T) {
 // causing Rego compile issue
 func TestDownloadCacheWorkdirMismatch(t *testing.T) {
 	t.Cleanup(func() {
-		downloadCache = sync.Map{}
+		ClearDownloadCache()
 	})
 	tmp := t.TempDir()
 
@@ -614,7 +613,7 @@ func TestDownloadCacheWorkdirMismatch(t *testing.T) {
 
 	// same URL downloaded to workdir1
 	precachedDest := uniqueDestination(tmp, "subdir", source.PolicyUrl())
-	require.NoError(t, os.MkdirAll(precachedDest, 0755))
+	require.NoError(t, os.MkdirAll(precachedDest, 0o755))
 	downloadCache.Store("policy-url", func() (string, cacheContent) {
 		return precachedDest, cacheContent{}
 	})
@@ -634,12 +633,55 @@ func TestDownloadCacheWorkdirMismatch(t *testing.T) {
 	assert.Equal(t, destination1, destination2)
 }
 
+// TestGetPolicyPinnedURLCacheConsistency verifies that URL pinning doesn't
+// cause duplicate policy directories. After the first GetPolicy call, the URL
+// is pinned (e.g. github.com/org/repo -> git::github.com/org/repo?ref=abc123),
+// which changes the cache key. Without the fix, the second call would miss the
+// cache and re-download into a new directory, causing OPA duplicate package errors.
+func TestGetPolicyPinnedURLCacheConsistency(t *testing.T) {
+	t.Cleanup(ClearDownloadCache)
+
+	workDir := t.TempDir()
+	policyDir := filepath.Join(workDir, "policy")
+	require.NoError(t, os.MkdirAll(policyDir, 0o755))
+
+	originalUrl := "github.com/org/repo//policy"
+	p := &PolicyUrl{Url: originalUrl, Kind: PolicyKind}
+
+	dl := &mockDownloader{}
+	dl.On("Download", mock.Anything, mock.Anything, originalUrl, false).
+		Run(func(args mock.Arguments) {
+			dest := args.String(1)
+			require.NoError(t, os.MkdirAll(dest, 0o755))
+		}).
+		Return(&gitMetadata.GitMetadata{LatestCommit: "abc123def456"}, nil)
+
+	ctx := usingDownloader(context.TODO(), dl)
+
+	// First call: downloads and pins URL
+	dest1, err := p.GetPolicy(ctx, workDir, false)
+	require.NoError(t, err)
+	assert.NotEqual(t, originalUrl, p.Url, "URL should be pinned after first call")
+
+	// Second call: should hit cache despite pinned URL
+	dest2, err := p.GetPolicy(ctx, workDir, false)
+	require.NoError(t, err)
+	assert.Equal(t, dest1, dest2, "second call should return same directory")
+
+	// Verify only one directory exists under policy/
+	entries, err := os.ReadDir(policyDir)
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "only one policy directory should exist, not a duplicate from pinned URL")
+
+	dl.AssertNumberOfCalls(t, "Download", 1)
+}
+
 // TestConcurrentPolicyCachingRaceCondition reproduces the "file exists" error
 // that occurs when multiple workers simultaneously try to create symlinks from
 // cached policy downloads to their individual work directories
 func TestConcurrentPolicyCachingRaceCondition(t *testing.T) {
 	t.Cleanup(func() {
-		downloadCache = sync.Map{}
+		ClearDownloadCache()
 	})
 
 	tmp := t.TempDir()
@@ -652,11 +694,11 @@ func TestConcurrentPolicyCachingRaceCondition(t *testing.T) {
 	// This represents the first worker that successfully downloaded the policy
 	sharedCacheDir := filepath.Join(tmp, "shared-cache")
 	cachedPolicyPath := uniqueDestination(sharedCacheDir, "subdir", source.PolicyUrl())
-	require.NoError(t, os.MkdirAll(cachedPolicyPath, 0755))
+	require.NoError(t, os.MkdirAll(cachedPolicyPath, 0o755))
 
 	// Create test policy files
 	policyFile := filepath.Join(cachedPolicyPath, "policy.rego")
-	require.NoError(t, os.WriteFile(policyFile, []byte("package test"), 0600))
+	require.NoError(t, os.WriteFile(policyFile, []byte("package test"), 0o600))
 
 	// Pre-populate the cache with the shared policy location
 	downloadCache.Store("policy-url", func() (string, cacheContent) {

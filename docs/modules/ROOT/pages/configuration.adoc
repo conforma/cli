@@ -9,7 +9,7 @@ such as in this example:
 ec validate image --policy '{
     "sources": [
         {
-            "policy": ["oci::quay.io/enterprise-contract/ec-release-policy:latest"],
+            "policy": ["oci::quay.io/conforma/release-policy:latest"],
             "data": ["git::https://github.com/conforma/policy//example/data"],
             "config": {
                 "include": ["@minimal"]
@@ -121,7 +121,7 @@ YAML::
 ----
 sources:
   - policy:
-      - oci::quay.io/enterprise-contract/ec-release-policy:latest
+      - oci::quay.io/conforma/release-policy:latest
     data:
       - git::https://github.com/conforma/policy//example/data
     volatileConfig:
@@ -141,7 +141,7 @@ JSON::
   "sources": [
     {
       "policy": [
-        "oci::quay.io/enterprise-contract/ec-release-policy:latest"
+        "oci::quay.io/conforma/release-policy:latest"
       ],
       "data": [
         "git::https://github.com/conforma/policy//example/data"
@@ -177,7 +177,7 @@ YAML::
 ----
 sources:
   - policy:
-      - oci::quay.io/enterprise-contract/ec-release-policy:latest
+      - oci::quay.io/conforma/release-policy:latest
     data:
       - git::https://github.com/conforma/policy//example/data
     volatileConfig:
@@ -194,7 +194,7 @@ JSON::
   "sources": [
     {
       "policy": [
-        "oci::quay.io/enterprise-contract/ec-release-policy:latest"
+        "oci::quay.io/conforma/release-policy:latest"
       ],
       "data": [
         "git::https://github.com/conforma/policy//example/data"
@@ -225,7 +225,7 @@ YAML::
 ----
 sources:
   - policy:
-      - oci::quay.io/enterprise-contract/ec-release-policy:latest
+      - oci::quay.io/conforma/release-policy:latest
     data:
       - git::https://github.com/conforma/policy//example/data
     volatileConfig:
@@ -242,7 +242,7 @@ JSON::
   "sources": [
     {
       "policy": [
-        "oci::quay.io/enterprise-contract/ec-release-policy:latest"
+        "oci::quay.io/conforma/release-policy:latest"
       ],
       "data": [
         "git::https://github.com/conforma/policy//example/data"
@@ -288,7 +288,7 @@ YAML::
 ----
 sources:
   - policy:
-      - oci::quay.io/enterprise-contract/ec-release-policy:latest
+      - oci::quay.io/conforma/release-policy:latest
     data:
       - git::https://github.com/conforma/policy//example/data
     config:
@@ -305,7 +305,7 @@ JSON::
 {
     "sources": [
         {
-            "policy": ["oci::quay.io/enterprise-contract/ec-release-policy:latest"],
+            "policy": ["oci::quay.io/conforma/release-policy:latest"],
             "data": ["git::https://github.com/conforma/policy//example/data"],
             "config": {
                 "include": ["@minimal"],
@@ -330,7 +330,7 @@ YAML::
 ----
 sources:
   - policy:
-      - oci::quay.io/enterprise-contract/ec-release-policy:latest
+      - oci::quay.io/conforma/release-policy:latest
     data:
       - git::https://github.com/conforma/policy//example/data
     config:
@@ -345,7 +345,7 @@ JSON::
 {
     "sources": [
         {
-            "policy": ["oci::quay.io/enterprise-contract/ec-release-policy:latest"],
+            "policy": ["oci::quay.io/conforma/release-policy:latest"],
             "data": ["git::https://github.com/conforma/policy//example/data"],
             "config": {
                 "include": ["test", "java"]
@@ -370,7 +370,7 @@ YAML::
 ----
 sources:
   - policy:
-      - oci::quay.io/enterprise-contract/ec-release-policy:latest
+      - oci::quay.io/conforma/release-policy:latest
     data:
       - git::https://github.com/conforma/policy//example/data
     config:
@@ -384,7 +384,7 @@ JSON::
 {
     "sources": [
         {
-            "policy": ["oci::quay.io/enterprise-contract/ec-release-policy:latest"],
+            "policy": ["oci::quay.io/conforma/release-policy:latest"],
             "data": ["git::https://github.com/conforma/policy//example/data"],
             "config": {
                 "exclude": ["attestation_type.pipelinerun_attestation_found"]
@@ -408,7 +408,7 @@ YAML::
 ----
 sources:
   - policy:
-      - oci::quay.io/enterprise-contract/ec-release-policy:latest
+      - oci::quay.io/conforma/release-policy:latest
     data:
       - git::https://github.com/conforma/policy//example/data
     config:
@@ -423,7 +423,7 @@ JSON::
 {
     "sources": [
         {
-            "policy": ["oci::quay.io/enterprise-contract/ec-release-policy:latest"],
+            "policy": ["oci::quay.io/conforma/release-policy:latest"],
             "data": ["git::https://github.com/conforma/policy//example/data"],
             "config": {
                 "exclude": ["test:get-clair-scan", "test:clamav-scan"]
@@ -454,7 +454,7 @@ YAML::
 ----
 sources:
   - policy:
-      - oci::quay.io/enterprise-contract/ec-release-policy:latest
+      - oci::quay.io/conforma/release-policy:latest
     data:
       - git::https://github.com/conforma/policy//example/data
     config:
@@ -471,7 +471,7 @@ JSON::
 {
     "sources": [
         {
-            "policy": ["oci::quay.io/enterprise-contract/ec-release-policy:latest"],
+            "policy": ["oci::quay.io/conforma/release-policy:latest"],
             "data": ["git::https://github.com/conforma/policy//example/data"],
             "config": {
                 "include": ["*", "attestation_type.pipelinerun_attestation_found"],

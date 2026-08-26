@@ -73,33 +73,44 @@ func init() {
 	}
 }
 
-func GenerateTektonDocumentation(module string) error {
-	if err := generateTektonReference(module); err != nil {
-		return err
+func GenerateTektonDocumentation(module, marker string) ([]string, error) {
+	generated, err := generateTektonReference(module, marker)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := generateTektonNav(module); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return generated, nil
 }
 
-func generateTektonReference(module string) error {
+func generateTektonReference(module, marker string) ([]string, error) {
+	var generated []string
 	for _, task := range tasks {
 		docpath := filepath.Join(module, "pages", task.Name+".adoc")
 		f, err := os.Create(docpath)
 		if err != nil {
-			return fmt.Errorf("creating file %q: %w", docpath, err)
+			return nil, fmt.Errorf("creating file %q: %w", docpath, err)
 		}
-		defer f.Close()
+
+		if _, err := fmt.Fprintln(f, marker); err != nil {
+			f.Close()
+			return nil, fmt.Errorf("writing marker to %q: %w", docpath, err)
+		}
 
 		if err := tektonTaskTemplate.Execute(f, task); err != nil {
-			return err
+			f.Close()
+			return nil, err
 		}
+		if err := f.Close(); err != nil {
+			return nil, fmt.Errorf("closing file %q: %w", docpath, err)
+		}
+		generated = append(generated, docpath)
 	}
 
-	return nil
+	return generated, nil
 }
 
 func generateTektonNav(module string) error {

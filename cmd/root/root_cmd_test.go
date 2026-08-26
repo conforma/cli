@@ -14,12 +14,16 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+//go:build unit
+
 package root
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/conforma/cli/internal/http"
@@ -77,6 +81,38 @@ func TestGlobalTimeout(t *testing.T) {
 			assert.Equal(t, tt.expectedString, globalTimeout.String())
 		})
 	}
+}
+
+func TestGlobalTimeoutDisabledInServerMode(t *testing.T) {
+	globalTimeout = 5 * time.Minute
+
+	var capturedCtx context.Context
+	cmd := NewRootCmd()
+
+	// Synthetic command tree to avoid pulling in the real validate input
+	// command and its dependencies. If the real flag or command name changes,
+	// the server-mode acceptance tests would catch it.
+	validate := &cobra.Command{Use: "validate"}
+	input := &cobra.Command{
+		Use: "input",
+		Run: func(cmd *cobra.Command, _ []string) {
+			capturedCtx = cmd.Context()
+		},
+	}
+	var server bool
+	input.Flags().BoolVar(&server, "server", false, "")
+	validate.AddCommand(input)
+	cmd.AddCommand(validate)
+
+	cmd.SetArgs([]string{"validate", "input", "--server"})
+
+	err := cmd.Execute()
+	assert.NoError(t, err)
+	// The package-level variable must not be mutated.
+	assert.Equal(t, 5*time.Minute, globalTimeout)
+	// The execution context must not carry a deadline.
+	_, hasDeadline := capturedCtx.Deadline()
+	assert.False(t, hasDeadline)
 }
 
 func TestRetryConfigurationFlags(t *testing.T) {

@@ -1,4 +1,3 @@
----
 # Copyright The Conforma Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,19 +14,15 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# A dedicated ServiceAccount is used to create create a distinction between build and release access.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: tenant-release
-  namespace: rhtap-contract-tenant
-secrets:
-  # Push credential for quay.io/conforma/cli
-  # and quay.io/enterprise-contract/cli
-  - name: ec-cli-main
-  # Push credential for quay.io/conforma/tekton-task
-  # and quay.io/enterprise-contract/tekton-task
-  - name: ec-tekton-task-main
+# The konflux-bot-0 ServiceAccount is pre-created by Konflux. The secrets
+# and role binding below grant it push access to the release registries
+# and read access to release resources.
+#
+# The following secrets must be attached to konflux-bot-0 in the cluster:
+#   - ec-cli-main: push credential for quay.io/conforma/cli
+#     and quay.io/enterprise-contract/cli
+#   - ec-tekton-task-main: push credential for quay.io/conforma/tekton-task
+#     and quay.io/enterprise-contract/tekton-task
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -53,7 +48,7 @@ metadata:
   namespace: rhtap-contract-tenant
 subjects:
   - kind: ServiceAccount
-    name: tenant-release
+    name: konflux-bot-0
 roleRef:
   kind: Role
   name: tenant-release

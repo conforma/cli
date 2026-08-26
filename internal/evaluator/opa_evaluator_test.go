@@ -72,7 +72,7 @@ func TestOPADestroy(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.workDir != "" {
-				err := fs.MkdirAll(tc.workDir, 0755)
+				err := fs.MkdirAll(tc.workDir, 0o755)
 				assert.NoError(t, err)
 			}
 

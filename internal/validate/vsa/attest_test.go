@@ -388,7 +388,7 @@ func TestNewSigner_Comprehensive(t *testing.T) {
 			name:   "file path success",
 			keyRef: "/path/to/key.pem",
 			setup: func(fs afero.Fs, ctx context.Context) {
-				err := afero.WriteFile(fs, "/path/to/key.pem", []byte("test key content"), 0600)
+				err := afero.WriteFile(fs, "/path/to/key.pem", []byte("test key content"), 0o600)
 				if err != nil {
 					t.Fatalf("WriteFile: %v", err)
 				}

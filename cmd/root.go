@@ -18,6 +18,9 @@ package cmd
 
 import (
 	"context"
+	"os"
+	"os/signal"
+	"syscall"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -44,7 +47,9 @@ var RootCmd = root.NewRootCmd()
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	if err := RootCmd.ExecuteContext(context.Background()); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := RootCmd.ExecuteContext(ctx); err != nil {
 		root.OnExit()
 		log.Fatalf("error executing command: %v", err)
 	}

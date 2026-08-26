@@ -32,9 +32,9 @@ func TestGetPolicyConfig(t *testing.T) {
 	fileName := "/tmp/policy.yaml"
 	fileContent := "foo: bar"
 	emptyFile := "/tmp/empty.yaml"
-	err := afero.WriteFile(fs, fileName, []byte(fileContent), 0644)
+	err := afero.WriteFile(fs, fileName, []byte(fileContent), 0o644)
 	require.NoError(t, err)
-	err = afero.WriteFile(fs, emptyFile, []byte{}, 0644)
+	err = afero.WriteFile(fs, emptyFile, []byte{}, 0o644)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -66,9 +66,9 @@ func TestGetPolicyConfig(t *testing.T) {
 func TestReadFile(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	ctx := utils.WithFS(context.Background(), fs)
-	err := afero.WriteFile(fs, "/tmp/testfile.txt", []byte("hello world"), 0644)
+	err := afero.WriteFile(fs, "/tmp/testfile.txt", []byte("hello world"), 0o644)
 	require.NoError(t, err)
-	err = afero.WriteFile(fs, "/tmp/emptyfile.txt", []byte{}, 0644)
+	err = afero.WriteFile(fs, "/tmp/emptyfile.txt", []byte{}, 0o644)
 	require.NoError(t, err)
 
 	tests := []struct {

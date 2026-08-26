@@ -414,7 +414,7 @@ sources:
       exclude:
         []
 `
-	p, err := policy.NewInputPolicy(ctx, policyConfiguration, "now")
+	p, err := policy.NewInputPolicy(ctx, policyConfiguration, "now", false)
 	assert.NoError(t, err)
 	return p
 }

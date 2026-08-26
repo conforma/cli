@@ -52,11 +52,11 @@ func TestFileVSARetriever_RetrieveVSA(t *testing.T) {
 	require.NoError(t, err)
 
 	// Write to both real filesystem and memory filesystem for different tests
-	err = os.WriteFile(vsaPath, envelopeJSON, 0600)
+	err = os.WriteFile(vsaPath, envelopeJSON, 0o600)
 	require.NoError(t, err)
 
 	// Also write to memory filesystem
-	err = afero.WriteFile(fs, "test-vsa.json", envelopeJSON, 0600)
+	err = afero.WriteFile(fs, "test-vsa.json", envelopeJSON, 0o600)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -278,7 +278,7 @@ func TestFileVSARetriever_RetrieveVSA_ErrorCases(t *testing.T) {
 
 	// Create a test file with invalid JSON
 	invalidJSON := []byte(`{"invalid": json}`)
-	err := afero.WriteFile(fs, "invalid.json", invalidJSON, 0600)
+	err := afero.WriteFile(fs, "invalid.json", invalidJSON, 0o600)
 	require.NoError(t, err)
 
 	// Create a test file with valid JSON but invalid DSSE structure
@@ -288,7 +288,7 @@ func TestFileVSARetriever_RetrieveVSA_ErrorCases(t *testing.T) {
 	}
 	invalidDSSEJSON, err := json.Marshal(invalidDSSE)
 	require.NoError(t, err)
-	err = afero.WriteFile(fs, "invalid-dsse.json", invalidDSSEJSON, 0600)
+	err = afero.WriteFile(fs, "invalid-dsse.json", invalidDSSEJSON, 0o600)
 	require.NoError(t, err)
 
 	tests := []struct {

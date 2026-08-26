@@ -357,7 +357,7 @@ Error: success criteria not met
       "source": {},
       "warnings": [
         {
-          "msg": "Fails in 2099",
+          "msg": "Fails in 2099. This will become a failure starting on ${TIMESTAMP}",
           "metadata": {
             "effective_on": "${TIMESTAMP}"
           }
@@ -2164,7 +2164,17 @@ Error: success criteria not met
 ---
 
 [TestFeatures/Dropping rego capabilities:stderr - 1]
-Error: error validating image ${REGISTRY}/acceptance/ec-happy-day of component Unnamed: load: loading policies: get compiler: 3 errors occurred:
+Error: error validating image ${REGISTRY}/acceptance/ec-happy-day of component Unnamed: policy compilation error: the policy references Rego built-in functions not available in this version of Conforma CLI (v1.15.2).
+
+Upgrade Conforma CLI to a newer version that includes the required functions.
+
+If upgrading does not help, check for less common causes:
+  - Conforma CLI disables certain built-in functions for security (opa.runtime, http.send, net.lookup_ip_addr). Policies using these will not compile regardless of the CLI version
+  - The policy may use Rego syntax requiring a newer OPA version.
+    Adjust the policy to target OPA v1.15.2 or earlier
+
+Details:
+  load: loading policies: get compiler: 3 errors occurred:
 ${TEMP}/ec-work-${RANDOM}/policy/${RANDOM}/main.rego:14: rego_type_error: undefined function opa.runtime
 ${TEMP}/ec-work-${RANDOM}/policy/${RANDOM}/main.rego:22: rego_type_error: undefined function http.send
 ${TEMP}/ec-work-${RANDOM}/policy/${RANDOM}/main.rego:33: rego_type_error: undefined function net.lookup_ip_addr

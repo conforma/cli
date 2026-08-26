@@ -71,8 +71,10 @@ type PolicySource interface {
 
 type PolicyUrl struct {
 	// A string containing a go-getter style source url compatible with conftest pull
-	Url  string
-	Kind PolicyType
+	Url     string
+	Kind    PolicyType
+	pinOnce sync.Once
+	urlMu   sync.RWMutex
 }
 
 // downloadCache is a concurrent map used to cache downloaded files.
@@ -134,7 +136,7 @@ func getPolicyThroughCache(ctx context.Context, s PolicySource, workDir string, 
 		}
 
 		base := filepath.Dir(dest)
-		if err := fs.MkdirAll(base, 0755); err != nil {
+		if err := fs.MkdirAll(base, 0o755); err != nil {
 			return "", nil, err
 		}
 
@@ -170,7 +172,7 @@ func (p *PolicyUrl) GetPolicy(ctx context.Context, workDir string, showMsg bool)
 	if trace.IsEnabled() {
 		region := trace.StartRegion(ctx, "ec:get-policy")
 		defer region.End()
-		trace.Logf(ctx, "", "policy=%q", p.Url)
+		trace.Logf(ctx, "", "policy=%q", p.url())
 	}
 
 	dl := func(source string, dest string) (metadata.Metadata, error) {
@@ -186,17 +188,37 @@ func (p *PolicyUrl) GetPolicy(ctx context.Context, workDir string, showMsg bool)
 		return "", err
 	}
 
-	p.Url, err = metadata.GetPinnedURL(p.Url)
-	log.Debug("Pinned URL: ", p.Url)
-	if err != nil {
-		return "", err
+	var pinErr error
+	p.pinOnce.Do(func() {
+		originalUrl := p.url()
+		p.urlMu.Lock()
+		p.Url, pinErr = metadata.GetPinnedURL(p.Url)
+		p.urlMu.Unlock()
+		log.Debug("Pinned URL: ", p.url())
+		// Register the cached download under the pinned URL too, so
+		// subsequent lookups (which use the now-mutated p.Url) still hit.
+		pinnedUrl := p.url()
+		if pinErr == nil && pinnedUrl != originalUrl {
+			if cached, ok := downloadCache.Load(originalUrl); ok {
+				downloadCache.LoadOrStore(pinnedUrl, cached)
+			}
+		}
+	})
+	if pinErr != nil {
+		return "", pinErr
 	}
 
-	return dest, err
+	return dest, nil
+}
+
+func (p *PolicyUrl) url() string {
+	p.urlMu.RLock()
+	defer p.urlMu.RUnlock()
+	return p.Url
 }
 
 func (p *PolicyUrl) PolicyUrl() string {
-	return p.Url
+	return p.url()
 }
 
 func (p *PolicyUrl) Subdir() string {
@@ -204,7 +226,7 @@ func (p *PolicyUrl) Subdir() string {
 	return string(p.Kind)
 }
 
-func (p PolicyUrl) Type() PolicyType {
+func (p *PolicyUrl) Type() PolicyType {
 	return p.Kind
 }
 
@@ -242,7 +264,7 @@ func (s inlineData) GetPolicy(ctx context.Context, workDir string, showMsg bool)
 	dl := func(source string, dest string) (metadata.Metadata, error) {
 		fs := utils.FS(ctx)
 
-		if err := fs.MkdirAll(dest, 0755); err != nil {
+		if err := fs.MkdirAll(dest, 0o755); err != nil {
 			return nil, err
 		}
 
@@ -253,7 +275,7 @@ func (s inlineData) GetPolicy(ctx context.Context, workDir string, showMsg bool)
 			Size: int64(len(dest)),
 		}
 
-		return m, afero.WriteFile(fs, f, s.source, 0400)
+		return m, afero.WriteFile(fs, f, s.source, 0o400)
 	}
 
 	dest, _, err := getPolicyThroughCache(ctx, s, workDir, dl)

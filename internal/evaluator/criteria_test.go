@@ -469,7 +469,7 @@ func TestCollectVolatileConfigItems(t *testing.T) {
 			expectedSuccess: true, // Function doesn't fail, just doesn't add items
 		},
 		{
-			name: "Warning scenario - invalid time formats",
+			name: "Warning scenario - invalid time formats skips item",
 			items: &Criteria{
 				digestItems:    make(map[string][]string),
 				componentItems: make(map[string][]string),
@@ -485,13 +485,82 @@ func TestCollectVolatileConfigItems(t *testing.T) {
 			},
 			configProvider: &MockConfigProvider{effectiveTime: fixedTime},
 			expectedItems: &Criteria{
+				digestItems:    make(map[string][]string),
+				componentItems: make(map[string][]string),
+				defaultItems:   []string{"existing-item"},
+			},
+			expectedSuccess: true, // Item is skipped when timestamp is unparseable (fail-closed)
+		},
+		{
+			name: "Both timestamps garbage - item skipped",
+			items: &Criteria{
+				digestItems:    make(map[string][]string),
+				componentItems: make(map[string][]string),
+				defaultItems:   []string{"existing-item"},
+			},
+			volatileCriteria: []ecc.VolatileCriteria{
+				{
+					Value:          "garbage-item",
+					EffectiveOn:    "garbage",
+					EffectiveUntil: "also-garbage",
+					ImageDigest:    "sha256:abc123",
+				},
+			},
+			configProvider: &MockConfigProvider{effectiveTime: fixedTime},
+			expectedItems: &Criteria{
+				digestItems:    make(map[string][]string),
+				componentItems: make(map[string][]string),
+				defaultItems:   []string{"existing-item"},
+			},
+			expectedSuccess: true,
+		},
+		{
+			name: "Date-only format accepted as fallback",
+			items: &Criteria{
+				digestItems:    make(map[string][]string),
+				componentItems: make(map[string][]string),
+				defaultItems:   []string{"existing-item"},
+			},
+			volatileCriteria: []ecc.VolatileCriteria{
+				{
+					Value:          "date-only-item",
+					EffectiveOn:    "2025-08-01",
+					EffectiveUntil: "2025-08-31",
+					ImageDigest:    "sha256:dateonly",
+				},
+			},
+			configProvider: &MockConfigProvider{effectiveTime: fixedTime},
+			expectedItems: &Criteria{
 				digestItems: map[string][]string{
-					"sha256:def456": {"partial-invalid-item"},
+					"sha256:dateonly": {"date-only-item"},
 				},
 				componentItems: make(map[string][]string),
 				defaultItems:   []string{"existing-item"},
 			},
-			expectedSuccess: true, // Function handles invalid times gracefully
+			expectedSuccess: true,
+		},
+		{
+			name: "EffectiveOn garbage with valid EffectiveUntil - item skipped",
+			items: &Criteria{
+				digestItems:    make(map[string][]string),
+				componentItems: make(map[string][]string),
+				defaultItems:   []string{"existing-item"},
+			},
+			volatileCriteria: []ecc.VolatileCriteria{
+				{
+					Value:          "bad-on-item",
+					EffectiveOn:    "garbage",
+					EffectiveUntil: "2025-08-31T23:59:59Z",
+					ImageDigest:    "sha256:badon",
+				},
+			},
+			configProvider: &MockConfigProvider{effectiveTime: fixedTime},
+			expectedItems: &Criteria{
+				digestItems:    make(map[string][]string),
+				componentItems: make(map[string][]string),
+				defaultItems:   []string{"existing-item"},
+			},
+			expectedSuccess: true,
 		},
 		{
 			name: "Component names with volatile criteria",

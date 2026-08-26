@@ -41,8 +41,30 @@ Tests use build tags with different timeouts:
 
 - **Multi-module project:** root, `acceptance/`, `tools/` each have their own go.mod.
   Run `go mod tidy` in the right module.
-- **Debug mode:** `--debug` or `EC_DEBUG=1` preserves `ec-work-*` temp directories for inspection.
-- Conventional commits with Jira key encouraged (e.g., `feat(EC-1234): description`).
+- **Debug mode:** `EC_DEBUG=1` preserves `ec-work-*` temp directories for inspection.
+  The `--debug` flag only increases log verbosity.
+- **Product name:** This project is "Conforma CLI" (binary name: `ec`). Use "Conforma CLI" in new
+  user-facing strings, error messages, and documentation. Legacy identifiers required for
+  compatibility (e.g., `quay.io/enterprise-contract/ec-cli`, Tekton parameter names) must be
+  preserved as-is.
+
+## Go file header convention
+
+Go source files in this repository place the SPDX license header comment
+before the `//go:build` tag. This is the established convention across
+all Go files — do not flag build tag placement as a style violation.
+
+## Security fix review expectations
+
+Security bug fixes and vulnerability mitigations (PRs labeled `bug` +
+`Possible security concern`, or referencing security-related Jira tickets
+like EC-1842) should not be blocked on documentation updates.
+
+Documentation gaps in files like `THREAT_MODEL.md`, `DESIGN.md`, and
+user-facing docs should be flagged as informational comments (not
+blocking change requests) when the PR's primary purpose is a security
+fix. Authors are expected to create follow-up issues or PRs for
+documentation updates after the security fix is merged.
 
 ## CGO and DNS Resolution
 
@@ -53,6 +75,13 @@ Acceptance tests require `/etc/hosts` entries:
 ```
 127.0.0.1 apiserver.localhost
 127.0.0.1 rekor.localhost
+```
+
+## Single-File Verification
+
+```bash
+golangci-lint run internal/evaluator/evaluator.go   # Lint a single file (fast)
+gofmt -l internal/evaluator/evaluator.go            # Check formatting on a single file
 ```
 
 ## Design Documents

@@ -63,6 +63,23 @@ func (customDeadlineExceededError) Error() string {
 func (customDeadlineExceededError) Timeout() bool   { return true }
 func (customDeadlineExceededError) Temporary() bool { return true }
 
+// effectiveTimeout returns the timeout to use for the given command. It
+// disables the timeout for "validate input --server" since that starts a
+// persistent HTTP server that should run indefinitely.
+//
+// Note: this couples the root command to a leaf subcommand's flag. Moving
+// the logic to the subcommand's PreRunE is not practical because
+// PersistentPreRun has already applied the timeout to the context by then.
+func effectiveTimeout(cmd *cobra.Command, timeout time.Duration) time.Duration {
+	if cmd.Name() == "input" && cmd.Parent() != nil && cmd.Parent().Name() == "validate" {
+		if serverFlag := cmd.Flags().Lookup("server"); serverFlag != nil && serverFlag.Value.String() == "true" {
+			log.Debug("timeout disabled because --server flag is set")
+			return 0
+		}
+	}
+	return timeout
+}
+
 func NewRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "ec",
@@ -116,11 +133,12 @@ func NewRootCmd() *cobra.Command {
 			// custom timeout can be used and traces can be added
 			ctx := cmd.Context()
 			var cancel context.CancelFunc
-			if globalTimeout > 0 {
-				ctx, cancel = context.WithTimeout(ctx, globalTimeout)
-				log.Debugf("globalTimeout is %s", time.Duration(globalTimeout))
+			timeout := effectiveTimeout(cmd, globalTimeout)
+			if timeout > 0 {
+				ctx, cancel = context.WithTimeout(ctx, timeout)
+				log.Debugf("globalTimeout is %s", time.Duration(timeout))
 			} else {
-				log.Debugf("globalTimeout is %d, no timeout used", globalTimeout)
+				log.Debugf("globalTimeout is %d, no timeout used", timeout)
 			}
 			ctx = tracing.WithTrace(ctx, enabledTraces)
 			cmd.SetContext(ctx)

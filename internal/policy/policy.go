@@ -86,7 +86,7 @@ type Policy interface {
 type policy struct {
 	ecc.EnterpriseContractPolicySpec
 	checkOpts         *cosign.CheckOpts
-	choosenTime       string
+	chosenTime        string
 	effectiveTime     *time.Time
 	attestationTime   *time.Time
 	identity          cosign.Identity
@@ -167,24 +167,25 @@ func (p *policy) SigstoreOpts() (SigstoreOpts, error) {
 }
 
 type Options struct {
-	EffectiveTime     string
-	Identity          cosign.Identity
-	IgnoreRekor       bool
-	SkipImageSigCheck bool
-	SkipAttSigCheck   bool
-	PolicyRef         string
-	PublicKey         string
-	RekorURL          string
+	EffectiveTime          string
+	AllowPastEffectiveTime bool
+	Identity               cosign.Identity
+	IgnoreRekor            bool
+	SkipImageSigCheck      bool
+	SkipAttSigCheck        bool
+	PolicyRef              string
+	PublicKey              string
+	RekorURL               string
 }
 
 // NewOfflinePolicy construct and return a new instance of Policy that is used
 // in offline scenarios, i.e. without cluster or specific services access, and
 // no signature verification being performed.
 func NewOfflinePolicy(ctx context.Context, effectiveTime string) (Policy, error) {
-	if efn, err := parseEffectiveTime(effectiveTime); err == nil {
+	if efn, err := parseEffectiveTime(effectiveTime, true); err == nil {
 		return &policy{
 			effectiveTime: efn,
-			choosenTime:   effectiveTime,
+			chosenTime:    effectiveTime,
 			checkOpts:     &cosign.CheckOpts{},
 		}, nil
 	} else {
@@ -219,11 +220,11 @@ func NewInertPolicy(ctx context.Context, policyRef string) (Policy, error) {
 // resource in Kubernetes using the format: [namespace/]name
 //
 // If policyRef is blank, an empty EnterpriseContractPolicySpec is used.
-func NewInputPolicy(ctx context.Context, policyRef string, effectiveTime string) (Policy, error) {
-	if efn, err := parseEffectiveTime(effectiveTime); err == nil {
+func NewInputPolicy(ctx context.Context, policyRef string, effectiveTime string, allowPastEffectiveTime bool) (Policy, error) {
+	if efn, err := parseEffectiveTime(effectiveTime, allowPastEffectiveTime); err == nil {
 		p := policy{
-			choosenTime: effectiveTime,
-			checkOpts:   &cosign.CheckOpts{},
+			chosenTime: effectiveTime,
+			checkOpts:  &cosign.CheckOpts{},
 		}
 		if err := p.loadPolicy(ctx, policyRef); err != nil {
 			return nil, err
@@ -255,7 +256,7 @@ func NewInputPolicy(ctx context.Context, policyRef string, effectiveTime string)
 // to a kubernetes resource, for example, the cluster will be contacted.
 func NewPolicy(ctx context.Context, opts Options) (Policy, error) {
 	p := policy{
-		choosenTime: opts.EffectiveTime,
+		chosenTime: opts.EffectiveTime,
 	}
 
 	if err := p.loadPolicy(ctx, opts.PolicyRef); err != nil {
@@ -299,7 +300,7 @@ func NewPolicy(ctx context.Context, opts Options) (Policy, error) {
 		}
 	}
 
-	if efn, err := parseEffectiveTime(opts.EffectiveTime); err != nil {
+	if efn, err := parseEffectiveTime(opts.EffectiveTime, opts.AllowPastEffectiveTime); err != nil {
 		return nil, err
 	} else {
 		p.effectiveTime = efn
@@ -392,7 +393,7 @@ func (p *policy) WithSpec(spec ecc.EnterpriseContractPolicySpec) Policy {
 
 func (p *policy) AttestationTime(attestationTime time.Time) {
 	p.attestationTime = &attestationTime
-	if p.choosenTime == AtAttestation {
+	if p.chosenTime == AtAttestation {
 		p.effectiveTime = &attestationTime
 	}
 }
@@ -417,40 +418,76 @@ func (p policy) SkipAttSigCheck() bool {
 	return p.skipAttSigCheck
 }
 
-func isNow(choosenTime string) bool {
-	return strings.EqualFold(choosenTime, Now)
+func isNow(chosenTime string) bool {
+	return strings.EqualFold(chosenTime, Now)
 }
 
-func parseEffectiveTime(choosenTime string) (*time.Time, error) {
+// pastEffectiveTimeGracePeriod is the tolerance for clock skew when rejecting
+// past effective-time values. Times within this window are accepted even
+// without --allow-past-effective-time.
+const pastEffectiveTimeGracePeriod = 2 * time.Second
+
+// ParseEffectiveTime parses the effective-time string and returns the resolved
+// time. It accepts "now", "attestation", RFC3339, or YYYY-MM-DD formats. When
+// allowPast is false, dates in the past are rejected.
+// The "attestation" sentinel returns a zero time.Time — callers should handle
+// that case separately.
+func ParseEffectiveTime(chosenTime string, allowPast bool) (time.Time, error) {
+	t, err := parseEffectiveTime(chosenTime, allowPast)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if t == nil {
+		return time.Time{}, nil
+	}
+	return *t, nil
+}
+
+func parseEffectiveTime(chosenTime string, allowPast bool) (*time.Time, error) {
 	switch {
-	case isNow(choosenTime):
+	case isNow(chosenTime):
 		now := now().UTC()
 		log.Debugf("Chosen to use effective time of `now`, using current time %s", now.Format(time.RFC3339))
 		return &now, nil
-	case strings.EqualFold(choosenTime, AtAttestation):
+	case strings.EqualFold(chosenTime, AtAttestation):
 		log.Debugf("Chosen to use effective time of `attestation`")
 		return nil, nil
 	default:
-		var err error
-		if when, err := time.Parse(time.RFC3339, choosenTime); err == nil {
+		when, rfc3339Err := time.Parse(time.RFC3339, chosenTime)
+		if rfc3339Err == nil {
 			log.Debugf("Using provided effective time %s", when.Format(time.RFC3339))
 			whenUTC := when.UTC()
+			if err := rejectPastTime(whenUTC, allowPast); err != nil {
+				return nil, err
+			}
 			return &whenUTC, nil
 		}
+		log.Debugf("Unable to parse provided effective time `%s` using RFC3339", chosenTime)
 
-		log.Debugf("Unable to parse provided effective time `%s` using RFC3339", choosenTime)
-		errs := err
-
-		if when, err := time.Parse(DateFormat, choosenTime); err == nil {
+		when, dateErr := time.Parse(DateFormat, chosenTime)
+		if dateErr == nil {
 			log.Debugf("Using provided effective time %s", when.Format(time.RFC3339))
 			whenUTC := when.UTC()
+			if err := rejectPastTime(whenUTC, allowPast); err != nil {
+				return nil, err
+			}
 			return &whenUTC, nil
 		}
-		log.Debugf("Unable to parse provided effective time string `%s` using %s format", choosenTime, DateFormat)
-		errs = errors.Join(errs, err)
+		log.Debugf("Unable to parse provided effective time string `%s` using %s format", chosenTime, DateFormat)
 
-		return nil, fmt.Errorf("invalid policy time argument: %s", errs)
+		return nil, fmt.Errorf("invalid policy time argument: %s", errors.Join(rfc3339Err, dateErr))
 	}
+}
+
+func rejectPastTime(when time.Time, allowPast bool) error {
+	if allowPast {
+		return nil
+	}
+	threshold := now().UTC().Add(-pastEffectiveTimeGracePeriod)
+	if when.Before(threshold) {
+		return fmt.Errorf("effective time %s is in the past; use --allow-past-effective-time to override", when.Format(time.RFC3339))
+	}
+	return nil
 }
 
 // checkOpts returns an instance based on attributes of the Policy.

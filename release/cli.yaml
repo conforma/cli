@@ -92,6 +92,7 @@ spec:
         - $(results.cli-snapshot-spec.path)
         - $(results.bundle-snapshot-spec.path)
         image: quay.io/konflux-ci/task-runner:v1
+        imagePullPolicy: IfNotPresent
         name: expand
         workingDir: $(workspaces.source.path)/source
       workspaces:
@@ -182,12 +183,14 @@ spec:
         - $(params.cli-snapshot-spec)
         - $(params.cli-target-repo)
         image: quay.io/konflux-ci/task-runner:v1
+        imagePullPolicy: IfNotPresent
         name: copy-cli
       - command:
         - hack/copy-snapshot-image.sh
         - $(params.bundle-snapshot-spec)
         - $(params.bundle-target-repo)
         image: quay.io/konflux-ci/task-runner:v1
+        imagePullPolicy: IfNotPresent
         name: copy-bundle
       # To ease the transtion from the old quay org to the new quay org,
       # also push the two images to the old quay org at. Rather than
@@ -201,6 +204,7 @@ spec:
         # Hard-coded "old" $(params.cli-target-repo):
         - quay.io/enterprise-contract/cli
         image: quay.io/konflux-ci/task-runner:v1
+        imagePullPolicy: IfNotPresent
         name: copy-cli-old-org
       - command:
         - hack/copy-snapshot-image.sh
@@ -208,6 +212,7 @@ spec:
         # Hard-coded "old" $(params.bundle-target-repo)
         - quay.io/enterprise-contract/tekton-task
         image: quay.io/konflux-ci/task-runner:v1
+        imagePullPolicy: IfNotPresent
         name: copy-bundle-old-org
       workspaces:
       - name: source

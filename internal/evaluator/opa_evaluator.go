@@ -94,7 +94,7 @@ func (o *opaEvaluator) compileEngine(ctx context.Context) error {
 
 	engine, err := conftest.LoadWithData([]string{o.policyDir}, dataDirs, opts)
 	if err != nil {
-		return fmt.Errorf("load: %w", err)
+		return wrapRegoError(fmt.Errorf("load: %w", err))
 	}
 
 	engine.EnableInterQueryCache()

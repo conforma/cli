@@ -392,6 +392,13 @@ func extractStringArrayFromRuleData(src ecc.Source, key string) []string {
 	}
 }
 
+// formatEffectiveOnMessage returns the message with an appended notice
+// indicating when the rule will begin enforcement.
+func formatEffectiveOnMessage(message, effectiveOn string) string {
+	return fmt.Sprintf("%s. This will become a failure starting on %s",
+		strings.TrimSuffix(message, "."), effectiveOn)
+}
+
 //////////////////////////////////////////////////////////////////////////////
 // Comprehensive Policy Resolution
 //////////////////////////////////////////////////////////////////////////////
@@ -996,7 +1003,10 @@ func (f *LegacyPostEvaluationFilter) CategorizeResults(
 				warnings = append(warnings, result)
 			}
 		case "failure":
-			if getSeverity(result) == severityWarning || !isResultEffective(result, effectiveTime) {
+			if getSeverity(result) == severityWarning {
+				warnings = append(warnings, result)
+			} else if !isResultEffective(result, effectiveTime) {
+				result.Message = formatEffectiveOnMessage(result.Message, result.Metadata[metadataEffectiveOn].(string))
 				warnings = append(warnings, result)
 			} else {
 				failures = append(failures, result)
@@ -1119,7 +1129,10 @@ func (f *UnifiedPostEvaluationFilter) CategorizeResults(
 				warnings = append(warnings, filteredResult)
 			}
 		case "failure":
-			if getSeverity(filteredResult) == severityWarning || !isResultEffective(filteredResult, effectiveTime) {
+			if getSeverity(filteredResult) == severityWarning {
+				warnings = append(warnings, filteredResult)
+			} else if !isResultEffective(filteredResult, effectiveTime) {
+				filteredResult.Message = formatEffectiveOnMessage(filteredResult.Message, filteredResult.Metadata[metadataEffectiveOn].(string))
 				warnings = append(warnings, filteredResult)
 			} else {
 				failures = append(failures, filteredResult)

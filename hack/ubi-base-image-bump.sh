@@ -43,22 +43,12 @@ hack/update-rpm-lock.sh
 
 [[ ${1:-""} == "--no-commit" ]] && exit
 
-# Make a branch and a commit
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-PR_BRANCH="$CURRENT_BRANCH-ubi-bump-$(date +%y%m%d%H%M%S)"
-git checkout -b $PR_BRANCH
+# Make a branch
+#CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+#PR_BRANCH="$CURRENT_BRANCH-ubi-bump-$(date +%y%m%d%H%M%S)"
+#git checkout -b $PR_BRANCH
+
+# Make a commit
 git add ${DOCKER_FILES[@]} rpms.lock.yaml
 # Todo maybe: Detect if there are no changes and handle it nicely
 git commit -m "chore(deps): Update ubi-minimal base image"
-
-[[ ${1:-""} == "--no-push" ]] && exit
-
-# Push the branch ready to make a PR
-git push origin $PR_BRANCH:$PR_BRANCH
-
-# Todo maybe: gh pr create ...
-echo ""
-echo "***********************************************************************"
-echo " Click the 'Create a pull request...' link above and create a PR"
-echo " Be careful to choose the correct target branch: $CURRENT_BRANCH"
-echo "***********************************************************************"

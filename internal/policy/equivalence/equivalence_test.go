@@ -14,6 +14,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+//go:build unit
+
 package equivalence
 
 import (
@@ -2040,6 +2042,101 @@ func TestVolatileConfigWithImageInfo(t *testing.T) {
 			if !tt.expected {
 				t.Logf("Differences: %+v", diffs)
 			}
+		})
+	}
+}
+
+func TestIsVolatileMatcherActive(t *testing.T) {
+	effectiveTime := time.Date(2025, 8, 18, 12, 0, 0, 0, time.UTC)
+	checker := NewEquivalenceChecker(effectiveTime, nil)
+
+	tests := []struct {
+		name     string
+		matcher  ecc.VolatileCriteria
+		expected bool
+	}{
+		{
+			name: "valid timestamps in range returns true",
+			matcher: ecc.VolatileCriteria{
+				Value:          "some-rule",
+				EffectiveOn:    "2025-08-01T00:00:00Z",
+				EffectiveUntil: "2025-08-31T23:59:59Z",
+			},
+			expected: true,
+		},
+		{
+			name: "empty timestamps returns true (open-ended)",
+			matcher: ecc.VolatileCriteria{
+				Value: "open-ended-rule",
+			},
+			expected: true,
+		},
+		{
+			name: "garbage EffectiveOn returns false (fail-closed)",
+			matcher: ecc.VolatileCriteria{
+				Value:       "garbage-on",
+				EffectiveOn: "not-a-date",
+			},
+			expected: false,
+		},
+		{
+			name: "garbage EffectiveUntil returns false (fail-closed)",
+			matcher: ecc.VolatileCriteria{
+				Value:          "garbage-until",
+				EffectiveUntil: "also-garbage",
+			},
+			expected: false,
+		},
+		{
+			name: "both timestamps garbage returns false",
+			matcher: ecc.VolatileCriteria{
+				Value:          "both-garbage",
+				EffectiveOn:    "garbage",
+				EffectiveUntil: "garbage",
+			},
+			expected: false,
+		},
+		{
+			name: "date-only format accepted, in range returns true",
+			matcher: ecc.VolatileCriteria{
+				Value:          "date-only-rule",
+				EffectiveOn:    "2025-08-01",
+				EffectiveUntil: "2025-08-31",
+			},
+			expected: true,
+		},
+		{
+			name: "date-only format, out of range returns false",
+			matcher: ecc.VolatileCriteria{
+				Value:          "date-only-expired",
+				EffectiveOn:    "2025-07-01",
+				EffectiveUntil: "2025-07-15",
+			},
+			expected: false,
+		},
+		{
+			name: "future EffectiveOn returns false",
+			matcher: ecc.VolatileCriteria{
+				Value:          "future-rule",
+				EffectiveOn:    "2025-09-01T00:00:00Z",
+				EffectiveUntil: "2025-09-30T23:59:59Z",
+			},
+			expected: false,
+		},
+		{
+			name: "expired EffectiveUntil returns false",
+			matcher: ecc.VolatileCriteria{
+				Value:          "expired-rule",
+				EffectiveOn:    "2025-07-01T00:00:00Z",
+				EffectiveUntil: "2025-07-31T23:59:59Z",
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, checker.isVolatileMatcherActive(tt.matcher))
 		})
 	}
 }

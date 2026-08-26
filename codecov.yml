@@ -16,6 +16,7 @@
 ---
 ignore:
   - "acceptance"
+  - "benchmark"
 parsers:
   go:
     partials_as_hits: true

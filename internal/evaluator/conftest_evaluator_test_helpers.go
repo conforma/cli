@@ -133,7 +133,7 @@ func setupTestContext(r *mockTestRunner, dl *mockDownloader) context.Context {
 	# description: This rule will always fail
 	deny contains result if {
 		result := "Fails always"
-	}`)), 0644); err != nil {
+	}`)), 0o644); err != nil {
 		panic(err)
 	}
 
@@ -175,7 +175,7 @@ func rulesArchiveFromFS(t *testing.T, files fs.FS) (string, error) {
 
 		require.NoError(t, ar.WriteHeader(&tar.Header{
 			Name: r.Name(),
-			Mode: 0644,
+			Mode: 0o644,
 			Size: int64(len(bytes)),
 		}))
 

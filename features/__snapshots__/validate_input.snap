@@ -172,3 +172,34 @@ success: true
 [TestFeatures/valid policy URL with publicKey in policy config:stderr - 1]
 
 ---
+
+[TestFeatures/deprecated file flag backward compatibility:stdout - 1]
+{
+  "success": true,
+  "filepaths": [
+    {
+      "filepath": "pipeline_definition.yaml",
+      "violations": [],
+      "warnings": [],
+      "successes": null,
+      "success": true,
+      "success-count": 1
+    }
+  ],
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "git::https://${GITHOST}/git/happy-day-policy.git"
+        ]
+      }
+    ]
+  },
+  "ec-version": "${EC_VERSION}",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[TestFeatures/deprecated file flag backward compatibility:stderr - 1]
+
+---

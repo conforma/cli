@@ -92,7 +92,7 @@ Feature: Verify Enterprise Contract Tekton Tasks
     When version 0.1 of the task named "verify-enterprise-contract" is run with parameters:
       | IMAGES               | {"components": [{"containerImage": "quay.io/hacbs-contract-demo/golden-container@sha256:e76a4ae9dd8a52a0d191fd34ca133af5b4f2609536d32200a4a40a09fdc93a0d"}]} |
       | POLICY_CONFIGURATION | ${NAMESPACE}/${POLICY_NAME}                                                                                                                                  |
-      | POLICY_BUNDLE_DIGEST | sha256:f904979d405a39a3cc492439b379b4b117c622bbe7126a0e1ba76527ec3ce6a2                                                                                      |
+      | POLICY_BUNDLE_DIGEST | sha256:2a851b5d56259ba46391f72bc4e75ed5475510dce5ae47d054b72baf1e908d26                                                                                      |
       | STRICT               | false                                                                                                                                                        |
       | IGNORE_REKOR         | true                                                                                                                                                         |
     Then the task should succeed
@@ -356,10 +356,11 @@ Feature: Verify Enterprise Contract Tekton Tasks
       {"publicKey": ${known_PUBLIC_KEY}}
       ```
     When version 0.1 of the task named "verify-enterprise-contract" is run with parameters:
-      | IMAGES               | {"components": [{"containerImage": "${REGISTRY}/acceptance/effective-time"}]} |
-      | POLICY_CONFIGURATION | ${NAMESPACE}/${POLICY_NAME}                                                   |
-      | IGNORE_REKOR         | true                                                                          |
-      | EFFECTIVE_TIME       | 2020-01-01T00:00:00Z                                                          |
+      | IMAGES                       | {"components": [{"containerImage": "${REGISTRY}/acceptance/effective-time"}]} |
+      | POLICY_CONFIGURATION         | ${NAMESPACE}/${POLICY_NAME}                                                   |
+      | IGNORE_REKOR                 | true                                                                          |
+      | EFFECTIVE_TIME               | 2020-01-01T00:00:00Z                                                          |
+      | ALLOW_PAST_EFFECTIVE_TIME    | true                                                                          |
     Then the task should succeed
       And the task logs for step "show-config" should contain `"effective-time": "2020-01-01T00:00:00Z"`
 

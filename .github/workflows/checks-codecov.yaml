@@ -37,31 +37,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # v2.15.1
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
         with:
           egress-policy: audit
           disable-telemetry: true
 
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           # Needed in hack/derive-version.sh
           fetch-depth: 0
 
       - name: Restore Cache
-        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           key: main
           path: '**'
 
       - name: Setup Go environment
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
           cache: false
 
       - name: Check go versions
-        uses: conforma/github-workflows/golang-version-check@main
+        uses: conforma/github-workflows/golang-version-check@e049ae95d6a78c4665e88efa667981184394e913 # main
 
       - name: Show git sha and commit subject
         run: git log --oneline -n1
@@ -107,10 +107,10 @@ jobs:
       #     disable-telemetry: true
 
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Cache Go build and module artifacts
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             ~/.cache/go-build
@@ -120,14 +120,14 @@ jobs:
             go-acceptance-${{ runner.os }}-
 
       - name: Setup Go environment
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
           cache: false
 
       - name: Install tkn CLI
         run: |
-          TKN_VERSION=$(grep 'tektoncd/cli' tools/go.mod | awk '{print $2}' | sed 's/^v//')
+          TKN_VERSION=$(grep 'github.com/tektoncd/cli' tools/go.mod | awk '{print $2}' | sed 's/^v//')
           TKN_TARBALL="tkn_${TKN_VERSION}_Linux_x86_64.tar.gz"
           curl -fsSL "https://github.com/tektoncd/cli/releases/download/v${TKN_VERSION}/checksums.txt" -o checksums.txt
           curl -fsSL "https://github.com/tektoncd/cli/releases/download/v${TKN_VERSION}/${TKN_TARBALL}" -o "${TKN_TARBALL}"
@@ -168,14 +168,14 @@ jobs:
     needs: [Test, Acceptance]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # v2.15.1
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
         with:
           egress-policy: audit
           disable-telemetry: true
 
         # checkout is required for codecov to map the coverage data back to files in the repo
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
 
@@ -192,7 +192,7 @@ jobs:
           path: ./coverage
 
       - name: Upload unit test coverage report
-        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5.5.4
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -201,7 +201,7 @@ jobs:
           flags: unit
 
       - name: Upload generative test coverage report
-        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5.5.4
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -210,7 +210,7 @@ jobs:
           flags: generative
 
       - name: Upload integration test coverage report
-        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5.5.4
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -219,7 +219,7 @@ jobs:
           flags: integration
 
       - name: Upload acceptance test coverage report
-        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5.5.4
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -231,23 +231,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Restore Cache
-        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           key: main
           path: '**'
 
       - name: Setup Go environment
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
           cache: false
 
       - name: Development tools can be run
-        run: |
-          go run -modfile tools/go.mod github.com/tektoncd/cli/cmd/tkn version
-          go run -modfile tools/go.mod sigs.k8s.io/kustomize/kustomize/v5 version
-          go run -modfile tools/go.mod helm.sh/helm/v3/cmd/helm version
-          go run -modfile tools/go.mod github.com/open-policy-agent/conftest --version
+        run: make tools-ci

@@ -52,7 +52,7 @@ func NewLocalBackend(config *StorageConfig) (StorageBackend, error) {
 	}
 
 	// Ensure directory exists
-	if err := os.MkdirAll(basePath, 0755); err != nil {
+	if err := os.MkdirAll(basePath, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create storage directory %s: %w", basePath, err)
 	}
 
@@ -67,7 +67,7 @@ func (l *LocalBackend) Name() string {
 // Upload saves the VSA envelope to a local file
 func (l *LocalBackend) Upload(ctx context.Context, envelopeContent []byte) error {
 	// Create directory if it doesn't exist
-	if err := os.MkdirAll(l.basePath, 0755); err != nil {
+	if err := os.MkdirAll(l.basePath, 0o755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", l.basePath, err)
 	}
 
@@ -78,7 +78,7 @@ func (l *LocalBackend) Upload(ctx context.Context, envelopeContent []byte) error
 
 	// Write to file
 	filePath := filepath.Join(l.basePath, filename)
-	if err := os.WriteFile(filePath, envelopeContent, 0600); err != nil {
+	if err := os.WriteFile(filePath, envelopeContent, 0o600); err != nil {
 		return fmt.Errorf("failed to write VSA envelope to %s: %w", filePath, err)
 	}
 

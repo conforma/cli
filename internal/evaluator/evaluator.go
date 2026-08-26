@@ -27,6 +27,10 @@ type EvaluationTarget struct {
 	ParsedInput   map[string]any
 }
 
+// Evaluator implementations must be safe for concurrent use. The server (when
+// using ec validate input --server) shares evaluator instances across HTTP
+// requests, relying on Evaluate being read-only with respect to shared state
+// after initialization.
 type Evaluator interface {
 	Evaluate(ctx context.Context, target EvaluationTarget) ([]Outcome, error)
 

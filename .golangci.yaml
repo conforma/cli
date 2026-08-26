@@ -24,10 +24,17 @@ run:
 
 linters:
   enable:
+    - depguard
     - gosec
     - misspell
     - staticcheck
   settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: "io/ioutil"
+              desc: "Deprecated: use io and os packages instead"
     gosec:
       excludes:
         - G122

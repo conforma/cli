@@ -151,5 +151,6 @@ var insecure = regexp.MustCompile("^[A-Za-z0-9]*::http:")
 //   - http  -- not deemed secure
 //   - https -- deemed secure
 func isSecure(url string) bool {
-	return !strings.HasPrefix(url, "http:") && !insecure.MatchString(url)
+	lower := strings.ToLower(url)
+	return !strings.HasPrefix(lower, "http:") && !insecure.MatchString(lower)
 }

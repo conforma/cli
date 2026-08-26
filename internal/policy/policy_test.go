@@ -66,7 +66,7 @@ func TestNewPolicy(t *testing.T) {
 			policyRef: toJson(&ecc.EnterpriseContractPolicySpec{PublicKey: utils.TestPublicKey}),
 			expected: &policy{EnterpriseContractPolicySpec: ecc.EnterpriseContractPolicySpec{
 				PublicKey: utils.TestPublicKey,
-			}, effectiveTime: &timeNow, choosenTime: timeNowStr},
+			}, effectiveTime: &timeNow, chosenTime: timeNowStr},
 			expectErr: false,
 		},
 		{
@@ -81,7 +81,7 @@ func TestNewPolicy(t *testing.T) {
 			}),
 			expected: &policy{EnterpriseContractPolicySpec: ecc.EnterpriseContractPolicySpec{
 				PublicKey: utils.TestPublicKey,
-			}, effectiveTime: &timeNow, choosenTime: timeNowStr},
+			}, effectiveTime: &timeNow, chosenTime: timeNowStr},
 			expectErr: false,
 		},
 		{
@@ -89,7 +89,7 @@ func TestNewPolicy(t *testing.T) {
 			policyRef: toYAML(&ecc.EnterpriseContractPolicySpec{PublicKey: utils.TestPublicKey}),
 			expected: &policy{EnterpriseContractPolicySpec: ecc.EnterpriseContractPolicySpec{
 				PublicKey: utils.TestPublicKey,
-			}, effectiveTime: &timeNow, choosenTime: timeNowStr},
+			}, effectiveTime: &timeNow, chosenTime: timeNowStr},
 			expectErr: false,
 		},
 		{
@@ -104,7 +104,7 @@ func TestNewPolicy(t *testing.T) {
 			}),
 			expected: &policy{EnterpriseContractPolicySpec: ecc.EnterpriseContractPolicySpec{
 				PublicKey: utils.TestPublicKey,
-			}, effectiveTime: &timeNow, choosenTime: timeNowStr},
+			}, effectiveTime: &timeNow, chosenTime: timeNowStr},
 			expectErr: false,
 		},
 		{
@@ -113,7 +113,7 @@ func TestNewPolicy(t *testing.T) {
 			publicKey: utils.TestPublicKey,
 			expected: &policy{EnterpriseContractPolicySpec: ecc.EnterpriseContractPolicySpec{
 				PublicKey: utils.TestPublicKey,
-			}, effectiveTime: &timeNow, choosenTime: timeNowStr},
+			}, effectiveTime: &timeNow, chosenTime: timeNowStr},
 			expectErr: false,
 		},
 		{
@@ -122,7 +122,7 @@ func TestNewPolicy(t *testing.T) {
 			publicKey: utils.TestPublicKey,
 			expected: &policy{EnterpriseContractPolicySpec: ecc.EnterpriseContractPolicySpec{
 				PublicKey: utils.TestPublicKey,
-			}, effectiveTime: &timeNow, choosenTime: timeNowStr},
+			}, effectiveTime: &timeNow, chosenTime: timeNowStr},
 			expectErr: false,
 		},
 		{
@@ -130,7 +130,7 @@ func TestNewPolicy(t *testing.T) {
 			policyRef: toJson(&ecc.EnterpriseContractPolicySpec{PublicKey: utils.TestPublicKey, RekorUrl: utils.TestRekorURL}),
 			expected: &policy{EnterpriseContractPolicySpec: ecc.EnterpriseContractPolicySpec{
 				PublicKey: utils.TestPublicKey, RekorUrl: utils.TestRekorURL,
-			}, effectiveTime: &timeNow, choosenTime: timeNowStr},
+			}, effectiveTime: &timeNow, chosenTime: timeNowStr},
 			expectErr: false,
 		},
 		{
@@ -138,7 +138,7 @@ func TestNewPolicy(t *testing.T) {
 			policyRef: toYAML(&ecc.EnterpriseContractPolicySpec{PublicKey: utils.TestPublicKey, RekorUrl: utils.TestRekorURL}),
 			expected: &policy{EnterpriseContractPolicySpec: ecc.EnterpriseContractPolicySpec{
 				PublicKey: utils.TestPublicKey, RekorUrl: utils.TestRekorURL,
-			}, effectiveTime: &timeNow, choosenTime: timeNowStr},
+			}, effectiveTime: &timeNow, chosenTime: timeNowStr},
 			expectErr: false,
 		},
 		{
@@ -147,7 +147,7 @@ func TestNewPolicy(t *testing.T) {
 			rekorUrl:  utils.TestRekorURL,
 			expected: &policy{EnterpriseContractPolicySpec: ecc.EnterpriseContractPolicySpec{
 				PublicKey: utils.TestPublicKey, RekorUrl: utils.TestRekorURL,
-			}, effectiveTime: &timeNow, choosenTime: timeNowStr},
+			}, effectiveTime: &timeNow, chosenTime: timeNowStr},
 			expectErr: false,
 		},
 		{
@@ -156,7 +156,7 @@ func TestNewPolicy(t *testing.T) {
 			rekorUrl:  utils.TestRekorURL,
 			expected: &policy{EnterpriseContractPolicySpec: ecc.EnterpriseContractPolicySpec{
 				PublicKey: utils.TestPublicKey, RekorUrl: utils.TestRekorURL,
-			}, effectiveTime: &timeNow, choosenTime: timeNowStr},
+			}, effectiveTime: &timeNow, chosenTime: timeNowStr},
 			expectErr: false,
 		},
 		{
@@ -165,7 +165,7 @@ func TestNewPolicy(t *testing.T) {
 			k8sResource: &ecc.EnterpriseContractPolicySpec{PublicKey: utils.TestPublicKey},
 			expected: &policy{EnterpriseContractPolicySpec: ecc.EnterpriseContractPolicySpec{
 				PublicKey: utils.TestPublicKey,
-			}, effectiveTime: &timeNow, choosenTime: timeNowStr},
+			}, effectiveTime: &timeNow, chosenTime: timeNowStr},
 			expectErr: false,
 		},
 		{
@@ -175,7 +175,7 @@ func TestNewPolicy(t *testing.T) {
 			publicKey:   utils.TestPublicKey,
 			expected: &policy{EnterpriseContractPolicySpec: ecc.EnterpriseContractPolicySpec{
 				PublicKey: utils.TestPublicKey,
-			}, effectiveTime: &timeNow, choosenTime: timeNowStr},
+			}, effectiveTime: &timeNow, chosenTime: timeNowStr},
 			expectErr: false,
 		},
 		{
@@ -184,7 +184,7 @@ func TestNewPolicy(t *testing.T) {
 			k8sResource: &ecc.EnterpriseContractPolicySpec{PublicKey: utils.TestPublicKey, RekorUrl: utils.TestRekorURL},
 			expected: &policy{EnterpriseContractPolicySpec: ecc.EnterpriseContractPolicySpec{
 				PublicKey: utils.TestPublicKey, RekorUrl: utils.TestRekorURL,
-			}, effectiveTime: &timeNow, choosenTime: timeNowStr},
+			}, effectiveTime: &timeNow, chosenTime: timeNowStr},
 			expectErr: false,
 		},
 		{
@@ -194,7 +194,7 @@ func TestNewPolicy(t *testing.T) {
 			rekorUrl:    utils.TestRekorURL,
 			expected: &policy{EnterpriseContractPolicySpec: ecc.EnterpriseContractPolicySpec{
 				PublicKey: utils.TestPublicKey, RekorUrl: utils.TestRekorURL,
-			}, effectiveTime: &timeNow, choosenTime: timeNowStr},
+			}, effectiveTime: &timeNow, chosenTime: timeNowStr},
 			expectErr: false,
 		},
 		{
@@ -202,7 +202,7 @@ func TestNewPolicy(t *testing.T) {
 			publicKey: utils.TestPublicKey,
 			expected: &policy{EnterpriseContractPolicySpec: ecc.EnterpriseContractPolicySpec{
 				PublicKey: utils.TestPublicKey,
-			}, effectiveTime: &timeNow, choosenTime: timeNowStr},
+			}, effectiveTime: &timeNow, chosenTime: timeNowStr},
 			expectErr: false,
 		},
 		// Failure scenarios
@@ -245,10 +245,11 @@ func TestNewPolicy(t *testing.T) {
 			utils.SetTestRekorPublicKey(t)
 
 			got, err := NewPolicy(ctx, Options{
-				PolicyRef:     c.policyRef,
-				RekorURL:      c.rekorUrl,
-				PublicKey:     c.publicKey,
-				EffectiveTime: timeNowStr,
+				PolicyRef:              c.policyRef,
+				RekorURL:               c.rekorUrl,
+				PublicKey:              c.publicKey,
+				EffectiveTime:          timeNowStr,
+				AllowPastEffectiveTime: true,
 			})
 
 			if c.expectErr {
@@ -656,10 +657,10 @@ func TestIdentity(t *testing.T) {
 }
 
 func TestParseEffectiveTime(t *testing.T) {
-	_, err := parseEffectiveTime("")
+	_, err := parseEffectiveTime("", false)
 	assert.ErrorContains(t, err, "invalid policy time argument")
 
-	effective, err := parseEffectiveTime(Now)
+	effective, err := parseEffectiveTime(Now, false)
 	assert.NoError(t, err)
 	assert.Equal(t, time.UTC, effective.Location())
 
@@ -671,22 +672,72 @@ func TestParseEffectiveTime(t *testing.T) {
 	epoch := time.Unix(0, 0).UTC()
 	now = func() time.Time { return epoch }
 
-	effective, err = parseEffectiveTime(Now)
+	effective, err = parseEffectiveTime(Now, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, effective)
 	assert.Equal(t, epoch, *effective)
 
-	effective, err = parseEffectiveTime("2001-02-03T04:05:06+07:00")
+	effective, err = parseEffectiveTime("2001-02-03T04:05:06+07:00", true)
 	assert.NoError(t, err)
 	assert.NotNil(t, effective)
 	assert.Equal(t, time.Date(2001, 2, 2, 21, 5, 6, 0, time.UTC), *effective)
 
-	effective, err = parseEffectiveTime("2001-02-03")
+	effective, err = parseEffectiveTime("2001-02-03", true)
 	assert.NoError(t, err)
 	assert.NotNil(t, effective)
 	assert.Equal(t, time.Date(2001, 2, 3, 0, 0, 0, 0, time.UTC), *effective)
 
-	effective, err = parseEffectiveTime("attestation")
+	effective, err = parseEffectiveTime("attestation", false)
+	assert.NoError(t, err)
+	assert.Nil(t, effective)
+}
+
+func TestParseEffectiveTimePastRejection(t *testing.T) {
+	then := now
+	t.Cleanup(func() {
+		now = then
+	})
+
+	fixedNow := time.Date(2025, 7, 20, 12, 0, 0, 0, time.UTC)
+	now = func() time.Time { return fixedNow }
+
+	// Past date (RFC3339) rejected by default
+	_, err := parseEffectiveTime("2025-01-01T00:00:00Z", false)
+	assert.ErrorContains(t, err, "is in the past")
+	assert.ErrorContains(t, err, "--allow-past-effective-time")
+
+	// Past date (date-only) rejected by default
+	_, err = parseEffectiveTime("2025-01-01", false)
+	assert.ErrorContains(t, err, "is in the past")
+
+	// Past date allowed with allowPast=true
+	effective, err := parseEffectiveTime("2025-01-01T00:00:00Z", true)
+	assert.NoError(t, err)
+	assert.NotNil(t, effective)
+
+	// Time within grace period is accepted
+	withinGrace := fixedNow.Add(-1 * time.Second).Format(time.RFC3339)
+	effective, err = parseEffectiveTime(withinGrace, false)
+	assert.NoError(t, err)
+	assert.NotNil(t, effective)
+
+	// Time past the grace period is rejected
+	pastGrace := fixedNow.Add(-5 * time.Second).Format(time.RFC3339)
+	_, err = parseEffectiveTime(pastGrace, false)
+	assert.ErrorContains(t, err, "is in the past")
+
+	// Future date is always accepted
+	effective, err = parseEffectiveTime("2030-01-01T00:00:00Z", false)
+	assert.NoError(t, err)
+	assert.NotNil(t, effective)
+
+	// "now" is unaffected
+	effective, err = parseEffectiveTime(Now, false)
+	assert.NoError(t, err)
+	assert.NotNil(t, effective)
+
+	// "attestation" is unaffected
+	effective, err = parseEffectiveTime("attestation", false)
 	assert.NoError(t, err)
 	assert.Nil(t, effective)
 }
@@ -747,39 +798,39 @@ func TestEffectiveTimeAttestationAllowMutation(t *testing.T) {
 func TestAttestationTime(t *testing.T) {
 	cases := []struct {
 		name                      string
-		choosenTime               string
+		chosenTime                string
 		attestationTime           time.Time
 		expectEffectiveTimeUpdate bool
 		description               string
 	}{
 		{
-			name:                      "successful attestation time set with AtAttestation choosenTime",
-			choosenTime:               AtAttestation,
+			name:                      "successful attestation time set with AtAttestation chosenTime",
+			chosenTime:                AtAttestation,
 			attestationTime:           time.Date(2023, 1, 15, 10, 30, 0, 0, time.UTC),
 			expectEffectiveTimeUpdate: true,
-			description:               "Should set attestation time and update effective time when choosenTime is AtAttestation",
+			description:               "Should set attestation time and update effective time when chosenTime is AtAttestation",
 		},
 		{
-			name:                      "successful attestation time set with Now choosenTime",
-			choosenTime:               Now,
+			name:                      "successful attestation time set with Now chosenTime",
+			chosenTime:                Now,
 			attestationTime:           time.Date(2023, 2, 20, 14, 45, 0, 0, time.UTC),
 			expectEffectiveTimeUpdate: false,
-			description:               "Should set attestation time but not update effective time when choosenTime is Now",
+			description:               "Should set attestation time but not update effective time when chosenTime is Now",
 		},
 		{
 			name:                      "edge case with zero time attestation",
-			choosenTime:               AtAttestation,
+			chosenTime:                AtAttestation,
 			attestationTime:           time.Time{}, // zero time
 			expectEffectiveTimeUpdate: true,
-			description:               "Should handle zero time correctly and still update effective time when choosenTime is AtAttestation",
+			description:               "Should handle zero time correctly and still update effective time when chosenTime is AtAttestation",
 		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			// Create a policy with the specified choosenTime
+			// Create a policy with the specified chosenTime
 			p := &policy{
-				choosenTime: c.choosenTime,
+				chosenTime: c.chosenTime,
 			}
 
 			// Store initial effective time for comparison
@@ -794,11 +845,11 @@ func TestAttestationTime(t *testing.T) {
 
 			// Verify effective time behavior
 			if c.expectEffectiveTimeUpdate {
-				assert.NotNil(t, p.effectiveTime, "Effective time should be updated when choosenTime is AtAttestation")
-				assert.Equal(t, c.attestationTime, *p.effectiveTime, "Effective time should match attestation time when choosenTime is AtAttestation")
+				assert.NotNil(t, p.effectiveTime, "Effective time should be updated when chosenTime is AtAttestation")
+				assert.Equal(t, c.attestationTime, *p.effectiveTime, "Effective time should match attestation time when chosenTime is AtAttestation")
 			} else {
 				// Effective time should remain unchanged
-				assert.Equal(t, initialEffectiveTime, p.effectiveTime, "Effective time should remain unchanged when choosenTime is not AtAttestation")
+				assert.Equal(t, initialEffectiveTime, p.effectiveTime, "Effective time should remain unchanged when chosenTime is not AtAttestation")
 			}
 		})
 	}
@@ -806,7 +857,7 @@ func TestAttestationTime(t *testing.T) {
 	// Additional test for multiple calls to AttestationTime
 	t.Run("multiple attestation time calls", func(t *testing.T) {
 		p := &policy{
-			choosenTime: AtAttestation,
+			chosenTime: AtAttestation,
 		}
 
 		firstTime := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -1152,7 +1203,7 @@ func TestNewInputPolicy(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			ctx := context.Background()
 
-			policy, err := NewInputPolicy(ctx, c.policyRef, c.effectiveTime)
+			policy, err := NewInputPolicy(ctx, c.policyRef, c.effectiveTime, true)
 
 			if c.expectErr {
 				assert.Error(t, err, "Expected error for invalid input")
@@ -1323,8 +1374,9 @@ func TestPreProcessPolicy(t *testing.T) {
 		{
 			name: "successful preprocessing with simple policy",
 			policyOptions: Options{
-				PolicyRef:     fmt.Sprintf(`{"publicKey": %s}`, utils.TestPublicKeyJSON),
-				EffectiveTime: "2023-01-01T12:00:00Z",
+				PolicyRef:              fmt.Sprintf(`{"publicKey": %s}`, utils.TestPublicKeyJSON),
+				EffectiveTime:          "2023-01-01T12:00:00Z",
+				AllowPastEffectiveTime: true,
 			},
 			expectErr:   false,
 			description: "Should successfully preprocess a simple policy without sources",
@@ -1342,7 +1394,8 @@ func TestPreProcessPolicy(t *testing.T) {
 						}
 					]
 				}`, utils.TestPublicKeyJSON),
-				EffectiveTime: "2023-01-01T12:00:00Z",
+				EffectiveTime:          "2023-01-01T12:00:00Z",
+				AllowPastEffectiveTime: true,
 			},
 			mockDownload: func(ctx context.Context, dest, source string, showMsg bool) (metadata.Metadata, error) {
 				// Mock successful download
@@ -1367,7 +1420,8 @@ func TestPreProcessPolicy(t *testing.T) {
 						}
 					]
 				}`, utils.TestPublicKeyJSON),
-				EffectiveTime: "2023-01-01T12:00:00Z",
+				EffectiveTime:          "2023-01-01T12:00:00Z",
+				AllowPastEffectiveTime: true,
 			},
 			mockDownload: func(ctx context.Context, dest, source string, showMsg bool) (metadata.Metadata, error) {
 				return nil, fmt.Errorf("network error: connection refused")
@@ -1379,8 +1433,9 @@ func TestPreProcessPolicy(t *testing.T) {
 		{
 			name: "failed preprocessing with invalid policy reference",
 			policyOptions: Options{
-				PolicyRef:     `{"invalid": "json""}`,
-				EffectiveTime: "2023-01-01T12:00:00Z",
+				PolicyRef:              `{"invalid": "json""}`,
+				EffectiveTime:          "2023-01-01T12:00:00Z",
+				AllowPastEffectiveTime: true,
 			},
 			expectErr:   true,
 			errMsg:      "unable to parse",

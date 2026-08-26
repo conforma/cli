@@ -153,3 +153,31 @@ To trigger a manual release:
 . Click "Run workflow" button
 
 The release will proceed with the same steps as an automatic release.
+
+== Updating Pyxis Content Streams (Cicada)
+
+When creating or retiring a release branch, the `content_stream_tags` and `auto_rebuild_tags` for `rhtas/ec-rhel9` must be updated in https://gitlab.cee.redhat.com/releng/pyxis-repo-configs[Cicada].
+
+=== When to update
+
+* **New release branch** (e.g. `release-v0.9`): add `"0.9"` to the tags
+* **Retiring a release branch**: remove the corresponding tag
+
+=== How to update
+
+. Push a branch directly to `releng/pyxis-repo-configs` (not a fork)
+. Edit `products/rhtas/rhtas.yaml`, find the `rhtas/ec-rhel9` entry, and update `content_stream_tags` and `auto_rebuild_tags`
+. Open a merge request. Cicada runs a dry-run automatically
+. After merge, Cicada applies the change to prod and stage Pyxis
+
+=== Verifying the change
+
+After the MR merges, confirm with (VPN + Kerberos required):
+
+[source,bash]
+----
+kinit <kerberos-id>@IPA.REDHAT.COM
+curl --silent --negotiate -u : \
+  "https://pyxis.engineering.redhat.com/v1/repositories/registry/registry.access.redhat.com/repository/rhtas/ec-rhel9" \
+  | jq '{content_stream_tags, includes_multiple_content_streams, auto_rebuild_tags}'
+----

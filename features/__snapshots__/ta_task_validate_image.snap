@@ -1,4 +1,40 @@
 
+[TestFeatures/Golden container image with trusted artifacts:pin-policy-bundle - 1]
+Applying policy bundle digest override: sha256:f904979d405a39a3cc492439b379b4b117c622bbe7126a0e1ba76527ec3ce6a2
+'oci::quay.io/conforma/release-policy:konflux' not found in policy configuration, nothing to do.
+
+---
+
+[TestFeatures/Pin policy bundle digest:pin-policy-bundle - 1]
+Applying policy bundle digest override: sha256:2a851b5d56259ba46391f72bc4e75ed5475510dce5ae47d054b72baf1e908d26
+Replaced: oci::quay.io/conforma/release-policy:konflux
+    with: oci::quay.io/conforma/release-policy@sha256:2a851b5d56259ba46391f72bc4e75ed5475510dce5ae47d054b72baf1e908d26
+Modified policy written to: /tekton/home/policy-with-pinned-bundle.yaml
+
+---
+
+[TestFeatures/Pin policy bundle digest:show-config - 1]
+{
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "oci::quay.io/conforma/release-policy@sha256:2a851b5d56259ba46391f72bc4e75ed5475510dce5ae47d054b72baf1e908d26"
+        ],
+        "config": {
+          "include": [
+            "slsa_provenance_available"
+          ]
+        }
+      }
+    ],
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----"
+  },
+  "key": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----\n",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
 [TestFeatures/Golden container image with trusted artifacts:report-json - 1]
 {
   "success": true,

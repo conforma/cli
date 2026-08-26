@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"$CLAUDE_FILE_PATHS\" | while IFS= read -r f; do case \"$f\" in *.go) gofmt -w \"$f\" 2>/dev/null;; esac; done"
+          }
+        ]
+      }
+    ]
+  }
+}

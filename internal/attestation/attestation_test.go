@@ -126,6 +126,7 @@ func TestProvenanceFromSignature(t *testing.T) {
 			snaps.MatchJSON(t, string(p.Statement()))
 		})
 	}
+
 }
 
 func TestProvenance_Type(t *testing.T) {
@@ -283,6 +284,27 @@ func TestProvenanceFromBundlePayload(t *testing.T) {
 			dsseJSON: fmt.Sprintf(`{"signatures": [], "payload": "%s"}`,
 				base64.StdEncoding.EncodeToString([]byte(`not-json`))),
 			expectErr: "malformed bundle attestation",
+		},
+		{
+			name:  "unsupported attestation type",
+			setup: func(l *mockSignature) {},
+			dsseJSON: fmt.Sprintf(`{"payloadType":"application/vnd.in-toto+json","signatures": [%s], "payload": "%s"}`,
+				sig1, encode(`{
+					"_type": "https://bogus.example.io/Statement/v9.9",
+					"predicateType": "https://cool-type.example.io/Amazing/v2.0",
+					"predicate": {}
+				}`)),
+			expectErr: "unsupported attestation type: https://bogus.example.io/Statement/v9.9",
+		},
+		{
+			name:  "empty attestation type",
+			setup: func(l *mockSignature) {},
+			dsseJSON: fmt.Sprintf(`{"payloadType":"application/vnd.in-toto+json","signatures": [%s], "payload": "%s"}`,
+				sig1, encode(`{
+					"predicateType": "https://cool-type.example.io/Amazing/v2.0",
+					"predicate": {}
+				}`)),
+			expectErr: "unsupported attestation type: ",
 		},
 	}
 

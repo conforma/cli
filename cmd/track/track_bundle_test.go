@@ -214,7 +214,7 @@ func Test_TrackBundleCommand(t *testing.T) {
 			inputData := []byte(fmt.Sprintf(`{"file": "%s"}`, c.expectInput))
 
 			if c.expectInput != "" {
-				err := afero.WriteFile(fs, c.expectInput, inputData, 0777)
+				err := afero.WriteFile(fs, c.expectInput, inputData, 0o777)
 				assert.NoError(t, err)
 			}
 			testOutput := `{"test": true}`

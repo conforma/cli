@@ -41,7 +41,7 @@ func TestPrivateKeyFromKeyRef(t *testing.T) {
 			name:   "file path",
 			keyRef: "/path/to/key.pem",
 			setup: func(fs afero.Fs, ctx context.Context) {
-				err := afero.WriteFile(fs, "/path/to/key.pem", []byte("test key content"), 0600)
+				err := afero.WriteFile(fs, "/path/to/key.pem", []byte("test key content"), 0o600)
 				require.NoError(t, err)
 			},
 			expectErr: false,
@@ -218,7 +218,7 @@ func TestPublicKeyFromKeyRef(t *testing.T) {
 			name:   "file path",
 			keyRef: "/path/to/public-key.pem",
 			setup: func(fs afero.Fs, ctx context.Context) {
-				err := afero.WriteFile(fs, "/path/to/public-key.pem", []byte("test public key content"), 0600)
+				err := afero.WriteFile(fs, "/path/to/public-key.pem", []byte("test public key content"), 0o600)
 				require.NoError(t, err)
 			},
 			expectErr: false,

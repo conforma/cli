@@ -28,6 +28,9 @@ import (
 
 	ecc "github.com/conforma/crds/api/v1alpha1"
 	"github.com/pmezard/go-difflib/difflib"
+	log "github.com/sirupsen/logrus"
+
+	"github.com/conforma/cli/internal/timeutil"
 )
 
 // ImageInfo represents information about an image for volatile config matching
@@ -324,12 +327,22 @@ func (ec *EquivalenceChecker) getActiveVolatileMatchers(v *ecc.VolatileSourceCon
 
 func (ec *EquivalenceChecker) isVolatileMatcherActive(m ecc.VolatileCriteria) bool {
 	if m.EffectiveOn != "" {
-		if t, err := time.Parse(time.RFC3339, m.EffectiveOn); err == nil && ec.effectiveTime.Before(t) {
+		t, err := timeutil.ParseVolatileTime(m.EffectiveOn)
+		if err != nil {
+			log.Warnf("skipping volatile matcher %q: %v", m.Value, err)
+			return false
+		}
+		if ec.effectiveTime.Before(t) {
 			return false
 		}
 	}
 	if m.EffectiveUntil != "" {
-		if t, err := time.Parse(time.RFC3339, m.EffectiveUntil); err == nil && ec.effectiveTime.After(t) {
+		t, err := timeutil.ParseVolatileTime(m.EffectiveUntil)
+		if err != nil {
+			log.Warnf("skipping volatile matcher %q: %v", m.Value, err)
+			return false
+		}
+		if ec.effectiveTime.After(t) {
 			return false
 		}
 	}
