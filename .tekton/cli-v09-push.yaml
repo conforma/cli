@@ -117,10 +117,6 @@ spec:
       type: string
       default: .
       description: Target directories to scan with SAST tools. Multiple values should be separated with commas.
-    - name: enable-package-registry-proxy
-      default: 'true'
-      description: Use the package registry proxy when prefetching dependencies
-      type: string
     - name: source-date-epoch
       type: string
       default: ''
@@ -133,6 +129,10 @@ spec:
       type: string
       default: 'false'
       description: When "true", omit the build history (history timestamps, layer metadata, etc.) from the resulting image.
+    - name: enable-package-registry-proxy
+      default: 'true'
+      description: Use the package registry proxy when prefetching dependencies
+      type: string
     results:
     - description: ""
       name: IMAGE_URL
