@@ -42,6 +42,7 @@ ec initialize -mirror <url> -root <url>
 -h, --help:: help for initialize (Default: false)
 --mirror:: GCS bucket to a SigStore TUF repository, or HTTP(S) base URL, or file:/// for local filestore remote (air-gap) (Default: https://tuf-repo-cdn.sigstore.dev)
 --root:: path to trusted initial root. defaults to embedded root
+--root-checksum:: checksum of the initial root, required if root is downloaded via http(s). expects sha256 by default, can be changed to sha512 by providing sha512:<checksum>
 
 == Options inherited from parent commands
 
