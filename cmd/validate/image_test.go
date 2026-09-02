@@ -1427,7 +1427,7 @@ func TestValidateImageCommand_VSAUpload_Success(t *testing.T) {
 	originalLoadPrivateKey := vsa.LoadPrivateKey
 	defer func() { vsa.LoadPrivateKey = originalLoadPrivateKey }()
 
-	vsa.LoadPrivateKey = func(keyBytes, password []byte) (signature.SignerVerifier, error) {
+	vsa.LoadPrivateKey = func(keyBytes, password []byte, defaultLoadOptions *[]signature.LoadOption) (signature.SignerVerifier, error) {
 		return &simpleFakeSigner{}, nil
 	}
 
@@ -1488,7 +1488,7 @@ func TestValidateImageCommand_VSAUpload_NoStorageBackends(t *testing.T) {
 	originalLoadPrivateKey := vsa.LoadPrivateKey
 	defer func() { vsa.LoadPrivateKey = originalLoadPrivateKey }()
 
-	vsa.LoadPrivateKey = func(keyBytes, password []byte) (signature.SignerVerifier, error) {
+	vsa.LoadPrivateKey = func(keyBytes, password []byte, defaultLoadOptions *[]signature.LoadOption) (signature.SignerVerifier, error) {
 		return &simpleFakeSigner{}, nil
 	}
 
