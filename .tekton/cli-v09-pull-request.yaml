@@ -8,13 +8,13 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-cel-expression: event == "pull_request" && target_branch == "main"
+    pipelinesascode.tekton.dev/on-cel-expression: event == "pull_request" && target_branch == "release-v0.9"
   creationTimestamp:
   labels:
-    appstudio.openshift.io/application: ec-main
-    appstudio.openshift.io/component: cli-main
+    appstudio.openshift.io/application: ec-v09
+    appstudio.openshift.io/component: cli-v09
     pipelines.appstudio.openshift.io/type: build
-  name: cli-main-on-pull-request
+  name: cli-v09-on-pull-request
   namespace: rhtap-contract-tenant
 spec:
   params:
@@ -23,9 +23,7 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/rhtap-contract-tenant/ec-main/cli-main:on-pr-{{revision}}
-  - name: bundle-cli-ref-repo
-    value: quay.io/redhat-user-workloads/rhtap-contract-tenant/ec-main/cli-main
+    value: quay.io/redhat-user-workloads/rhtap-contract-tenant/ec-v09/cli-v09:on-pr-{{revision}}
   - name: image-expires-after
     value: 5d
   - name: dockerfile
@@ -37,7 +35,7 @@ spec:
   - name: build-source-image
     value: "true"
   - name: build-args-file
-    value: main-pre-merge-build-args.conf
+    value: ""
   - name: hermetic
     value: "true"
   - name: enable-cache-proxy
@@ -59,10 +57,6 @@ spec:
       type: string
     - description: Fully Qualified Output Image
       name: output-image
-      type: string
-    - description: >-
-        OCI repository of the CLI image to use as a reference in the Tekton bundle. When setting this value, take into account where the CLI image will be available for usage. For certain workflows, e.g. pull request, this should be the repo in which the CLI image is built into because those CLI images are not promoted to another location. For merge workflows that go through a release, for example, this should be the repository for which the CLI image will be released to.
-      name: bundle-cli-ref-repo
       type: string
     - default: .
       description: Path to the source code of an application's component from where to build image.
@@ -117,6 +111,14 @@ spec:
       description: Enable cache proxy
       name: enable-cache-proxy
       type: string
+    - name: sast-target-dirs
+      type: string
+      default: .
+      description: Target directories to scan with SAST tools. Multiple values should be separated with commas.
+    - name: enable-package-registry-proxy
+      default: 'true'
+      description: Use the package registry proxy when prefetching dependencies
+      type: string
     - name: source-date-epoch
       type: string
       default: ''
@@ -129,10 +131,6 @@ spec:
       type: string
       default: 'false'
       description: When "true", omit the build history (history timestamps, layer metadata, etc.) from the resulting image.
-    - name: enable-package-registry-proxy
-      default: 'true'
-      description: Use the package registry proxy when prefetching dependencies
-      type: string
     results:
     - description: ""
       name: IMAGE_URL
@@ -313,36 +311,6 @@ spec:
         operator: in
         values:
         - "true"
-    - name: build-tekton-bundle
-      params:
-      - name: IMAGE
-        value: $(params.output-image).bundle
-      - name: CONTEXT
-        value: >-
-          tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
-          tasks/verify-conforma-konflux-ta/0.1/verify-conforma-konflux-ta.yaml
-          tasks/collect-keyless-params/0.1/collect-keyless-params.yaml
-      - name: STEPS_IMAGE
-        value: $(params.bundle-cli-ref-repo)@$(tasks.build-image-index.results.IMAGE_DIGEST)
-      - name: URL
-        value: $(params.git-url)
-      - name: REVISION
-        value: $(params.revision)
-      - name: SOURCE_ARTIFACT
-        value: $(tasks.clone-repository.results.SOURCE_ARTIFACT)
-      - name: STEPS_IMAGE_STEP_NAMES
-        value: "!use-trusted-artifact,!create-trusted-artifact"
-      runAfter:
-      - build-image-index
-      taskRef:
-        params:
-        - name: name
-          value: tkn-bundle-oci-ta
-        - name: bundle
-          value: quay.io/konflux-ci/tekton-catalog/task-tkn-bundle-oci-ta:0.2@sha256:da807e473a1f3b6565617080ccdbfa7f49f34084c224bc0fb5123acc08a9f51c
-        - name: kind
-          value: task
-        resolver: bundles
     - name: deprecated-base-image-check
       params:
       - name: IMAGE_URL
@@ -422,6 +390,8 @@ spec:
         value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
       - name: CACHI2_ARTIFACT
         value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
+      - name: TARGET_DIRS
+        value: $(params.sast-target-dirs)
       runAfter:
       - build-image-index
       taskRef:
@@ -475,6 +445,8 @@ spec:
         value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
       - name: CACHI2_ARTIFACT
         value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
+      - name: TARGET_DIRS
+        value: $(params.sast-target-dirs)
       runAfter:
       - build-image-index
       taskRef:
@@ -501,6 +473,8 @@ spec:
         value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
       - name: CACHI2_ARTIFACT
         value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
+      - name: TARGET_DIRS
+        value: $(params.sast-target-dirs)
       runAfter:
       - build-image-index
       taskRef:
@@ -585,7 +559,7 @@ spec:
     - name: netrc
       optional: true
   taskRunTemplate:
-    serviceAccountName: build-pipeline-cli-main
+    serviceAccountName: build-pipeline-cli-v09
   workspaces:
   - name: git-auth
     secret:
