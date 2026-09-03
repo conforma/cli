@@ -61,7 +61,7 @@ awk_query=$(cat <<EOT
   gsub(/== "main"/, "== \"release-v$VERSION\"");
 
   # We use different build args in the release branch
-  gsub(/main-pre-merge-build-args.conf/, "quick-build-args.conf");
+  gsub(/main-pre-merge-build-args.conf/, "\"\"");
   gsub(/main-build-args.conf/, "\"\"");
 
   # Replace "main" in several places
