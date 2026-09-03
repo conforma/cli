@@ -104,6 +104,11 @@ if [[ -z "$CPE_VERSION" ]]; then
   exit 1
 fi
 
+if [[ ! "$CPE_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
+  echo "Error: CPE version must be in MAJOR.MINOR format (e.g. 1.5), got: ${CPE_VERSION}"
+  exit 1
+fi
+
 sed -i'' -e "s|name=\"ec\"|name=\"rhtas/ec-rhel9\" \\\\\\n  cpe=\"cpe:/a:redhat:trusted_artifact_signer:${CPE_VERSION}::el9\"|" Dockerfile.dist
 
 echo "Updated Dockerfile.dist labels:"
