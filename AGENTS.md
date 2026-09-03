@@ -92,6 +92,29 @@ Read these before modifying the corresponding areas:
 - [internal/validate/vsa/DESIGN.md](internal/validate/vsa/DESIGN.md) — VSA: storage backends, DSSE signing rationale, expiration model
 - [acceptance/README.md](acceptance/README.md) — acceptance test framework, Testcontainers, WireMock, snapshot testing
 
+## UBI Base Image Updates
+
+The project pins UBI9 ubi-minimal base image digests in three Dockerfiles:
+- `Dockerfile` (production)
+- `Dockerfile.dist` (distribution)
+- `acceptance/kubernetes/kind/acceptance.Dockerfile` (acceptance tests)
+
+The script `hack/ubi-base-image-bump.sh` updates all three files and regenerates `rpms.lock.yaml`
+via `hack/update-rpm-lock.sh`.
+
+### Multi-branch strategy
+
+On `main`, all three Dockerfiles are updated together. On `release-v*` branches, bump PRs may
+intentionally update only production Dockerfiles (`Dockerfile`, `Dockerfile.dist`) since acceptance
+test infrastructure is typically not backported to release branches. A narrower scope on release
+branches is expected, not a bug.
+
+### Review guidance
+
+When reviewing UBI bump PRs on `release-v*` branches, do not flag missing updates to
+`acceptance/kubernetes/kind/acceptance.Dockerfile` as stale references. The coordinated update set
+defined in `hack/ubi-base-image-bump.sh` applies to `main` branch bumps only.
+
 ## Troubleshooting
 
 System-level issues that surface in acceptance tests:
