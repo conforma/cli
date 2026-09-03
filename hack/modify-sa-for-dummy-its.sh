@@ -57,6 +57,23 @@ PUSH_SECRET="${PUSH_SECRET:-imagerepository-for-ec-main-cli-main-image-push}"
 # *different* keys and runs after the merge. So this removal is still required.
 PULL_SECRET="${PULL_SECRET:-ec-main-pull}"
 
+# The push secret must live in BOTH secret lists on the SA, because two
+# different consumers read two different fields:
+#
+#   secrets          - Tekton's credential init mounts these into task steps as
+#                      ~/.docker/config.json. This is what lets the oras attach
+#                      step action push. (The original POC only touched this.)
+#   imagePullSecrets - Tekton Chains authenticates to the registry via k8schain,
+#                      which reads ONLY imagePullSecrets (not .secrets). Without
+#                      the push secret here, Chains can't push the attestation and
+#                      the run ends with chains.tekton.dev/signed=failed, so no
+#                      attestation is ever created for the built artifact.
+#
+# The pull-only-secret removal (see above) applies to both fields for the same
+# reason: co-located pull/push creds for the same repo collide in the merged
+# docker config / keyring, and if the pull-only credential wins, the push fails.
+SA_SECRET_FIELDS=(secrets imagePullSecrets)
+
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [--revert] [--help]
@@ -70,55 +87,60 @@ Environment overrides: NAMESPACE, PUSH_SECRET, PULL_SECRET.
 EOF
 }
 
-# Returns 0 if the integration SA already lists the named secret.
+# Returns 0 if the integration SA already lists the named secret in the given
+# field (secrets or imagePullSecrets).
 sa_has_secret() {
-  local secret="$1"
+  local field="$1" secret="$2"
   oc get sa "${INTEGRATION_SA}" -n "${NAMESPACE}" -o json | python3 -c "
 import json, sys
-secret = sys.argv[1]
-secrets = [s['name'] for s in json.load(sys.stdin).get('secrets', [])]
+field, secret = sys.argv[1], sys.argv[2]
+secrets = [s['name'] for s in json.load(sys.stdin).get(field, [])]
 sys.exit(0 if secret in secrets else 1)
-" "${secret}"
+" "${field}" "${secret}"
 }
 
-# Link the named secret to the integration SA (no-op if already present).
+# Link the named secret to the integration SA field (no-op if already present).
 link_secret() {
-  local secret="$1"
-  if sa_has_secret "${secret}"; then
-    echo "Secret '${secret}' already linked to SA '${INTEGRATION_SA}'"
+  local field="$1" secret="$2"
+  if sa_has_secret "${field}" "${secret}"; then
+    echo "Secret '${secret}' already linked to SA '${INTEGRATION_SA}' (${field})"
   else
-    echo "Adding secret '${secret}' to SA '${INTEGRATION_SA}'"
+    echo "Adding secret '${secret}' to SA '${INTEGRATION_SA}' (${field})"
     oc patch sa "${INTEGRATION_SA}" -n "${NAMESPACE}" --type=json \
-      -p="[{\"op\":\"add\",\"path\":\"/secrets/-\",\"value\":{\"name\":\"${secret}\"}}]"
+      -p="[{\"op\":\"add\",\"path\":\"/${field}/-\",\"value\":{\"name\":\"${secret}\"}}]"
   fi
 }
 
-# Unlink the named secret from the integration SA (no-op if absent).
+# Unlink the named secret from the integration SA field (no-op if absent).
 unlink_secret() {
-  local secret="$1"
-  if ! sa_has_secret "${secret}"; then
-    echo "Secret '${secret}' not present on SA '${INTEGRATION_SA}' (nothing to remove)"
+  local field="$1" secret="$2"
+  if ! sa_has_secret "${field}" "${secret}"; then
+    echo "Secret '${secret}' not present on SA '${INTEGRATION_SA}' (${field}) (nothing to remove)"
     return
   fi
-  echo "Removing secret '${secret}' from SA '${INTEGRATION_SA}'"
+  echo "Removing secret '${secret}' from SA '${INTEGRATION_SA}' (${field})"
   local index
   index=$(oc get sa "${INTEGRATION_SA}" -n "${NAMESPACE}" -o json | python3 -c "
 import json, sys
-secret = sys.argv[1]
-for i, s in enumerate(json.load(sys.stdin).get('secrets', [])):
+field, secret = sys.argv[1], sys.argv[2]
+for i, s in enumerate(json.load(sys.stdin).get(field, [])):
     if s['name'] == secret:
         print(i)
         break
-" "${secret}")
+" "${field}" "${secret}")
   oc patch sa "${INTEGRATION_SA}" -n "${NAMESPACE}" --type=json \
-    -p="[{\"op\":\"remove\",\"path\":\"/secrets/${index}\"}]"
+    -p="[{\"op\":\"remove\",\"path\":\"/${field}/${index}\"}]"
 }
 
 grant_push() {
   echo "Granting push access on SA '${INTEGRATION_SA}' in namespace '${NAMESPACE}'"
   echo ""
-  unlink_secret "${PULL_SECRET}"
-  link_secret "${PUSH_SECRET}"
+  # Applied to every secret field so BOTH the oras attach step (.secrets) and
+  # Tekton Chains (imagePullSecrets) can authenticate the push.
+  for field in "${SA_SECRET_FIELDS[@]}"; do
+    unlink_secret "${field}" "${PULL_SECRET}"
+    link_secret "${field}" "${PUSH_SECRET}"
+  done
   echo ""
   echo "Done. Verify with:"
   echo "  oc get sa ${INTEGRATION_SA} -n ${NAMESPACE} -o yaml"
@@ -127,8 +149,12 @@ grant_push() {
 revoke_push() {
   echo "Restoring pull-only state on SA '${INTEGRATION_SA}' in namespace '${NAMESPACE}'"
   echo ""
-  unlink_secret "${PUSH_SECRET}"
-  link_secret "${PULL_SECRET}"
+  # Exactly reverses grant_push over the same fields: drop the push secret and
+  # restore the pull-only secret everywhere it was added.
+  for field in "${SA_SECRET_FIELDS[@]}"; do
+    unlink_secret "${field}" "${PUSH_SECRET}"
+    link_secret "${field}" "${PULL_SECRET}"
+  done
   echo ""
   echo "Done. Verify with:"
   echo "  oc get sa ${INTEGRATION_SA} -n ${NAMESPACE} -o yaml"
