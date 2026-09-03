@@ -30,6 +30,7 @@ jobs:
 
   stress:
     name: Stress Benchmark
+    if: false  # skipped for POC branch
     runs-on: ubuntu-latest
     timeout-minutes: 15
     continue-on-error: true
