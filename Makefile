@@ -197,6 +197,29 @@ benchmark_data: benchmark/simple/data.tar.gz ## Prepare data for benchmark
 .PHONY: benchmark
 benchmark: benchmark_simple ## Run benchmarks
 
+.PHONY: generate-baseline
+generate-baseline: benchmark/stress/data.tar.gz ## Generate stress benchmark baseline
+	@cd benchmark/stress && \
+	EC_STRESS_COMPONENTS=$${EC_STRESS_COMPONENTS:-10} EC_STRESS_WORKERS=$${EC_STRESS_WORKERS:-10} \
+	go run . 2>benchmark-stderr.txt | tee benchmark-output.txt && \
+	python3 -c "\
+	import re, json, sys; \
+	line = [l for l in open('benchmark-output.txt') if l.startswith('BenchmarkStress')]; \
+	line or sys.exit('No BenchmarkStress results found'); \
+	line = line[0]; \
+	def val(p): \
+	    m = re.search(p, line); \
+	    return m.group(1) if m else ''; \
+	ns = val(r'([\d.]+)\s+ns/op'); rss = val(r'([\d.]+)\s+peak-RSS-bytes'); \
+	(ns and rss) or sys.exit('Failed to parse benchmark metrics'); \
+	json.dump({'peak_rss_bytes': int(float(rss)), 'ns_per_op': int(float(ns)), \
+	  'components': int('$${EC_STRESS_COMPONENTS:-10}'), 'workers': int('$${EC_STRESS_WORKERS:-10}'), \
+	  'commit': '$(shell git rev-parse --short HEAD)', 'date': '$(shell date -u +%Y-%m-%d)', \
+	  'go_version': '$(shell go env GOVERSION | sed "s/^go//")' \
+	}, open('baseline.json','w'), indent=2); print()" && \
+	rm -f benchmark-output.txt benchmark-stderr.txt && \
+	echo "Baseline written to benchmark/stress/baseline.json"
+
 .PHONY: tools-ci
 tools-ci: ## Ensure all tools build cleanly
 	@echo "• tkn:" && \
