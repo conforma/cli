@@ -91,6 +91,31 @@ EOT
 awk "$awk_query" <(git show main:$MAIN_PR_PIPELINE) > $RELEASE_PR_PIPELINE
 awk "$awk_query" <(git show main:$MAIN_PUSH_PIPELINE) > $RELEASE_PUSH_PIPELINE
 
+# Set the CPE and name labels in Dockerfile.dist for the release branch.
+# The CPE version is a Red Hat product version that doesn't necessarily follow
+# the Conforma version, so it must be provided explicitly.
+CPE_VERSION="${CPE_VERSION:-}"
+if [[ -z "$CPE_VERSION" ]]; then
+  read -rp "Enter the CPE version for this release (e.g. 1.5): " CPE_VERSION
+fi
+
+if [[ -z "$CPE_VERSION" ]]; then
+  echo "Error: CPE version is required"
+  exit 1
+fi
+
+if [[ ! "$CPE_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
+  echo "Error: CPE version must be in MAJOR.MINOR format (e.g. 1.5), got: ${CPE_VERSION}"
+  exit 1
+fi
+
+sed -i'' -e "s|name=\"ec\"|name=\"rhtas/ec-rhel9\" \\\\\\n  cpe=\"cpe:/a:redhat:trusted_artifact_signer:${CPE_VERSION}::el9\"|" Dockerfile.dist
+
+echo "Updated Dockerfile.dist labels:"
+echo "  name=\"rhtas/ec-rhel9\""
+echo "  cpe=\"cpe:/a:redhat:trusted_artifact_signer:${CPE_VERSION}::el9\""
+echo ""
+
 echo "To review the new pipeline definitions:"
 echo "  vimdiff <(git show main:$MAIN_PR_PIPELINE) $RELEASE_PR_PIPELINE"
 echo "  vimdiff <(git show main:$MAIN_PUSH_PIPELINE) $RELEASE_PUSH_PIPELINE"
@@ -100,4 +125,4 @@ echo "  vimdiff <(git show release-v$OLD_VERSION:$OLD_RELEASE_PUSH_PIPELINE) $RE
 echo ""
 echo "If the above comparisons look good then you probably want to do this:"
 echo "  git rm $MAIN_PR_PIPELINE $MAIN_PUSH_PIPELINE"
-echo "  git add $RELEASE_PR_PIPELINE $RELEASE_PUSH_PIPELINE"
+echo "  git add $RELEASE_PR_PIPELINE $RELEASE_PUSH_PIPELINE Dockerfile.dist"
