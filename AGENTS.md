@@ -102,3 +102,7 @@ System-level issues that surface in acceptance tests:
 | Podman container failures | Use user service: `systemctl enable --user --now podman.socket` |
 | Too many containers (inotify) | `echo fs.inotify.max_user_watches=524288 \| sudo tee -a /etc/sysctl.conf` |
 | Key limit errors | `echo kernel.keys.maxkeys=1000 \| sudo tee -a /etc/sysctl.conf` |
+
+## Dependency Management
+
+Go version updates are managed by both Renovate and Mintmaker (`red-hat-konflux[bot]`). The local `renovate.json` extends the org-level preset at `conforma/.github` with an additional `helpers:pinGitHubActionDigests` extension. The org-level config's dependency grouping strategy for Go has changed over time — config comments may reference a "go version" group that was never fully implemented. Do not propose changes to the Renovate or Mintmaker configuration for Go version management (e.g., adding package rules, re-enabling or disabling automated Go version bumps, or creating new dependency groups) without explicit maintainer approval.
