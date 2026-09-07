@@ -15,7 +15,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# Update the POLICY_BUNDLE_DIGEST default value in tekton task definitions.
+# Update the POLICY_BUNDLE_DIGEST default value in the enterprise-contract
+# pipeline definition and related docs/tests.
 
 set -o errexit
 set -o nounset
@@ -23,12 +24,11 @@ set -o pipefail
 
 IMAGE="${IMAGE:-"quay.io/conforma/release-policy:konflux"}"
 
-# The two task definitions are the important placess where the digest
-# should update, but it also appears in some tests, and in the docs.
-# Update all those files as well so the change is ready to merge.
+# The pipeline definition is the primary place where the digest default
+# lives. The docs and test features also reference it and should be kept
+# in sync.
 FILES=(
-  tasks/verify-conforma-konflux-ta/0.1/verify-conforma-konflux-ta.yaml
-  tasks/verify-enterprise-contract/0.1/verify-enterprise-contract.yaml
+  pipelines/enterprise-contract/0.1/enterprise-contract.yaml
   docs/modules/ROOT/pages/verify-conforma-konflux-ta.adoc
   docs/modules/ROOT/pages/verify-enterprise-contract.adoc
   features/__snapshots__/task_validate_image.snap

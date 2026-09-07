@@ -79,6 +79,14 @@ spec:
       type: string
       description: Merge additional Rego variables into the policy data. Use syntax "key=value,key2=value2..."
       default: ""
+    - name: POLICY_BUNDLE_DIGEST
+      type: string
+      description: >-
+        OCI digest to pin the release policy bundle. The task resolves the
+        policy configuration and replaces oci::quay.io/conforma/release-policy:konflux
+        with oci::quay.io/conforma/release-policy@<digest>.
+      # To update this digest use the script in hack/update-policy-digest-in-tasks.sh
+      default: "sha256:f904979d405a39a3cc492439b379b4b117c622bbe7126a0e1ba76527ec3ce6a2"
     - name: SINGLE_COMPONENT
       type: string
       description: Reduce the Snapshot to only the component whose build caused the Snapshot to be created
@@ -154,6 +162,8 @@ spec:
           value: "$(params.CA_TRUST_CONFIG_MAP_KEY)"
         - name: EXTRA_RULE_DATA
           value: "$(params.EXTRA_RULE_DATA)"
+        - name: POLICY_BUNDLE_DIGEST
+          value: "$(params.POLICY_BUNDLE_DIGEST)"
         - name: SINGLE_COMPONENT
           value: "$(params.SINGLE_COMPONENT)"
         - name: SINGLE_COMPONENT_CUSTOM_RESOURCE
