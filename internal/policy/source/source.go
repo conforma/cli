@@ -71,22 +71,81 @@ type PolicySource interface {
 
 type PolicyUrl struct {
 	// A string containing a go-getter style source url compatible with conftest pull
-	Url     string
-	Kind    PolicyType
-	pinOnce sync.Once
-	urlMu   sync.RWMutex
+	Url  string
+	Kind PolicyType
+	pin  urlPin
 }
 
-// downloadCache is a concurrent map used to cache downloaded files.
-var downloadCache sync.Map
+// urlPin coordinates the lazy, one-time pinning of a PolicyUrl's Url field
+// and guards concurrent access to it. It consolidates what used to be two
+// independent PolicyUrl fields (pinOnce sync.Once + urlMu sync.RWMutex) into
+// a single small thread-safe type dedicated to this one purpose.
+type urlPin struct {
+	once sync.Once
+	mu   sync.RWMutex
+}
 
-// symlinkMutexes provides per-destination synchronization for symlink creation
-var symlinkMutexes sync.Map
+// read returns the result of get while holding a read lock, safe for
+// concurrent use with write and doOnce.
+func (p *urlPin) read(get func() string) string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return get()
+}
+
+// write runs set while holding a write lock.
+func (p *urlPin) write(set func()) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	set()
+}
+
+// doOnce runs fn at most once across the lifetime of p; subsequent calls are
+// no-ops, matching sync.Once.Do semantics.
+func (p *urlPin) doOnce(fn func()) {
+	p.once.Do(fn)
+}
+
+// policyDownloadCache memoizes downloaded policy files by source URL and
+// coordinates concurrent creation of the symlinks that expose those
+// downloads under a caller's work directory. It consolidates what used to be
+// two independent package-level sync.Map variables (downloadCache +
+// symlinkMutexes) into a single struct, since both exist to support the same
+// download-caching feature.
+type policyDownloadCache struct {
+	downloads sync.Map // sourceUrl (string) -> func() (string, cacheContent)
+	symlinks  sync.Map // destination (string) -> *sync.Mutex
+}
+
+// loadOrCompute returns the cached result for sourceUrl, computing and
+// caching it via compute at most once if it isn't already present.
+func (c *policyDownloadCache) loadOrCompute(sourceUrl string, compute func() (string, cacheContent)) func() (string, cacheContent) {
+	dfn, _ := c.downloads.LoadOrStore(sourceUrl, sync.OnceValues(compute))
+	return dfn.(func() (string, cacheContent))
+}
+
+// registerAlias makes pinnedUrl resolve to the same cached download as
+// originalUrl, so that a URL which gets pinned after it was first downloaded
+// doesn't cause a cache miss and a duplicate download.
+func (c *policyDownloadCache) registerAlias(originalUrl, pinnedUrl string) {
+	if cached, ok := c.downloads.Load(originalUrl); ok {
+		c.downloads.LoadOrStore(pinnedUrl, cached)
+	}
+}
+
+// symlinkMutex returns the mutex dedicated to synchronizing symlink creation
+// at dest, creating one on first use.
+func (c *policyDownloadCache) symlinkMutex(dest string) *sync.Mutex {
+	m, _ := c.symlinks.LoadOrStore(dest, &sync.Mutex{})
+	return m.(*sync.Mutex)
+}
+
+// downloadCache is the package-level policy download cache.
+var downloadCache policyDownloadCache
 
 // ClearDownloadCache clears the download cache. This is primarily used for testing.
 func ClearDownloadCache() {
-	downloadCache = sync.Map{}
-	symlinkMutexes = sync.Map{}
+	downloadCache = policyDownloadCache{}
 }
 
 type cacheContent struct {
@@ -102,16 +161,15 @@ func getPolicyThroughCache(ctx context.Context, s PolicySource, workDir string, 
 	// Load or store the downloaded policy file from the given source URL.
 	// If the file is already in the download cache, it is loaded from there.
 	// Otherwise, it is downloaded from the source URL and stored in the cache.
-	dfn, _ := downloadCache.LoadOrStore(sourceUrl, sync.OnceValues(func() (string, cacheContent) {
+	dfn := downloadCache.loadOrCompute(sourceUrl, func() (string, cacheContent) {
 		log.Debugf("Download cache miss: %s", sourceUrl)
 		// Checkout policy repo into work directory.
 		log.Debugf("Downloading policy files from source url %s to destination %s", sourceUrl, dest)
 		m, err := dl(sourceUrl, dest)
-		c := &cacheContent{sourceUrl, m, err}
-		return dest, *c
-	}))
+		return dest, cacheContent{sourceUrl, m, err}
+	})
 
-	d, c := dfn.(func() (string, cacheContent))()
+	d, c := dfn()
 	if c.err != nil {
 		return "", c.metadata, c.err
 	}
@@ -124,8 +182,7 @@ func getPolicyThroughCache(ctx context.Context, s PolicySource, workDir string, 
 	// try to create the same symlink simultaneously.
 	if filepath.Dir(dest) != filepath.Dir(d) {
 		// Get or create a mutex for this specific destination
-		mutexValue, _ := symlinkMutexes.LoadOrStore(dest, &sync.Mutex{})
-		mutex := mutexValue.(*sync.Mutex)
+		mutex := downloadCache.symlinkMutex(dest)
 
 		mutex.Lock()
 		defer mutex.Unlock()
@@ -189,19 +246,17 @@ func (p *PolicyUrl) GetPolicy(ctx context.Context, workDir string, showMsg bool)
 	}
 
 	var pinErr error
-	p.pinOnce.Do(func() {
+	p.pin.doOnce(func() {
 		originalUrl := p.url()
-		p.urlMu.Lock()
-		p.Url, pinErr = metadata.GetPinnedURL(p.Url)
-		p.urlMu.Unlock()
+		p.pin.write(func() {
+			p.Url, pinErr = metadata.GetPinnedURL(p.Url)
+		})
 		log.Debug("Pinned URL: ", p.url())
 		// Register the cached download under the pinned URL too, so
 		// subsequent lookups (which use the now-mutated p.Url) still hit.
 		pinnedUrl := p.url()
 		if pinErr == nil && pinnedUrl != originalUrl {
-			if cached, ok := downloadCache.Load(originalUrl); ok {
-				downloadCache.LoadOrStore(pinnedUrl, cached)
-			}
+			downloadCache.registerAlias(originalUrl, pinnedUrl)
 		}
 	})
 	if pinErr != nil {
@@ -212,9 +267,7 @@ func (p *PolicyUrl) GetPolicy(ctx context.Context, workDir string, showMsg bool)
 }
 
 func (p *PolicyUrl) url() string {
-	p.urlMu.RLock()
-	defer p.urlMu.RUnlock()
-	return p.Url
+	return p.pin.read(func() string { return p.Url })
 }
 
 func (p *PolicyUrl) PolicyUrl() string {
