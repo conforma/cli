@@ -111,6 +111,11 @@ fi
 
 sed -i'' -e "s|name=\"ec\"|name=\"rhtas/ec-rhel9\" \\\\\\n  cpe=\"cpe:/a:redhat:trusted_artifact_signer:${TAS_VERSION}::el9\"|" Dockerfile.dist
 
+grep -q "cpe:/a:redhat:trusted_artifact_signer:${TAS_VERSION}::el9" Dockerfile.dist || {
+  echo "Error: failed to update Dockerfile.dist labels (pattern not found — file may already be patched, or the label format changed)"
+  exit 1
+}
+
 echo "Updated Dockerfile.dist labels:"
 echo "  name=\"rhtas/ec-rhel9\""
 echo "  cpe=\"cpe:/a:redhat:trusted_artifact_signer:${TAS_VERSION}::el9\""
