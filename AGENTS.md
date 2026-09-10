@@ -48,6 +48,24 @@ Tests use build tags with different timeouts:
   compatibility (e.g., `quay.io/enterprise-contract/ec-cli`, Tekton parameter names) must be
   preserved as-is.
 
+## Go Version Consistency
+
+These files must all declare the same Go version:
+
+1. `go.mod` (line 3: `go X.Y.Z`)
+2. `acceptance/go.mod` (`go X.Y.Z`)
+3. `tools/go.mod` (`go X.Y.Z`)
+4. `tools/kubectl/go.mod` (`go X.Y.Z`)
+5. `.tool-versions` (`golang X.Y.Z`)
+6. `Dockerfile` (`FROM golang:X.Y.Z@sha256:...`)
+7. `Dockerfile.dist` (`FROM go-toolset:X.Y.Z@sha256:...`)
+
+**Reviewer guidance:** When any PR modifies a Go version in one of these files,
+verify all seven files declare the same version. Mismatches between `go.mod` and
+Dockerfile base images can cause build failures when `GOTOOLCHAIN=local` is set.
+Dockerfile image tags also require updated `@sha256:` digests — a version bump
+without a corresponding digest update will pull a stale or incorrect image.
+
 ## Go file header convention
 
 Go source files in this repository place the SPDX license header comment
