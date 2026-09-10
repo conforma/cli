@@ -35,7 +35,7 @@ require (
 	github.com/yudai/gojsondiff v1.0.0
 	golang.org/x/exp v0.0.0-20260603202125-055de637280b
 	golang.org/x/sync v0.23.0
-	gopkg.in/go-jose/go-jose.v2 v2.6.3
+	gopkg.in/go-jose/go-jose.v4 v4.1.5
 	k8s.io/api v0.36.0
 	k8s.io/apimachinery v0.36.0
 	k8s.io/client-go v0.36.0
