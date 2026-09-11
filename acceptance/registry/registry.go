@@ -94,7 +94,7 @@ func startStubRegistry(ctx context.Context) (context.Context, error) {
 
 	req := testenv.TestContainersRequest(ctx, testcontainers.ContainerRequest{
 		Image:        registryImage,
-		ExposedPorts: []string{"0.0.0.0::5000/tcp"},
+		ExposedPorts: []string{"5000/tcp"},
 		WaitingFor:   wait.ForHTTP("/v2/").WithPort("5000/tcp"),
 		Cmd:          []string{"serve", "/config/config.json"},
 		Files: []testcontainers.ContainerFile{
@@ -125,7 +125,7 @@ func startStubRegistry(ctx context.Context) (context.Context, error) {
 		return ctx, err
 	}
 
-	state.HostAndPort = fmt.Sprintf("localhost:%d", port.Int())
+	state.HostAndPort = fmt.Sprintf("localhost:%d", port.Num())
 
 	return ctx, nil
 }

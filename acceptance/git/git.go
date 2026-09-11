@@ -164,7 +164,7 @@ func startStubGitServer(ctx context.Context) (context.Context, error) {
 
 	req := testenv.TestContainersRequest(ctx, testcontainers.ContainerRequest{
 		Image:        "docker.io/ynohat/git-http-backend",
-		ExposedPorts: []string{"0.0.0.0::443/tcp"},
+		ExposedPorts: []string{"443/tcp"},
 		WaitingFor: wait.ForHTTP("/git/health-check.git/info/refs?service=git-upload-pack").
 			WithPort("443/tcp").
 			WithTLS(true).
@@ -196,7 +196,7 @@ func startStubGitServer(ctx context.Context) (context.Context, error) {
 		return ctx, err
 	}
 
-	state.HostAndPort = fmt.Sprintf("localhost:%d", port.Int())
+	state.HostAndPort = fmt.Sprintf("localhost:%d", port.Num())
 	state.RepositoriesDir = repositories
 
 	return ctx, nil
