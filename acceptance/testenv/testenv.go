@@ -23,12 +23,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path"
 	"runtime"
 	"testing"
 
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 	"github.com/testcontainers/testcontainers-go"
 )
 
@@ -251,6 +254,35 @@ func TestContainersRequest(ctx context.Context, req testcontainers.ContainerRequ
 	req.AutoRemove = !persisted
 	if persisted {
 		os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
+	}
+
+	// Publish the exposed ports on the IPv4 (0.0.0.0) address only. This avoids
+	// accidentally reaching an unintended container that happens to be listening
+	// on the same port over IPv6 (Ref. https://issues.redhat.com/browse/HACBS-1354).
+	// This used to be expressed with the "0.0.0.0::<port>/tcp" ExposedPorts syntax,
+	// but testcontainers-go v0.44 no longer accepts a host-binding IP in ExposedPorts,
+	// so it must be set via PortBindings in a HostConfigModifier instead. Supplying a
+	// HostConfigModifier replaces testcontainers' default one, so re-apply the fields
+	// it would otherwise copy from the request.
+	exposedPorts := req.ExposedPorts
+	req.HostConfigModifier = func(hc *container.HostConfig) {
+		hc.AutoRemove = req.AutoRemove
+		hc.CapAdd = req.CapAdd
+		hc.CapDrop = req.CapDrop
+		hc.Binds = req.Binds
+		hc.ExtraHosts = req.ExtraHosts
+		hc.NetworkMode = req.NetworkMode
+		hc.Resources = req.Resources
+		hc.Privileged = req.Privileged
+		hc.ShmSize = req.ShmSize
+
+		hc.PortBindings = network.PortMap{}
+		for _, spec := range exposedPorts {
+			// HostPort is left empty so Docker/Podman allocates a random host port.
+			hc.PortBindings[network.MustParsePort(spec)] = []network.PortBinding{
+				{HostIP: netip.IPv4Unspecified()},
+			}
+		}
 	}
 
 	return req
