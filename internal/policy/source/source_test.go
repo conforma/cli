@@ -614,7 +614,7 @@ func TestDownloadCacheWorkdirMismatch(t *testing.T) {
 	// same URL downloaded to workdir1
 	precachedDest := uniqueDestination(tmp, "subdir", source.PolicyUrl())
 	require.NoError(t, os.MkdirAll(precachedDest, 0o755))
-	downloadCache.Store("policy-url", func() (string, cacheContent) {
+	downloadCache.downloads.Store("policy-url", func() (string, cacheContent) {
 		return precachedDest, cacheContent{}
 	})
 
@@ -701,7 +701,7 @@ func TestConcurrentPolicyCachingRaceCondition(t *testing.T) {
 	require.NoError(t, os.WriteFile(policyFile, []byte("package test"), 0o600))
 
 	// Pre-populate the cache with the shared policy location
-	downloadCache.Store("policy-url", func() (string, cacheContent) {
+	downloadCache.downloads.Store("policy-url", func() (string, cacheContent) {
 		return cachedPolicyPath, cacheContent{}
 	})
 
