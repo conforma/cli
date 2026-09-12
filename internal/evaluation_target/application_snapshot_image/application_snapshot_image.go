@@ -30,7 +30,7 @@ import (
 	ecc "github.com/conforma/crds/api/v1alpha1"
 	"github.com/google/go-containerregistry/pkg/name"
 	app "github.com/konflux-ci/application-api/api/v1alpha1"
-	"github.com/santhosh-tekuri/jsonschema/v5"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/sigstore/cosign/v3/pkg/cosign"
 	cosignOCI "github.com/sigstore/cosign/v3/pkg/oci"
 	log "github.com/sirupsen/logrus"
