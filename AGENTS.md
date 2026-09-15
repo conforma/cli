@@ -92,6 +92,68 @@ Read these before modifying the corresponding areas:
 - [internal/validate/vsa/DESIGN.md](internal/validate/vsa/DESIGN.md) — VSA: storage backends, DSSE signing rationale, expiration model
 - [acceptance/README.md](acceptance/README.md) — acceptance test framework, Testcontainers, WireMock, snapshot testing
 
+## Claude Code Skills
+
+Skills live in `.claude/skills/<name>/SKILL.md`. They are **step-by-step executable workflows**
+that Claude Code follows to complete a task — not reference documentation, how-to guides, or
+API descriptions.
+
+### Format
+
+Every skill file has three parts:
+
+**1. YAML frontmatter** with `name` (kebab-case, matches directory name) and `description`
+(multi-line string listing trigger phrases so Claude Code knows when to invoke the skill):
+
+```yaml
+---
+name: my-skill
+description: >
+  Short description. Use when users ask "trigger phrase 1", "trigger phrase 2",
+  or need help with <topic>.
+---
+```
+
+**2. Title and summary** — an `# H1` heading describing the skill's purpose, followed by a
+one-line description of what the skill does:
+
+````markdown
+# Do the Thing
+
+Determine what to do, execute it, and report results.
+````
+
+**3. Numbered step sections** — each `## Step N: Action` contains a brief explanation and,
+typically, fenced code blocks (usually `bash`) with the concrete commands to run. The final step is always
+`## Step N: Report [<topic>]`, describing what to summarize to the user:
+
+````markdown
+## Step 1: Do the first thing
+
+Explanation of what this step accomplishes.
+
+```bash
+make build
+```
+
+## Step 2: Report results
+
+Summarize:
+- What happened
+- Pass/fail status
+- What needs attention
+````
+
+### Anti-patterns
+
+- **How-to guides or reference docs:** Skills are not documentation — they are runbooks.
+  "Here's how you could run tests" is wrong; "Run these tests and report the results" is right.
+- **Missing trigger phrases:** Without them, Claude Code won't know when to invoke the skill.
+- **Prose-only steps:** Action steps should generally include concrete commands, not just prose.
+  Brief prose-only steps are acceptable when they establish context (e.g., classifying inputs).
+
+See [.claude/skills/run-tests/SKILL.md](.claude/skills/run-tests/SKILL.md) as the canonical example.
+
 ## Troubleshooting
 
 System-level issues that surface in acceptance tests:
