@@ -2,5 +2,15 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "github>conforma/.github//config/renovate/renovate.json"
-  ]
+  ],
+  // Vulnerability/security fixes are already kept as standalone PRs: Renovate
+  // internally forces `groupName: null` for vulnerability alerts via its
+  // built-in `force` block, which outranks user packageRules — so an explicit
+  // ungrouping rule would be a no-op and is intentionally omitted.
+  // Here we only tune how vulnerability PRs surface: label them and create them
+  // immediately, bypassing the daily schedule.
+  "vulnerabilityAlerts": {
+    "labels": ["security", "renovate"],
+    "schedule": ["at any time"]
+  }
 }
