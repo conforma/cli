@@ -66,7 +66,7 @@ spec:
     - name: WORKERS
       type: string
       description: Number of parallel workers to use for policy evaluation.
-      default: "1"
+      default: "2"
     - name: CA_TRUST_CONFIGMAP_NAME
       type: string
       description: The name of the ConfigMap to read CA bundle data from.
