@@ -467,6 +467,7 @@ spec:
             cmd_args+=(
               --vsa-signing-key="${VSA_SIGNING_KEY}"
               --vsa-upload="${VSA_UPLOAD}"
+              --vsa-expiration=0
             )
           fi
 

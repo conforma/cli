@@ -296,6 +296,11 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				}
 			}
 
+			// Require --vsa-public-key when the VSA skip path is active
+			if len(data.vsaUpload) > 0 && data.vsaPublicKey == "" && data.vsaExpiration > 0 {
+				allErrors = errors.Join(allErrors, fmt.Errorf("--vsa-public-key required when --vsa-upload is set with --vsa-expiration > 0"))
+			}
+
 			return
 		},
 
@@ -367,9 +372,20 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 					var out *output.Output
 					var err error
 					if data.vsaExpiration > 0 {
-						vsaChecker := vsa.CreateVSACheckerFromUploadFlags(data.vsaUpload)
-						if vsaChecker != nil {
-							out, err = image.ValidateImageWithVSACheck(ctx, comp, data.spec, data.policy, evaluators, data.info, vsaChecker, data.vsaExpiration)
+						retriever := vsa.CreateRetrieverFromUploadFlags(data.vsaUpload)
+						if retriever != nil {
+							vsaEffectiveTime := data.effectiveTime
+							if vsaEffectiveTime == "attestation" {
+								vsaEffectiveTime = policy.Now
+							}
+							vsaConfig := &vsa.VSAValidationConfig{
+								Retriever:     retriever,
+								VSAExpiration: data.vsaExpiration,
+								PublicKeyPath: data.vsaPublicKey,
+								PolicySpec:    data.policy.Spec(),
+								EffectiveTime: vsaEffectiveTime,
+							}
+							out, err = image.ValidateImageWithVSACheck(ctx, comp, data.spec, data.policy, evaluators, data.info, vsaConfig)
 						} else {
 							// Fall back to normal validation if no VSA retriever is available
 							out, err = validate(ctx, comp, data.spec, data.policy, evaluators, data.info)
@@ -583,6 +599,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 	cmd.Flags().BoolVar(&data.vsaEnabled, "vsa", false, "Generate a Verification Summary Attestation (VSA) for each validated image.")
 	cmd.Flags().StringVar(&data.attestationFormat, "attestation-format", "dsse", "Attestation output format: dsse (signed envelope), predicate (raw JSON)")
 	cmd.Flags().StringVar(&data.vsaSigningKey, "vsa-signing-key", "", "Path to the private key for signing the VSA. Supports file paths and Kubernetes secret references (k8s://namespace/secret-name/key-field).")
+	cmd.Flags().StringVar(&data.vsaPublicKey, "vsa-public-key", "", "Path to the public key for VSA signature verification. Required when --vsa-upload is set and --vsa-expiration is greater than 0.")
 	cmd.Flags().StringSliceVar(&data.vsaUpload, "vsa-upload", nil, "Storage backends for VSA upload. Format: backend@url?param=value. Examples: rekor@https://rekor.sigstore.dev, local@./vsa-dir")
 	cmd.Flags().DurationVar(&data.vsaExpiration, "vsa-expiration", data.vsaExpiration, "Expiration threshold for existing VSAs. If a valid VSA exists and is newer than this threshold, validation will be skipped. (default 168h)")
 	cmd.Flags().StringVar(&data.attestationOutputDir, "attestation-output-dir", "", "Directory for attestation output files. Defaults to a temp directory under /tmp. Must be under /tmp or the current working directory.")
@@ -667,6 +684,7 @@ type imageData struct {
 	vsaEnabled                  bool
 	attestationFormat           string
 	vsaSigningKey               string
+	vsaPublicKey                string
 	vsaUpload                   []string
 	vsaExpiration               time.Duration
 	attestationOutputDir        string

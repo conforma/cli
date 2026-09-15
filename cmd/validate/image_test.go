@@ -1471,6 +1471,7 @@ func TestValidateImageCommand_VSAUpload_Success(t *testing.T) {
 		"--vsa",
 		"--vsa-signing-key", "/tmp/vsa-key.pem",
 		"--vsa-upload", "local@/tmp/vsa-test",
+		"--vsa-public-key", "/tmp/vsa-pub.pem",
 	})
 
 	var out bytes.Buffer
@@ -1541,6 +1542,39 @@ func TestValidateImageCommand_VSAUpload_NoStorageBackends(t *testing.T) {
 	// Should succeed even without storage backends - tests the "no backends" code path
 	_ = cmd.Execute()
 	// Don't assert no error since VSA processing might fail, but upload logic should be reached
+}
+
+func TestValidateImageCommand_VSAPublicKeyRequired(t *testing.T) {
+	// --vsa-public-key is required when --vsa-upload is set
+	validateImageCmd := validateImageCmd(happyValidator())
+	cmd := setUpCobra(validateImageCmd)
+
+	fs := afero.NewMemMapFs()
+	ctx := utils.WithFS(context.Background(), fs)
+
+	client := fake.FakeClient{}
+	commonMockClient(&client)
+	ctx = oci.WithClient(ctx, &client)
+	cmd.SetContext(ctx)
+
+	cmd.SetArgs([]string{
+		"validate", "image",
+		"--image", "registry/image:tag",
+		"--policy", fmt.Sprintf(`{"publicKey": %s}`, utils.TestPublicKeyJSON),
+		"--vsa-upload", "local@/tmp/vsa-test",
+		// Missing --vsa-public-key
+	})
+
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+
+	utils.SetTestRekorPublicKey(t)
+
+	err := cmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "--vsa-public-key required when --vsa-upload is set with --vsa-expiration > 0")
 }
 
 func TestValidateImageCommand_ShowWarningsFlag(t *testing.T) {
@@ -1676,6 +1710,7 @@ func TestValidateImageCommand_VSAFormat_DSSE(t *testing.T) {
 		"--attestation-format", "dsse",
 		"--vsa-signing-key", "/tmp/vsa-key.pem",
 		"--vsa-upload", "local@/tmp/vsa-test",
+		"--vsa-public-key", "/tmp/vsa-pub.pem",
 	})
 
 	var out bytes.Buffer
@@ -1712,6 +1747,7 @@ func TestValidateImageCommand_VSAFormat_Predicate(t *testing.T) {
 		"--vsa",
 		"--attestation-format", "predicate",
 		"--vsa-upload", "local@/tmp/vsa-predicates",
+		"--vsa-public-key", "/tmp/vsa-pub.pem",
 	})
 
 	var out bytes.Buffer
@@ -1747,6 +1783,7 @@ func TestValidateImageCommand_VSAFormat_InvalidFormat(t *testing.T) {
 		"--attestation-format", "invalid-format",
 		"--vsa-signing-key", "/tmp/vsa-key.pem",
 		"--vsa-upload", "local@/tmp/vsa-test",
+		"--vsa-public-key", "/tmp/vsa-pub.pem",
 	})
 
 	var out bytes.Buffer
@@ -1784,6 +1821,7 @@ func TestValidateImageCommand_VSAFormat_DSSE_RequiresSigningKey(t *testing.T) {
 		"--attestation-format", "dsse",
 		// Missing --vsa-signing-key
 		"--vsa-upload", "local@/tmp/vsa-test",
+		"--vsa-public-key", "/tmp/vsa-pub.pem",
 	})
 
 	var out bytes.Buffer
@@ -1822,6 +1860,7 @@ func TestValidateImageCommand_VSAFormat_Predicate_WorksWithoutSigningKey(t *test
 		"--attestation-format", "predicate",
 		// No --vsa-signing-key provided
 		"--vsa-upload", "local@/tmp/vsa-predicates",
+		"--vsa-public-key", "/tmp/vsa-pub.pem",
 	})
 
 	var out bytes.Buffer
@@ -1940,6 +1979,7 @@ func TestGenerateVSAsDSSE_Errors(t *testing.T) {
 			"--attestation-format", "dsse",
 			"--vsa-signing-key", "/tmp/invalid-key.pem",
 			"--vsa-upload", "local@/tmp/vsa-test",
+			"--vsa-public-key", "/tmp/vsa-pub.pem",
 		})
 
 		var out bytes.Buffer
@@ -1974,6 +2014,7 @@ func TestGenerateVSAsDSSE_Errors(t *testing.T) {
 			"--attestation-format", "dsse",
 			"--vsa-signing-key", "/tmp/nonexistent-key.pem",
 			"--vsa-upload", "local@/tmp/vsa-test",
+			"--vsa-public-key", "/tmp/vsa-pub.pem",
 		})
 
 		var out bytes.Buffer
@@ -2025,6 +2066,7 @@ func TestGenerateVSAsDSSE_Errors(t *testing.T) {
 			"--attestation-format", "dsse",
 			"--vsa-signing-key", "/tmp/vsa-key.pem",
 			"--vsa-upload", "local@/tmp/vsa-test",
+			"--vsa-public-key", "/tmp/vsa-pub.pem",
 		})
 
 		var out bytes.Buffer
@@ -2060,6 +2102,7 @@ func TestGenerateVSAsPredicates_Errors(t *testing.T) {
 			"--attestation-format", "predicate",
 			"--attestation-output-dir", "/etc/invalid-dir", // Invalid directory outside /tmp and cwd
 			"--vsa-upload", "local@/tmp/vsa-predicates",
+			"--vsa-public-key", "/tmp/vsa-pub.pem",
 		})
 
 		var out bytes.Buffer
@@ -2096,6 +2139,7 @@ func TestGenerateVSAsPredicates_Errors(t *testing.T) {
 			"--attestation-format", "predicate",
 			"--attestation-output-dir", "/tmp/vsa-predicates",
 			"--vsa-upload", "local@/tmp/vsa-predicates",
+			"--vsa-public-key", "/tmp/vsa-pub.pem",
 		})
 
 		var out bytes.Buffer
@@ -2175,6 +2219,7 @@ func TestVSAGeneration_WithOutputDir(t *testing.T) {
 				"--attestation-format", tt.format,
 				"--attestation-output-dir", tt.outputDir,
 				"--vsa-upload", "local@/tmp/vsa-test",
+				"--vsa-public-key", "/tmp/vsa-pub.pem",
 			}
 
 			if tt.needsKey {

@@ -1,0 +1,3 @@
+# Default code owners for this repository.
+# Applies to all paths, including .github/.
+* @conforma/devs

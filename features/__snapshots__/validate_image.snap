@@ -357,7 +357,7 @@ Error: success criteria not met
       "source": {},
       "warnings": [
         {
-          "msg": "Fails in 2099",
+          "msg": "Fails in 2099. This will become a failure starting on ${TIMESTAMP}",
           "metadata": {
             "effective_on": "${TIMESTAMP}"
           }

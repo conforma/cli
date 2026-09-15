@@ -165,6 +165,7 @@ func ec(dir string, components, workers int) func() {
 			strconv.Itoa(workers),
 			"--effective-time",
 			"2024-12-10T00:00:00Z",
+			"--allow-past-effective-time",
 		}); err != nil {
 			panic(err)
 		}

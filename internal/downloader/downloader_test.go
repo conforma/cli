@@ -142,7 +142,11 @@ func TestIsSecure(t *testing.T) {
 
 	insecure := []string{
 		"http://example.com",
+		"Http://example.com",
+		"HTTP://example.com",
+		"hTTp://example.com",
 		"git::http://github.com/org/repository",
+		"git::Http://github.com/org/repository",
 		"hg::http://github.com/org/repository",
 		"http::http://github.com/org/repository",
 		"s3::http://127.0.0.1:9000/test-bucket/hello.txt?aws_access_key_id=KEYID&aws_access_key_secret=SECRETKEY&region=us-east-2",

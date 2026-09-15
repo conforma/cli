@@ -19,11 +19,12 @@ package evaluator
 import (
 	"fmt"
 	"regexp"
-	"time"
 
 	ecc "github.com/conforma/crds/api/v1alpha1"
 	"github.com/google/go-containerregistry/pkg/name"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/conforma/cli/internal/timeutil"
 )
 
 // contains include/exclude items
@@ -179,20 +180,26 @@ func computeIncludeExclude(src ecc.Source, p ConfigProvider) (*Criteria, *Criter
 func collectVolatileConfigItems(items *Criteria, volatileCriteria []ecc.VolatileCriteria, p ConfigProvider) *Criteria {
 	at := p.EffectiveTime()
 	for _, c := range volatileCriteria {
-		from, err := time.Parse(time.RFC3339, c.EffectiveOn)
-		if err != nil {
-			if c.EffectiveOn != "" {
-				log.Warnf("unable to parse time for criteria %q, was given %q: %v", c.Value, c.EffectiveOn, err)
+		from := at
+		if c.EffectiveOn != "" {
+			t, err := timeutil.ParseVolatileTime(c.EffectiveOn)
+			if err != nil {
+				log.Warnf("skipping volatile criteria %q: %v", c.Value, err)
+				continue
 			}
-			from = at
+			from = t
 		}
-		until, err := time.Parse(time.RFC3339, c.EffectiveUntil)
-		if err != nil {
-			if c.EffectiveUntil != "" {
-				log.Warnf("unable to parse time for criteria %q, was given %q: %v", c.Value, c.EffectiveUntil, err)
+
+		until := at
+		if c.EffectiveUntil != "" {
+			t, err := timeutil.ParseVolatileTime(c.EffectiveUntil)
+			if err != nil {
+				log.Warnf("skipping volatile criteria %q: %v", c.Value, err)
+				continue
 			}
-			until = at
+			until = t
 		}
+
 		if until.Compare(at) >= 0 && from.Compare(at) <= 0 {
 			// DEPRECATED: use c.ImageDigest instead
 			if c.ImageRef != "" {
