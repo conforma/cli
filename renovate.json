@@ -3,14 +3,13 @@
   "extends": [
     "github>conforma/.github//config/renovate/renovate.json"
   ],
-  // Vulnerability/security fixes are already kept as standalone PRs: Renovate
-  // internally forces `groupName: null` for vulnerability alerts via its
-  // built-in `force` block, which outranks user packageRules — so an explicit
-  // ungrouping rule would be a no-op and is intentionally omitted.
-  // Here we only tune how vulnerability PRs surface: label them and create them
-  // immediately, bypassing the daily schedule.
+  // Vulnerability/security fixes are already kept as standalone PRs and created
+  // immediately: Renovate internally forces `groupName: null` and ignores the
+  // daily `schedule` for vulnerability alerts via its built-in `force` block,
+  // which outranks user config — so an explicit ungrouping rule or a `schedule`
+  // override would be a no-op and is intentionally omitted.
+  // Here we only add labels so CVE-fix PRs are easy to spot and route.
   "vulnerabilityAlerts": {
-    "labels": ["security", "renovate"],
-    "schedule": ["at any time"]
+    "labels": ["security", "renovate"]
   }
 }
