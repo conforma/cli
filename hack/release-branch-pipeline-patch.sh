@@ -91,6 +91,37 @@ EOT
 awk "$awk_query" <(git show main:$MAIN_PR_PIPELINE) > $RELEASE_PR_PIPELINE
 awk "$awk_query" <(git show main:$MAIN_PUSH_PIPELINE) > $RELEASE_PUSH_PIPELINE
 
+# Set the CPE and name labels in Dockerfile.dist for the release branch.
+# The TAS (Trusted Artifact Signer) version doesn't necessarily follow
+# the Conforma version, so it must be provided explicitly.
+TAS_VERSION="${TAS_VERSION:-}"
+if [[ -z "$TAS_VERSION" ]]; then
+  read -rp "Enter the TAS version for this release (e.g. 1.5): " TAS_VERSION
+fi
+
+if [[ -z "$TAS_VERSION" ]]; then
+  echo "Error: TAS version is required"
+  exit 1
+fi
+
+if [[ ! "$TAS_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
+  echo "Error: TAS version must be in MAJOR.MINOR format (e.g. 1.5), got: ${TAS_VERSION}"
+  exit 1
+fi
+
+sed -i.bak -e "s|name=\"ec\"|name=\"rhtas/ec-rhel9\" \\\\\\n  cpe=\"cpe:/a:redhat:trusted_artifact_signer:${TAS_VERSION}::el9\"|" Dockerfile.dist
+rm -f Dockerfile.dist.bak
+
+grep -q "cpe:/a:redhat:trusted_artifact_signer:${TAS_VERSION}::el9" Dockerfile.dist || {
+  echo "Error: failed to update Dockerfile.dist labels (pattern not found — file may already be patched, or the label format changed)"
+  exit 1
+}
+
+echo "Updated Dockerfile.dist labels:"
+echo "  name=\"rhtas/ec-rhel9\" \\"
+echo "  cpe=\"cpe:/a:redhat:trusted_artifact_signer:${TAS_VERSION}::el9\""
+echo ""
+
 echo "To review the new pipeline definitions:"
 echo "  vimdiff <(git show main:$MAIN_PR_PIPELINE) $RELEASE_PR_PIPELINE"
 echo "  vimdiff <(git show main:$MAIN_PUSH_PIPELINE) $RELEASE_PUSH_PIPELINE"
@@ -100,4 +131,4 @@ echo "  vimdiff <(git show release-v$OLD_VERSION:$OLD_RELEASE_PUSH_PIPELINE) $RE
 echo ""
 echo "If the above comparisons look good then you probably want to do this:"
 echo "  git rm $MAIN_PR_PIPELINE $MAIN_PUSH_PIPELINE"
-echo "  git add $RELEASE_PR_PIPELINE $RELEASE_PUSH_PIPELINE"
+echo "  git add $RELEASE_PR_PIPELINE $RELEASE_PUSH_PIPELINE Dockerfile.dist"
