@@ -56,6 +56,12 @@ go run . -benchnum 5
 Multi-component snapshot with configurable parallelism:
 
 ```bash
+make benchmark_stress
+```
+
+Or manually:
+
+```bash
 cd benchmark/stress
 ./prepare_data.sh
 go run .
@@ -69,7 +75,30 @@ EC_STRESS_COMPONENTS=50 EC_STRESS_WORKERS=20 go run .
 
 Defaults: 10 components, 35 workers.
 
-## Step 5: Profile if needed
+## Step 5: Compare against baseline
+
+The stress benchmark has regression detection. After running:
+
+```bash
+cd benchmark/stress
+./compare.sh benchmark-output.txt
+```
+
+This compares current results against `baseline.json` using thresholds from
+`thresholds.json` (default: 15% RSS, 20% ns/op). Exits non-zero on regression.
+
+## Step 6: Regenerate baseline
+
+After intentional performance changes, update the stored baseline:
+
+```bash
+make generate-baseline
+```
+
+This runs the stress benchmark, parses results, and writes `benchmark/stress/baseline.json`
+with current metrics, commit SHA, date, and Go version.
+
+## Step 7: Profile if needed
 
 Use the CLI's built-in profiling:
 
@@ -79,7 +108,7 @@ ec validate image --trace=cpu ...     # pprof CPU profile
 ec validate image --trace=mem ...     # heap profile
 ```
 
-## Step 6: Report results
+## Step 8: Report results
 
 Output is in standard Go benchmark format (ns/op, memory stats). Summarize:
 - Benchmark type run (simple/stress)
