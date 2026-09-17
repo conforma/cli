@@ -176,13 +176,7 @@ spec:
         oci::quay.io/conforma/release-policy:konflux is replaced with
         oci::quay.io/conforma/release-policy@<digest>. Accepts a full digest
         (sha256:abc123...) or just the hex hash (abc123...).
-      # For Konflux stability we want to try pinning the policy bundle rather
-      # than use the floating oci::quay.io/conforma/release-policy:konflux tag.
-      # Instead of needing to bump this in hundreds of separate ECPs, we'll do
-      # it here instead. If you don't want this behavior then provide an empty
-      # string value for this param. To update this digest use the script in
-      # hack/update-policy-digest-in-tasks.sh
-      default: "sha256:f904979d405a39a3cc492439b379b4b117c622bbe7126a0e1ba76527ec3ce6a2"
+      default: ""
 
     - name: WORKERS
       type: string
