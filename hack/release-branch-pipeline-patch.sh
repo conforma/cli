@@ -109,7 +109,10 @@ if [[ ! "$TAS_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 
-sed -i.bak -e "s|name=\"ec\"|name=\"rhtas/ec-rhel9\" \\\\\\n  cpe=\"cpe:/a:redhat:trusted_artifact_signer:${TAS_VERSION}::el9\"|" Dockerfile.dist
+sed -i.bak -e 's|name="ec"|name="rhtas/ec-rhel9"|' Dockerfile.dist
+rm -f Dockerfile.dist.bak
+sed -i.bak -e "/name=\"rhtas\/ec-rhel9\"/a\\
+  cpe=\"cpe:/a:redhat:trusted_artifact_signer:${TAS_VERSION}::el9\" \\\\" Dockerfile.dist
 rm -f Dockerfile.dist.bak
 
 grep -q "cpe:/a:redhat:trusted_artifact_signer:${TAS_VERSION}::el9" Dockerfile.dist || {
