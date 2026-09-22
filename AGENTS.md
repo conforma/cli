@@ -34,7 +34,7 @@ and `hack/macos/TROUBLESHOOTING.md` for detailed debugging.
 ### Test Tags
 
 Tests use build tags with different timeouts:
-- `unit` (10s), `integration` (15s), `generative` (30s), `acceptance` (20m)
+- `unit` (30s), `integration` (15s), `generative` (30s), `acceptance` (20m)
 - Run specific: `go test -tags=unit ./internal/evaluator -run TestName`
 
 ## Key Conventions
