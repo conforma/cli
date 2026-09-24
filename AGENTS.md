@@ -188,3 +188,11 @@ System-level issues that surface in acceptance tests:
 ## Dependency Management
 
 Go version updates are managed by both Renovate and Mintmaker (`red-hat-konflux[bot]`). The local `renovate.json` extends the org-level preset at `conforma/.github` with an additional `helpers:pinGitHubActionDigests` extension. The org-level config's dependency grouping strategy for Go has changed over time — config comments may reference a "go version" group that was never fully implemented. Do not propose changes to the Renovate or Mintmaker configuration for Go version management (e.g., adding package rules, re-enabling or disabling automated Go version bumps, or creating new dependency groups) without explicit maintainer approval.
+
+## Retro filing
+
+When running as the `retro` agent, invoke the `retro-filing-policy` skill
+before writing output. It is loaded by the derived retro harness and is the
+enforcement layer; this pointer is only reinforcement. Scores 0–3 are
+summary-only, while scores 4–5 remain subject to the upstream duplicate and
+recently-closed checks before filing.

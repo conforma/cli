@@ -1,0 +1,27 @@
+# Copyright The Conforma Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+base: https://raw.githubusercontent.com/fullsend-ai/agents/440d3e3c1a4a770309e37c2fd2826dfc88297d99/harness/review.yaml#sha256=c259d94e7c50e5e01cb0fa38df2b70765f8e35beb7ad8bf006c9193a05589917
+
+# Fullsend's bool merge treats an omitted readonly_repo as false, so carry
+# forward the upstream read-only guarantee explicitly.
+readonly_repo: true
+
+env:
+    runner:
+        REVIEW_FINDING_SEVERITY_THRESHOLD: "high"
+    sandbox:
+        REVIEW_FINDING_SEVERITY_THRESHOLD: "high"
