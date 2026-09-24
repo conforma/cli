@@ -164,7 +164,7 @@ spec:
         resolver: bundles
         params:
           - name: bundle
-            value: quay.io/conforma/tekton-task:konflux
+            value: quay.io/conforma/tekton-task:ec-1943-deliberately-missing-round2
           - name: name
             value: verify-enterprise-contract
           - name: kind
