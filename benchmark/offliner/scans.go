@@ -87,7 +87,7 @@ func scanReports(ref name.Reference) ([]name.Reference, error) {
 		for _, task := range tasks {
 			task := task.(map[string]any)
 			// TODO match by reference instead of name
-			if task["name"] != "clair-scan" {
+			if task["name"] != "clair-scan" && task["name"] != "roxctl-scan" {
 				continue
 			}
 
