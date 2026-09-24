@@ -40,7 +40,7 @@ kubectl apply -f https://raw.githubusercontent.com/conforma/cli/main/tasks/verif
 * **HOMEDIR**: Value for the HOME environment variable. (default: "/tekton/home")
 * **EFFECTIVE_TIME**: Run policy checks with the provided time. (default: "now")
 * **EXTRA_RULE_DATA**: Merge additional Rego variables into the policy data. Use syntax "key=value,key2=value2..." (default: "")
-* **WORKERS**: Number of parallel workers to use for policy evaluation. (default: "1")
+* **WORKERS**: Number of parallel workers to use for policy evaluation. (default: "2")
 * **SINGLE_COMPONENT**: Reduce the Snapshot to only the component whose build caused the Snapshot to be created (default: "false")
 * **SINGLE_COMPONENT_CUSTOM_RESOURCE**: Name, including kind, of the Kubernetes resource to query for labels when single component mode is enabled, e.g. pr/somepipeline. (default: "unknown")
 * **SINGLE_COMPONENT_CUSTOM_RESOURCE_NS**: Kubernetes namespace where the SINGLE_COMPONENT_NAME is found. Only used when single component mode is enabled. (default: "")
