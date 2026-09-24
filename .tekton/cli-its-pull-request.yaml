@@ -1,0 +1,57 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  annotations:
+    build.appstudio.openshift.io/repo: https://github.com/conforma/cli?rev={{revision}}
+    build.appstudio.redhat.com/commit_sha: '{{revision}}'
+    build.appstudio.redhat.com/pull_request_number: '{{pull_request_number}}'
+    build.appstudio.redhat.com/target_branch: '{{target_branch}}'
+    pipelinesascode.tekton.dev/cancel-in-progress: "true"
+    pipelinesascode.tekton.dev/max-keep-runs: "3"
+    # Execution authorization is enforced by Pipelines-as-Code ACLs/approval policy.
+    # Match normalized event fields; raw webhook bodies differ for PRs and retries.
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      event == "pull_request" && target_branch == "main" &&
+      ("pipelines/enterprise-contract/**".pathChanged() ||
+       ".tekton/cli-its-pull-request.yaml".pathChanged())
+  labels:
+    appstudio.openshift.io/application: ec-main
+    appstudio.openshift.io/component: cli-main
+    pipelines.appstudio.openshift.io/type: test
+  name: cli-its-on-pull-request
+  namespace: rhtap-contract-tenant
+spec:
+  params:
+  # Pre-merge validation: restore conforma/e2e-tests and its merged SHA before merge.
+  - name: git-url
+    value: https://github.com/dheerajodha/conforma-e2e-tests.git
+  - name: revision
+    value: 4bbba993a3b44eec5debb89fbc4f8bd1c8d0503d
+  - name: oci-container-repo
+    value: quay.io/conforma/e2e-tests
+  - name: oci-container-repo-credentials-secret
+    value: konflux-test-infra
+  - name: aws-credentials-secret
+    value: mapt-kind-secret
+  - name: deprovision-aws-credentials-secret
+    value: mapt-kind-secret
+  - name: its-pipeline-repo-url
+    value: '{{source_url}}'
+  - name: its-pipeline-revision
+    value: '{{revision}}'
+  - name: its-pipeline-path
+    value: pipelines/enterprise-contract/0.1/enterprise-contract.yaml
+  - name: test-label-filter
+    value: its-pipeline
+  # Keep the runner and test-suite revisions pinned to the same commit.
+  pipelineRef:
+    resolver: git
+    params:
+    - name: url
+      value: https://github.com/dheerajodha/conforma-e2e-tests.git
+    - name: revision
+      value: 4bbba993a3b44eec5debb89fbc4f8bd1c8d0503d
+    - name: pathInRepo
+      value: .tekton/pipelines/conforma-e2e/pipeline.yaml
+  taskRunTemplate:
+    serviceAccountName: konflux-integration-runner
