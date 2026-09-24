@@ -8,14 +8,10 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    # PR events check the author; ChatOps events check the approving commenter.
-    # Other payload shapes do not match. PaC authorization still applies.
+    # Execution authorization is enforced by Pipelines-as-Code ACLs/approval policy.
+    # Match normalized event fields; raw webhook bodies differ for PRs and retries.
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "pull_request" && target_branch == "main" &&
-      ((has(body.pull_request) && has(body.pull_request.author_association) &&
-        body.pull_request.author_association in ["MEMBER", "OWNER", "COLLABORATOR"]) ||
-       (has(body.comment) && has(body.comment.author_association) &&
-        body.comment.author_association in ["MEMBER", "OWNER", "COLLABORATOR"])) &&
       ("pipelines/enterprise-contract/**".pathChanged() ||
        ".tekton/cli-its-pull-request.yaml".pathChanged())
   labels:
