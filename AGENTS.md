@@ -128,17 +128,32 @@ lockfile must be regenerated after any digest bump.
 
 ### RPM lockfile scope
 
-`rpms.lock.yaml` is generated from `rpms.in.yaml` and only tracks the packages
-explicitly listed there — currently `ca-certificates`, `jq`, and `gzip`. RPMs
-that ship inside the base image itself (for example `curl-minimal`, `glib2`,
-`libcurl-minimal`, `libnghttp2`) are **not** tracked in the lockfile.
+`rpms.lock.yaml` is generated from `rpms.in.yaml`. It contains two kinds of
+entries, and both are "tracked" for the purposes of this section:
+
+1. The packages explicitly listed in `rpms.in.yaml` — currently
+   `ca-certificates`, `jq`, and `gzip`.
+2. Their resolved transitive dependencies pulled in by the resolver
+   (for example `oniguruma`, which the lockfile carries as a dependency
+   of `jq`). These are not named in `rpms.in.yaml` but appear in
+   `rpms.lock.yaml` because the resolver had to pin them.
+
+Together, "tracked packages" below means the union of (1) and (2): every RPM
+that ends up in `rpms.lock.yaml`, whether requested directly or pulled in
+transitively.
+
+RPMs that ship inside the base image itself (for example `curl-minimal`,
+`glib2`, `libcurl-minimal`, `libnghttp2`) are **not** tracked in the lockfile —
+they are neither listed in `rpms.in.yaml` nor pulled in as a transitive
+dependency of anything that is.
 
 Consequence: when a UBI base image digest bump ships updates only to
-base-image-bundled RPMs and the tracked packages' available versions do not
-change, `hack/update-rpm-lock.sh` runs successfully but produces no diff in
-`rpms.lock.yaml`. A commit that bumps the digest in the Dockerfiles without
-touching `rpms.lock.yaml` is the expected outcome in that case, not evidence
-that the lockfile was skipped.
+base-image-bundled RPMs and no tracked package's available version changed
+(neither an explicitly listed package nor any of its resolved transitive
+dependencies), `hack/update-rpm-lock.sh` runs successfully but produces no
+diff in `rpms.lock.yaml`. A commit that bumps the digest in the Dockerfiles
+without touching `rpms.lock.yaml` is the expected outcome in that case, not
+evidence that the lockfile was skipped.
 
 ### Review guidance for UBI bump PRs
 
