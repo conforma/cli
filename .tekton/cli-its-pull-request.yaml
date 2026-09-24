@@ -8,8 +8,10 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
+    # Only trusted PR authors may automatically run pipeline code with test credentials.
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "pull_request" && target_branch == "main" &&
+      body.pull_request.author_association in ["MEMBER", "OWNER", "COLLABORATOR"] &&
       ("pipelines/enterprise-contract/**".pathChanged() ||
        ".tekton/cli-its-pull-request.yaml".pathChanged())
   labels:
@@ -24,7 +26,7 @@ spec:
   - name: git-url
     value: https://github.com/dheerajodha/conforma-e2e-tests.git
   - name: revision
-    value: 715c96ced8341ce10f5ab5b800ddcdec8b3d9e79
+    value: 4bbba993a3b44eec5debb89fbc4f8bd1c8d0503d
   - name: oci-container-repo
     value: quay.io/conforma/e2e-tests
   - name: oci-container-repo-credentials-secret
@@ -41,14 +43,14 @@ spec:
     value: pipelines/enterprise-contract/0.1/enterprise-contract.yaml
   - name: test-label-filter
     value: its-pipeline
-  # Keep the runner and test-suite revisions pinned to the same reviewed commit.
+  # Keep the runner and test-suite revisions pinned to the same commit.
   pipelineRef:
     resolver: git
     params:
     - name: url
       value: https://github.com/dheerajodha/conforma-e2e-tests.git
     - name: revision
-      value: 715c96ced8341ce10f5ab5b800ddcdec8b3d9e79
+      value: 4bbba993a3b44eec5debb89fbc4f8bd1c8d0503d
     - name: pathInRepo
       value: .tekton/pipelines/conforma-e2e/pipeline.yaml
   taskRunTemplate:
