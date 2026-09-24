@@ -126,7 +126,7 @@ Renovate raises the same bump automatically; the script exists for manual runs
 between Renovate PRs. All three Dockerfiles must pin the same digest, and the
 lockfile must be regenerated after any digest bump.
 
-### RPM lockfile scope
+### RPM Lockfile Scope
 
 `rpms.lock.yaml` is generated from `rpms.in.yaml`. It contains two kinds of
 entries, and both are "tracked" for the purposes of this section:
@@ -155,7 +155,7 @@ diff in `rpms.lock.yaml`. A commit that bumps the digest in the Dockerfiles
 without touching `rpms.lock.yaml` is the expected outcome in that case, not
 evidence that the lockfile was skipped.
 
-### Review guidance for UBI bump PRs
+### Review Guidance for UBI Bump PRs
 
 On any PR that bumps the `ubi-minimal` digest:
 
