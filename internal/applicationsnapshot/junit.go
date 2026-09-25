@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"cuelang.org/go/pkg/time"
-	"github.com/jstemmer/go-junit-report/v2/junit"
+	"github.com/jstemmer/go-junit-report/v2/v2/junit"
 	"golang.org/x/exp/maps"
 
 	"github.com/conforma/cli/internal/evaluator"

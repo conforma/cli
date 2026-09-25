@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"strings"
 
-	hd "github.com/MakeNowJust/heredoc"
+	hd "github.com/MakeNowJust/heredoc/v2"
 	"github.com/open-policy-agent/opa/v1/ast"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
