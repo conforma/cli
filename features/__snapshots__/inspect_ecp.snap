@@ -1,0 +1,104 @@
+
+[inspect policy with multiple overlays:stdout - 1]
+exclude:
+- overlay1_exclude
+- overlay2_exclude
+publicKey: k8s://openshift-pipelines/public-key
+ruleData:
+  key1: value1
+  key2: value2
+sources:
+- name: Default
+  policy:
+  - oci::quay.io/enterprise-contract/ec-release-policy:latest
+
+
+---
+
+[overlay values override base values:stdout - 1]
+ruleData:
+  baseKey: baseValue
+  overlayKey: overlayValue
+  sharedKey: fromOverlay
+sources:
+- name: Default
+  policy:
+  - oci::quay.io/example/policy:v1
+
+
+---
+
+[inspect policy with multiple overlays:stderr - 1]
+
+---
+
+[overlay values override base values:stderr - 1]
+
+---
+
+[inspect policy with single overlay:stdout - 1]
+exclude:
+- test.rule_data_provided
+- attestation_task_bundle.disallowed_task_reference
+publicKey: k8s://openshift-pipelines/public-key
+ruleData:
+  customThreshold: 0.95
+  teamName: platform-team
+sources:
+- name: Default
+  policy:
+  - oci::quay.io/enterprise-contract/ec-release-policy:latest
+
+
+---
+
+[inspect policy with single overlay:stderr - 1]
+
+---
+
+[deep merge of nested ruleData:stdout - 1]
+ruleData:
+  baseKey: baseValue
+  overlayKey: overlayValue
+  sharedKey: fromOverlay
+sources:
+- name: Default
+  policy:
+  - oci::quay.io/example/policy:v1
+
+
+---
+
+[deep merge of nested ruleData:stderr - 1]
+
+---
+
+[arrays are concatenated in overlays:stdout - 1]
+ruleData:
+  baseKey: baseValue
+  overlayKey: overlayValue
+  sharedKey: fromOverlay
+sources:
+- name: Default
+  policy:
+  - oci::quay.io/example/policy:v1
+
+
+---
+
+[arrays are concatenated in overlays:stderr - 1]
+
+---
+
+[inspect single policy file:stdout - 1]
+sources:
+  - name: Default
+    policy:
+      - "oci::quay.io/enterprise-contract/ec-release-policy:latest"
+publicKey: "k8s://openshift-pipelines/public-key"
+
+---
+
+[inspect single policy file:stderr - 1]
+
+---

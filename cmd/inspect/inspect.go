@@ -26,6 +26,7 @@ func init() {
 	InspectCmd = NewInspectCmd()
 	InspectCmd.AddCommand(inspectPolicyCmd())
 	InspectCmd.AddCommand(inspectPolicyDataCmd())
+	InspectCmd.AddCommand(inspectECPCmd())
 }
 
 func NewInspectCmd() *cobra.Command {
