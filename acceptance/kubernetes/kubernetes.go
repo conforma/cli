@@ -494,6 +494,7 @@ func stepEnvVarShouldBe(ctx context.Context, stepName, envName, want string) err
 
 // AddStepsTo adds cluster-related steps to the context
 func AddStepsTo(sc *godog.ScenarioContext) {
+	addPipelineStepsTo(sc)
 	sc.Step(`^a stub cluster running$`, startAndSetupState(stub.Start))
 	sc.Step(`^a cluster running$`, startAndSetupState(kind.Start))
 	sc.Step(`^a working namespace$`, createNamespace)
