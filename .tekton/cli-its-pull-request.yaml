@@ -8,8 +8,7 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    # Execution authorization is enforced by Pipelines-as-Code ACLs/approval policy.
-    # Match normalized event fields; raw webhook bodies differ for PRs and retries.
+    # Use normalized event fields because raw webhook payloads differ on retries.
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "pull_request" && target_branch == "main" &&
       ("pipelines/enterprise-contract/**".pathChanged() ||
@@ -43,7 +42,8 @@ spec:
     value: pipelines/enterprise-contract/0.1/enterprise-contract.yaml
   - name: test-label-filter
     value: its-pipeline
-  # Keep the runner and test-suite revisions pinned to the same commit.
+  # Use the same e2e-tests commit here and in spec.params.revision above
+  # so the pipeline definition and Go tests stay in sync.
   pipelineRef:
     resolver: git
     params:
