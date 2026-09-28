@@ -157,3 +157,24 @@ podman machine settings.
 * Restart the vm
   * `podman machine stop`
   * `podman machine start`
+
+## ITS pipeline coverage
+
+`features/pipeline_validate_image.feature` runs the checked-out ITS pipeline in
+kind using task bundles built from the same checkout. Only task bundle locations
+are redirected to the test registry; pipeline parameters, task ordering, result
+references, and task names are preserved. Scenarios cover signed images and
+validation failures with both values of `STRICT`, asserting the pipeline's
+`TEST_OUTPUT` as well as its completion status.
+
+Run these scenarios with the normal acceptance prerequisites:
+
+```bash
+cd acceptance
+CGO_ENABLED=0 go test -timeout 20m . -args -tags=@its-pipeline
+```
+
+They also run through `make acceptance` in the existing PR Checks workflow,
+including PRs that change only `pipelines/`. Keep task-test ConfigMap fixtures
+away from `konflux-info/cluster-config`: the pipeline uses that default location,
+so populating it with dummy keyless URLs would affect concurrent pipeline tests.
