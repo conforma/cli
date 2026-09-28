@@ -8,7 +8,6 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/cancel-in-progress: "true"
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    # Use normalized event fields because raw webhook payloads differ on retries.
     pipelinesascode.tekton.dev/on-cel-expression: |
       event == "pull_request" && target_branch == "main" &&
       ("pipelines/enterprise-contract/**".pathChanged() ||
@@ -21,7 +20,6 @@ metadata:
   namespace: rhtap-contract-tenant
 spec:
   params:
-  # Pre-merge validation: restore conforma/e2e-tests and its merged SHA before merge.
   - name: git-url
     value: https://github.com/dheerajodha/conforma-e2e-tests.git
   - name: revision
@@ -42,8 +40,6 @@ spec:
     value: pipelines/enterprise-contract/0.1/enterprise-contract.yaml
   - name: test-label-filter
     value: its-pipeline
-  # Use the same e2e-tests commit here and in spec.params.revision above
-  # so the pipeline definition and Go tests stay in sync.
   pipelineRef:
     resolver: git
     params:
