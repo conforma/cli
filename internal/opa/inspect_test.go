@@ -25,7 +25,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	hd "github.com/MakeNowJust/heredoc"
+	hd "github.com/MakeNowJust/heredoc/v2"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/spf13/afero"
