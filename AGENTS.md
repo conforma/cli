@@ -66,6 +66,37 @@ blocking change requests) when the PR's primary purpose is a security
 fix. Authors are expected to create follow-up issues or PRs for
 documentation updates after the security fix is merged.
 
+## Konflux/MintMaker Tekton task update reviews
+
+Automated Konflux/MintMaker PRs update Tekton task bundle references in
+`.tekton/` pipeline files. These updates fall into two categories with
+different risk profiles:
+
+**Digest-only bumps and patch version bumps** (e.g., updating the
+`@sha256:...` digest or moving from `0.3.1` to `0.3.2`) are low-risk.
+The task name and interface are unchanged, so cross-file analysis is
+unnecessary — review the bundle reference change itself.
+
+**Task name changes or task substitutions** (e.g., `clair-scan` →
+`roxctl-scan`) are higher-risk. When a task name changes, grep the
+codebase for references to the old task name. Key locations where task
+names appear as string literals:
+
+- **Go source** (`benchmark/`, `cmd/`, `pkg/`) — task-name filtering in
+  SLSA provenance attestation processing, e.g.,
+  `benchmark/offliner/scans.go` filters by task name to extract scan
+  results. Stale references silently return empty results rather than
+  errors.
+- **Shell scripts** (`hack/`) — developer utilities like
+  `hack/view-clair-reports.sh` use `jq` selects on task names.
+- **Documentation and test fixtures** (`docs/`, `pkg/schema/examples/`)
+  — example JSON and AsciiDoc references to task names.
+
+When stale references are found, distinguish **production code paths**
+(Go source in `benchmark/`, `cmd/`, `pkg/` — higher priority, should
+block merge) from **developer utility scripts** in `hack/` (lower
+priority, can be addressed in follow-up work).
+
 ## CGO and DNS Resolution
 
 Binaries are built with `CGO_ENABLED=0` for portability. This uses Go's native DNS resolver,
