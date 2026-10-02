@@ -571,6 +571,9 @@ spec:
       imagePullPolicy: IfNotPresent
       onError: continue  # progress even if the step fails so we can see the debug logs
       command: [sh, -c]
+      env:
+        - name: HOMEDIR
+          value: "$(params.HOMEDIR)"
       args:
         # Format the JSON output to wrap lines at 8000 characters per line.
         # The report can get very large, so add some line breaks
@@ -578,7 +581,7 @@ spec:
         # in the UI, easier to copy/paste, and less likely to cause problems
         # with logging systems or other consumers of the data (assuming they
         # correctly parse the full output).
-        - "jq . $(params.HOMEDIR)/report-json.json | awk '{gsub(/^ +/, \"\"); acc += length; if (acc >= 8000) { printf \"\\n\"; acc=length } printf $0 }'"
+        - "jq . \"${HOMEDIR}/report-json.json\" | awk '{gsub(/^ +/, \"\"); acc += length; if (acc >= 8000) { printf \"\\n\"; acc=length } printf $0 }'"
 
     - name: summary
       image: quay.io/conforma/cli:latest
