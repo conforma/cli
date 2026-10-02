@@ -26,8 +26,6 @@
 ** xref:ec_sigstore.adoc[ec sigstore]
 ** xref:ec_sigstore_initialize.adoc[ec sigstore initialize]
 ** xref:ec_test.adoc[ec test]
-** xref:ec_track.adoc[ec track]
-** xref:ec_track_bundle.adoc[ec track bundle]
 ** xref:ec_validate.adoc[ec validate]
 ** xref:ec_validate_image.adoc[ec validate image]
 ** xref:ec_validate_input.adoc[ec validate input]

@@ -827,10 +827,6 @@ func createGenericFile(ctx context.Context, name string, content *godog.DocStrin
 	return ctx, os.WriteFile(file, []byte(data), 0o600)
 }
 
-func createTrackBundleFile(ctx context.Context, name string, content *godog.DocString) (context.Context, error) {
-	return createGenericFile(ctx, name, content)
-}
-
 // theLogOutputShouldContain checks if the log output (stderr) contains the expected text
 func theLogOutputShouldContain(ctx context.Context, expected string) error {
 	status, err := ecStatusFrom(ctx)
@@ -858,7 +854,6 @@ func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step(`^the output should match the snapshot$`, matchSnapshot)
 	sc.Step(`^the "([^"]*)" file should match the snapshot$`, matchFileSnapshot)
 	sc.Step(`^a file named "([^"]*)" containing$`, createGenericFile)
-	sc.Step(`^a track bundle file named "([^"]*)" containing$`, createTrackBundleFile)
 	sc.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
 		if err != nil {
 			logExecution(ctx)

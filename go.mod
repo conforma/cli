@@ -6,22 +6,20 @@ require (
 	cuelang.org/go v0.16.0
 	github.com/CycloneDX/cyclonedx-go v0.10.0
 	github.com/MakeNowJust/heredoc v1.0.0
-	github.com/Maldris/go-billy-afero v0.0.0-20200815120323-e9d3de59c99a
 	github.com/conforma/crds/api v0.1.7
 	github.com/conforma/go-gather v1.2.0
 	github.com/evanphx/json-patch v5.9.11+incompatible
 	github.com/gkampitakis/go-snaps v0.5.19
-	github.com/go-git/go-git/v5 v5.19.2
+	github.com/go-git/go-git/v5 v5.19.2 // indirect
 	github.com/go-logr/logr v1.4.4
 	github.com/go-openapi/strfmt v0.26.4
-	github.com/google/go-cmp v0.7.0
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/safearchive v0.0.0-20241025131057-f7ce9d7b6f9c
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
 	github.com/in-toto/in-toto-golang v0.11.0
 	github.com/jstemmer/go-junit-report/v2 v2.1.0
 	github.com/konflux-ci/application-api v0.0.0-20240812090716-e7eb2ecfb409
-	github.com/leanovate/gopter v0.2.11
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/open-policy-agent/conftest v0.68.2
@@ -41,7 +39,6 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
-	github.com/stuart-warren/yamlfmt v0.2.0
 	github.com/tektoncd/pipeline v1.12.0
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.44.0

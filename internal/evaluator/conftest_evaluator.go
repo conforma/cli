@@ -999,9 +999,9 @@ func createConfigJSON(ctx context.Context, dataDir string, p ConfigProvider) err
 	}{}
 
 	// Now that the future deny logic is handled in the cli and not in rego,
-	// this field is used only for the checking the effective times in the
-	// acceptable bundles list. Always set it, even when we are using the current
-	// time, so that a consistent current time is used everywhere.
+	// this field is used only for checking effective times in the policy rules.
+	// Always set it, even when we are using the current time, so that a
+	// consistent current time is used everywhere.
 	pc.WhenNs = p.EffectiveTime().UnixNano()
 
 	opts, err := p.SigstoreOpts()
