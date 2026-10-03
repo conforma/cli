@@ -6,6 +6,7 @@
 ** xref:ec_init.adoc[ec init]
 ** xref:ec_init_policies.adoc[ec init policies]
 ** xref:ec_inspect.adoc[ec inspect]
+** xref:ec_inspect_ecp.adoc[ec inspect ecp]
 ** xref:ec_inspect_policy.adoc[ec inspect policy]
 ** xref:ec_inspect_policy-data.adoc[ec inspect policy-data]
 ** xref:ec_opa.adoc[ec opa]
