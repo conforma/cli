@@ -163,9 +163,10 @@ podman machine settings.
 `features/pipeline_validate_image.feature` runs the checked-out ITS pipeline in
 kind using task bundles built from the same checkout. Only task bundle locations
 are redirected to the test registry; pipeline parameters, task ordering, result
-references, and task names are preserved. Scenarios cover signed images and
-validation failures with both values of `STRICT`, asserting the pipeline's
-`TEST_OUTPUT` as well as its completion status.
+references, and task names are preserved. Scenarios cover trusted signed images,
+image lookup failures, and untrusted signatures. Both failure cases exercise both
+values of `STRICT`, asserting the pipeline's `TEST_OUTPUT` as well as its
+completion status.
 
 Run these scenarios with the normal acceptance prerequisites:
 
