@@ -14,7 +14,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-base: https://raw.githubusercontent.com/fullsend-ai/agents/440d3e3c1a4a770309e37c2fd2826dfc88297d99/harness/review.yaml#sha256=c259d94e7c50e5e01cb0fa38df2b70765f8e35beb7ad8bf006c9193a05589917
+base: https://raw.githubusercontent.com/fullsend-ai/agents/ce2eedd097dcccf17e29f4a7cd337ec4d95d7194/harness/review.yaml#sha256=3e9302d8143fcfd93df8e4542162776e98893c8ef367450679e2ffa89e5b0c53
 
 # Fullsend's bool merge treats an omitted readonly_repo as false, so carry
 # forward the upstream read-only guarantee explicitly.
