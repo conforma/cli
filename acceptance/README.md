@@ -171,8 +171,7 @@ completion status.
 Run these scenarios with the normal acceptance prerequisites:
 
 ```bash
-cd acceptance
-CGO_ENABLED=0 go test -timeout 20m . -args -tags=@its-pipeline
+CGO_ENABLED=0 make feature_pipeline_validate_image
 ```
 
 They also run through `make acceptance` in the existing PR Checks workflow,

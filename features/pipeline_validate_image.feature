@@ -1,4 +1,3 @@
-@its-pipeline
 Feature: Verify images through the ITS pipeline
   Exercise the repository pipeline with locally built task bundles in kind.
 
