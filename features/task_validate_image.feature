@@ -547,7 +547,7 @@ Feature: Verify Enterprise Contract Tekton Tasks
     #   https://github.com/redhat-appstudio/tsf-cli/blob/84561ca6c9/installer/charts/tsf-konflux/templates/konflux.yaml#L51-L65
     # Note: These scenarios might run in parallel so let's use a different config map
     # for each scenario so we don't have to worry about them clashing with each other
-    And a ConfigMap "cluster-config" in namespace "konflux-info" with content:
+    And a ConfigMap "cluster-config-keyless" in namespace "konflux-info" with content:
       # tufExternalUrl should be ignored here because tufInternalUrl takes precedence
       ```
       {
@@ -562,7 +562,7 @@ Feature: Verify Enterprise Contract Tekton Tasks
       }
       ```
     When version 0.1 of the task named "collect-keyless-params" is run with parameters:
-      | configMapName      | cluster-config |
+      | configMapName | cluster-config-keyless |
     Then the task should succeed
      And the task logs for step "collect-signing-params" should match the snapshot
      And the task result "keylessSigningEnabled" should equal "true"

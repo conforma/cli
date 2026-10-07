@@ -214,3 +214,11 @@ func (s stubCluster) Registry(ctx context.Context) (string, error) {
 func (s stubCluster) BuildSnapshotArtifact(ctx context.Context, content string) (context.Context, error) {
 	return ctx, nil
 }
+
+func (s stubCluster) RunPipeline(_ context.Context, _, _ string, _ map[string]string) error {
+	return errors.New("can't run pipelines when using the stub Kubernetes")
+}
+
+func (s stubCluster) AwaitUntilPipelineIsDone(context.Context) (*types.PipelineInfo, error) {
+	return nil, errors.New("can't run pipelines when using the stub Kubernetes")
+}

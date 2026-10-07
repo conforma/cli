@@ -27,6 +27,8 @@ type Cluster interface {
 	CreateNamespace(context.Context) (context.Context, error)
 	CreateNamedPolicy(context.Context, string, string) error
 	CreatePolicy(context.Context, string) error
+	RunPipeline(context.Context, string, string, map[string]string) error
+	AwaitUntilPipelineIsDone(context.Context) (*PipelineInfo, error)
 	RunTask(context.Context, string, string, string, map[string]string) error
 	AwaitUntilTaskIsDone(context.Context) (bool, error)
 	TaskInfo(context.Context) (*TaskInfo, error)
@@ -51,4 +53,12 @@ type Step struct {
 	Status  string
 	Logs    string
 	EnvVars map[string]string
+}
+
+// PipelineInfo describes a completed PipelineRun.
+type PipelineInfo struct {
+	Name       string
+	Status     string
+	Successful bool
+	Results    map[string]any
 }

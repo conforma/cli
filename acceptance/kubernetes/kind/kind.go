@@ -79,6 +79,7 @@ type testState struct {
 	namespace      string
 	policy         string
 	taskRun        string
+	pipelineRun    string
 	snapshot       string
 	registry       string
 	snapshotDigest string

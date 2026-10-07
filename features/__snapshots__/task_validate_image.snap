@@ -452,7 +452,7 @@ true
 ---
 
 [TestFeatures/Collect keyless signing parameters from ConfigMap:collect-signing-params - 1]
-Reading ConfigMap konflux-info/cluster-config
+Reading ConfigMap konflux-info/cluster-config-keyless
 ConfigMap found, extracting keyless signing parameters
 results.keylessSigningEnabled: true
 results.defaultOIDCIssuer: https://kubernetes.default.svc
