@@ -17,6 +17,7 @@
 package track
 
 import (
+	hd "github.com/MakeNowJust/heredoc"
 	"github.com/spf13/cobra"
 
 	"github.com/conforma/cli/internal/tracker"
@@ -33,5 +34,11 @@ func NewTrackCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "track",
 		Short: "Record resource references for tracking purposes",
+		Long: hd.Doc(`
+			Record resource references for tracking purposes
+
+			Deprecated: This command is deprecated and will be removed in a future
+			release.
+		`),
 	}
 }

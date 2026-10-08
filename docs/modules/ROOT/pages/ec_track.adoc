@@ -3,6 +3,17 @@
 
 Record resource references for tracking purposes
 
+== Synopsis
+
+Record resource references for tracking purposes
+
+Deprecated: This command is deprecated and will be removed in a future
+release.
+
+[source,shell]
+----
+ec track [flags]
+----
 == Options
 
 -h, --help:: help for track (Default: false)

@@ -56,6 +56,9 @@ func trackBundleCmd(track trackBundleFn, pullImage pullImageFn, pushImage pushIm
 		Long: hd.Doc(`
 			Record tracking information about Tekton bundles
 
+			Deprecated: This command is deprecated and will be removed in a future
+			release.
+
 			Each Tekton Bundle is expected to be a proper OCI image reference. They
 			may contain a tag, a digest, or both. If a digest is not provided, this
 			command will query the registry to determine its value. Either a tag

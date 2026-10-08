@@ -251,10 +251,16 @@ Tekton task bundles are OCI artifacts that package Tekton Task and Pipeline defi
 
 **How Conforma Uses It:**
 
-* Retrieved when using `ec track bundle` command
+* Retrieved when using the `ec track bundle` command (deprecated; see the note below)
 * Task definitions extracted from bundle layers
 * Used to track which task images are used in Tekton pipelines
 * Can be referenced in Application Snapshots
+
+[NOTE]
+====
+The `ec track bundle` command is deprecated and will be removed in a future
+release.
+====
 
 **Storage:**
 
