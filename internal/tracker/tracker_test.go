@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	hd "github.com/MakeNowJust/heredoc"
+	hd "github.com/MakeNowJust/heredoc/v2"
 	gba "github.com/Maldris/go-billy-afero"
 	"github.com/go-git/go-git/v5/plumbing/transport/client"
 	"github.com/go-git/go-git/v5/plumbing/transport/server"
