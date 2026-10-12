@@ -1,0 +1,111 @@
+# Copyright The Conforma Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: reqd-task-poc-ec2011
+  labels:
+    build.appstudio.redhat.com/pipeline: "reqd-task-poc-ec2011"
+spec:
+  params:
+    - name: SNAPSHOT
+      type: string
+      description: |
+        Spec section of an ApplicationSnapshot resource. Not all fields of the
+        resource are required. A minimal example:
+          {
+            "components": [
+              {
+                "containerImage": "quay.io/example/repo@sha256:abc123..."
+              }
+            ]
+          }
+        Each "containerImage" in the "components" array is validated.
+    - name: RESULT
+      type: string
+      description: >-
+        The desired result of the dummy check. Must be one of: SUCCESS,
+        FAILURE, WARNING, ERROR, or SKIPPED.
+      default: "SUCCESS"
+  results:
+    - name: TEST_OUTPUT
+      value: "$(tasks.dummy-check.results.TEST_OUTPUT)"
+
+    # Hoist these up from the task action
+    - name: ARTIFACT_URI
+      description: URI of the image the attestation was attached to.
+      value: $(tasks.dummy-check.results.ARTIFACT_URI)
+    - name: ARTIFACT_DIGEST
+      description: Digest of the pushed attestation.
+      value: $(tasks.dummy-check.results.ARTIFACT_DIGEST)
+
+  tasks:
+    - name: parse-snapshot
+      taskSpec:
+        params:
+          - name: SNAPSHOT
+            type: string
+        results:
+          - name: image-url
+          - name: image-digest
+        steps:
+          - name: parse
+            image: quay.io/konflux-ci/task-runner:v3
+            env:
+              - name: SNAPSHOT
+                value: $(params.SNAPSHOT)
+            script: |
+              #!/usr/bin/env bash
+              set -euo pipefail
+
+              IMAGE=$(jq -r '.components[0].containerImage // empty' <<<"${SNAPSHOT}")
+              if [[ -z "${IMAGE}" ]]; then
+                echo "ERROR: No containerImage found in SNAPSHOT" >&2
+                exit 1
+              fi
+
+              IMAGE_URL="${IMAGE%%@*}"
+              IMAGE_DIGEST="${IMAGE##*@}"
+
+              echo "Parsed image-url: ${IMAGE_URL}"
+              echo "Parsed image-digest: ${IMAGE_DIGEST}"
+
+              echo -n "${IMAGE_URL}" > "$(results.image-url.path)"
+              echo -n "${IMAGE_DIGEST}" > "$(results.image-digest.path)"
+      params:
+        - name: SNAPSHOT
+          value: "$(params.SNAPSHOT)"
+    - name: dummy-check
+      runAfter:
+        - parse-snapshot
+      params:
+        - name: RESULT
+          value: "$(params.RESULT)"
+        - name: image-url
+          value: "$(tasks.parse-snapshot.results.image-url)"
+        - name: image-digest
+          value: "$(tasks.parse-snapshot.results.image-digest)"
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/simonbaird/conforma-cli
+          - name: revision
+            value: reqd-task-its-poc
+          - name: pathInRepo
+            value: tasks/dummy-check/0.1/dummy-check.yaml
