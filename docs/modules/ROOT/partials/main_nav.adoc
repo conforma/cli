@@ -1,4 +1,5 @@
 * xref:index.adoc[Home]
+* xref:why-conforma.adoc[Why Conforma?]
 * xref:configuration.adoc[Configuration]
 * xref:policy_input.adoc[Policy Input]
 * xref:types-of-attestations-and-manifests.adoc[Types of Attestations and Manifests]

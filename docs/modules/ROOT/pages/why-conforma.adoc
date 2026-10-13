@@ -1,0 +1,95 @@
+= Why Conforma?
+
+Conforma builds on top of https://docs.sigstore.dev/cosign/overview/[cosign]
+to provide a comprehensive software supply chain verification platform. While
+cosign handles cryptographic signature and attestation verification, Conforma
+adds policy evaluation, batch validation, structured reporting, and CI/CD
+integration that organizations need to enforce compliance at scale.
+
+== Policy-as-code evaluation
+
+With cosign alone, you can verify that an image was signed and that
+attestations exist. Conforma goes further: it layers
+https://www.openpolicyagent.org/[OPA/Rego] policy evaluation over those
+verification results. This allows you to express organizational compliance
+rules — such as requiring SLSA provenance, specific build tasks, or release
+readiness criteria — as code that is evaluated automatically during
+validation.
+
+For example, `ec validate image` first verifies signatures and attestations
+(akin to `cosign verify` and `cosign verify-attestation`), then evaluates
+Rego policies defined in an
+xref:configuration.adoc[EnterpriseContractPolicy] against the attestation
+data.
+
+== Batch and snapshot validation
+
+cosign validates one image at a time. Conforma can validate multiple images
+from an ApplicationSnapshot in a single invocation using the `--images` flag:
+
+[source,shell]
+----
+ec validate image --images my-app.yaml
+----
+
+This is particularly useful in CI/CD pipelines where an application is
+composed of multiple container images that must all pass policy checks before
+a release proceeds.
+
+== Structured output and reporting
+
+cosign provides basic pass/fail output. Conforma supports multiple output
+formats for different consumers:
+
+* **JSON** and **YAML** — machine-readable results for downstream tooling
+* **Text** — human-readable console output
+* **JUnit** — test result format for CI/CD dashboard integration
+* **Summary** and **Summary Markdown** — concise overviews for pull request
+  comments and reports
+* **VSA** (Verification Summary Attestation) — a signed attestation recording
+  the verification result, which can be stored and checked later to avoid
+  redundant re-validation
+* **Policy Input** — the raw data sent to the policy engine, useful for
+  debugging and policy development
+
+Multiple formats can be produced simultaneously:
+
+[source,shell]
+----
+ec validate image --image registry/name:tag --output json=results.json --output summary
+----
+
+== EnterpriseContractPolicy CRD integration
+
+Conforma integrates with Kubernetes through the EnterpriseContractPolicy
+custom resource definition (CRD). This allows teams to define policy
+configurations declaratively — specifying policy sources, data sources,
+public keys, and rule inclusion/exclusion criteria — and store them
+alongside other Kubernetes resources.
+
+See xref:configuration.adoc[Configuration] for details on policy
+configuration options.
+
+== Tekton task integration
+
+Conforma ships ready-made Tekton tasks that can be embedded directly into
+CI/CD pipelines. The
+xref:verify-enterprise-contract.adoc[verify-enterprise-contract] task
+runs Conforma validation as a pipeline step, making it straightforward to
+gate releases on policy compliance without writing custom scripts.
+
+== Built-in rule library
+
+The https://github.com/conforma/policy[Conforma policy repository] provides
+a curated library of Rego policy rules covering common supply chain
+requirements:
+
+* **SLSA provenance** — verify that build provenance meets SLSA level
+  requirements
+* **Build task verification** — check that required build tasks were
+  executed
+* **Release readiness** — enforce criteria that must be met before an
+  artifact is approved for release
+
+These rules can be used as-is, extended, or combined with custom rules to
+match your organization's specific requirements.
