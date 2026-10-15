@@ -38,6 +38,7 @@ import (
 
 	"github.com/conforma/cli/internal/applicationsnapshot"
 	"github.com/conforma/cli/internal/evaluator"
+	"github.com/conforma/cli/internal/evidence"
 	"github.com/conforma/cli/internal/image"
 	"github.com/conforma/cli/internal/output"
 	"github.com/conforma/cli/internal/policy"
@@ -49,7 +50,7 @@ import (
 	"github.com/conforma/cli/internal/validate/vsa"
 )
 
-type imageValidationFunc func(context.Context, app.SnapshotComponent, *app.SnapshotSpec, policy.Policy, []evaluator.Evaluator, bool) (*output.Output, error)
+type imageValidationFunc func(context.Context, app.SnapshotComponent, *app.SnapshotSpec, policy.Policy, []evaluator.Evaluator, image.ValidationOptions) (*output.Output, error)
 
 var newOPAEvaluator = evaluator.NewOPAEvaluator
 
@@ -178,6 +179,10 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				cmd.SetContext(ctx)
 			}
 
+			if err := data.checkEvidenceOptions(); err != nil {
+				return err
+			}
+
 			if s, exp, err := applicationsnapshot.DetermineInputSpec(ctx, applicationsnapshot.Input{
 				File:     data.filePath,
 				JSON:     data.input,
@@ -283,6 +288,26 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 				data.policy = p
 			}
 
+			if allErrors == nil && len(data.evidenceFiles) > 0 {
+				opts, err := data.policy.CheckOpts()
+				if err != nil {
+					return err
+				}
+				trust, err := evidence.LoadKeyTrust(ctx, data.evidenceKeys, *opts)
+				if err != nil {
+					return err
+				}
+				data.attestationSources = []evidence.AttestationSource{evidence.NewOCI(*opts)}
+				for _, path := range data.evidenceFiles {
+					src, err := evidence.NewFilesystem(ctx, path, trust)
+					if err != nil {
+						return err
+					}
+					data.attestationSources = append(data.attestationSources, src)
+				}
+				data.vsaExpiration = 0
+			}
+
 			// Validate VSA configuration
 			if data.vsaEnabled {
 				if !slices.Contains([]string{"dsse", "predicate"}, data.attestationFormat) {
@@ -348,6 +373,8 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 			showWarnings, _ := cmd.Flags().GetBool("show-warnings")
 			showPolicyDocsLink, _ := cmd.Flags().GetBool("show-policy-docs-link")
 
+			validationOptions := image.ValidationOptions{Detailed: data.info, AttestationSources: data.attestationSources}
+
 			// worker is responsible for processing one component at a time from the jobs channel,
 			// and for emitting a corresponding result for the component on the results channel.
 			worker := func(id int, jobs <-chan app.SnapshotComponent, results chan<- validate_utils.Result) {
@@ -385,14 +412,14 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 								PolicySpec:    data.policy.Spec(),
 								EffectiveTime: vsaEffectiveTime,
 							}
-							out, err = image.ValidateImageWithVSACheck(ctx, comp, data.spec, data.policy, evaluators, data.info, vsaConfig)
+							out, err = image.ValidateImageWithVSACheck(ctx, comp, data.spec, data.policy, evaluators, validationOptions, vsaConfig)
 						} else {
 							// Fall back to normal validation if no VSA retriever is available
-							out, err = validate(ctx, comp, data.spec, data.policy, evaluators, data.info)
+							out, err = validate(ctx, comp, data.spec, data.policy, evaluators, validationOptions)
 						}
 					} else {
 						// Use original validation when VSA checking is disabled
-						out, err = validate(ctx, comp, data.spec, data.policy, evaluators, data.info)
+						out, err = validate(ctx, comp, data.spec, data.policy, evaluators, validationOptions)
 					}
 					res := validate_utils.PopulateResultFromOutput(out, err, comp, showSuccesses, data.output)
 					if err == nil && out == nil {
@@ -504,6 +531,11 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 		  * inline JSON ('{sources: {...}, identity: {...}}')")`))
 
 	cmd.Flags().StringVarP(&data.imageRef, "image", "i", data.imageRef, "OCI image reference")
+
+	cmd.Flags().StringArrayVar(&data.evidenceFiles, "evidence", nil,
+		"POC: local Sigstore attestation bundle or JSON array of bundles (repeatable)")
+	cmd.Flags().StringArrayVar(&data.evidenceKeys, "evidence-key", nil,
+		"POC: authorize a local evidence signer as predicateURI=publicKeyFile (repeatable)")
 
 	cmd.Flags().StringVarP(&data.publicKey, "public-key", "k", data.publicKey,
 		"path to the public key. Overrides publicKey from EnterpriseContractPolicy")
@@ -658,6 +690,9 @@ type imageData struct {
 	certificateOIDCIssuerRegExp string
 	effectiveTime               string
 	extraRuleData               []string
+	evidenceFiles               []string
+	evidenceKeys                []string
+	attestationSources          []evidence.AttestationSource
 	filePath                    string
 	filterType                  string
 	imageRef                    string
@@ -792,4 +827,28 @@ func (data *imageData) generateVSAsPredicates(cmd *cobra.Command, report applica
 	return nil
 }
 
-// find if the slice contains "value" output
+// checkEvidenceOptions runs before network access and policy initialization.
+func (data *imageData) checkEvidenceOptions() error {
+	if len(data.evidenceFiles) == 0 {
+		if len(data.evidenceKeys) > 0 {
+			return fmt.Errorf("--evidence-key requires --evidence")
+		}
+		return nil
+	}
+	if len(data.evidenceKeys) == 0 {
+		return fmt.Errorf("--evidence requires --evidence-key predicateURI=publicKeyFile")
+	}
+	if data.skipAttSigCheck {
+		return fmt.Errorf("--evidence cannot be used with --skip-att-sig-check")
+	}
+	if data.vsaEnabled || len(data.vsaUpload) > 0 {
+		return fmt.Errorf("filesystem evidence does not yet support VSA generation or upload")
+	}
+	for _, output := range data.output {
+		format, _, _ := strings.Cut(output, "=")
+		if format == "vsa" {
+			return fmt.Errorf("filesystem evidence does not yet support --output vsa")
+		}
+	}
+	return nil
+}

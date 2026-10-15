@@ -1719,7 +1719,7 @@ func validateImageFallbackWithWorkerContext(ctx context.Context, data *validateV
 	// Perform image validation using precomputed context and worker-specific evaluators
 	log.Debugf("🔄 Fallback: Starting image validation...")
 	log.Debugf("🔄 Fallback: Using fallback policy: %s", data.fallbackContext.FallbackPolicy)
-	result, err := image.ValidateImage(ctx, comp, data.snapshot, data.fallbackContext.FallbackPolicy, workerFallbackContext.Evaluators, data.info)
+	result, err := image.ValidateImage(ctx, comp, data.snapshot, data.fallbackContext.FallbackPolicy, workerFallbackContext.Evaluators, image.ValidationOptions{Detailed: data.info})
 	if err != nil {
 		log.Debugf("🔄 Fallback: Image validation failed with error: %v", err)
 		return nil, err
