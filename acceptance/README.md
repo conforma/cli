@@ -178,3 +178,26 @@ They also run through `make acceptance` in the existing PR Checks workflow,
 including PRs that change only `pipelines/`. Keep task-test ConfigMap fixtures
 away from `konflux-info/cluster-config`: the pipeline uses that default location,
 so populating it with dummy keyless URLs would affect concurrent pipeline tests.
+
+## Deprecated build-definitions copy
+
+`pipelines/enterprise-contract/0.1/enterprise-contract.yaml` is the source of
+truth for the Enterprise Contract ITS pipeline. A deprecated compatibility copy
+is still maintained in `konflux-ci/build-definitions` while existing consumers
+migrate to `conforma/tekton-catalog`.
+
+Use `hack/sync-build-definitions-pipeline.sh` to update or check that copy:
+
+```bash
+git clone git@github.com:konflux-ci/build-definitions.git /tmp/build-definitions
+hack/sync-build-definitions-pipeline.sh --check /tmp/build-definitions
+hack/sync-build-definitions-pipeline.sh /tmp/build-definitions
+```
+
+The sync preserves existing task bundle digest pins in `build-definitions` by
+default so release-promotion updates can continue to manage those values. Pass
+`--no-preserve-bundle-refs` only when intentionally copying the source bundle
+references exactly.
+
+For release-promotion updates, use `hack/update-build-definitions.sh`; it runs
+the pipeline sync first and then updates the task bundle digest references.
