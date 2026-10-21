@@ -64,7 +64,7 @@
 
       .editor-grid {
         display: grid;
-        grid-template-rows: minmax(280px, 1fr) minmax(220px, 0.8fr);
+        grid-template-rows: minmax(280px, 1fr) minmax(180px, 0.65fr) minmax(140px, 0.45fr);
         gap: 16px;
         min-height: calc(100vh - 98px);
       }
@@ -175,18 +175,28 @@
       <section class="editor-grid" aria-label="Playground inputs">
         <div class="panel">
           <div class="panel-head">
-            <h2>Rego Policy</h2>
+            <h2>Rego Modules</h2>
           </div>
-          <textarea id="policy" spellcheck="false">package main
+          <textarea id="policy" spellcheck="false"># file: main.rego
+package main
+
+import data.lib
 
 deny contains msg if {
-  input.kind != "Deployment"
-  msg := "kind must be Deployment"
+  not lib.allowed_kind(input.kind)
+  msg := sprintf("kind must be one of %v", [data.allowed_kinds])
 }
 
 warn contains msg if {
   not input.metadata.name
   msg := "metadata.name is recommended"
+}
+
+# file: lib/kinds.rego
+package lib
+
+allowed_kind(kind) if {
+  data.allowed_kinds[_] == kind
 }</textarea>
         </div>
 
@@ -197,6 +207,15 @@ warn contains msg if {
           </div>
           <textarea id="input" spellcheck="false">kind: Service
 metadata: {}</textarea>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Data JSON or YAML</h2>
+          </div>
+          <textarea id="data" spellcheck="false">allowed_kinds:
+  - Deployment
+  - Pipeline</textarea>
         </div>
       </section>
 
@@ -216,6 +235,7 @@ metadata: {}</textarea>
       const runButton = document.querySelector("#run");
       const policyEl = document.querySelector("#policy");
       const inputEl = document.querySelector("#input");
+      const dataEl = document.querySelector("#data");
       const outputEl = document.querySelector("#output");
 
       async function loadWasm() {
@@ -244,7 +264,7 @@ metadata: {}</textarea>
       }
 
       runButton.addEventListener("click", () => {
-        const raw = window.conformaPlaygroundValidate(policyEl.value, inputEl.value);
+        const raw = window.conformaPlaygroundValidate(policyEl.value, inputEl.value, dataEl.value);
         renderResult(raw);
       });
 
@@ -252,7 +272,7 @@ metadata: {}</textarea>
         .then(() => {
           statusEl.textContent = "WASM ready";
           runButton.disabled = false;
-          renderResult(window.conformaPlaygroundValidate(policyEl.value, inputEl.value));
+          renderResult(window.conformaPlaygroundValidate(policyEl.value, inputEl.value, dataEl.value));
         })
         .catch((error) => {
           statusEl.textContent = "WASM failed to load";

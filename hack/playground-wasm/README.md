@@ -31,7 +31,9 @@ ignored by Git.
 ## What It Supports
 
 - A single pasted Rego module.
+- Multiple pasted Rego modules separated by `# file: <name>.rego` markers.
 - Pasted JSON or YAML input.
+- Optional pasted JSON or YAML data available under `data`.
 - `deny`, `violation`, and `warn` rules in the module package.
 - A Conforma-like JSON result with `success`, `violations`, `warnings`, and
   parse/evaluation `errors`.

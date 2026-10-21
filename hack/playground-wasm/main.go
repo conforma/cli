@@ -33,8 +33,12 @@ func main() {
 		if len(args) > 1 {
 			inputText = args[1].String()
 		}
+		dataText := ""
+		if len(args) > 2 {
+			dataText = args[2].String()
+		}
 
-		report := evaluatePlayground(context.Background(), policyText, inputText)
+		report := evaluatePlaygroundWithData(context.Background(), policyText, inputText, dataText)
 		return marshalReport(report)
 	}))
 

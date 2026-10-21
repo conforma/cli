@@ -68,3 +68,57 @@ deny contains msg if {
 	require.NotEmpty(t, report.Errors)
 	require.Equal(t, "rego", report.Errors[0].Stage)
 }
+
+func TestEvaluatePlaygroundWithHelperModuleAndData(t *testing.T) {
+	policy := `# file: main.rego
+package main
+
+import data.lib
+
+deny contains msg if {
+	not lib.allowed_kind(input.kind)
+	msg := sprintf("kind must be one of %v", [data.allowed_kinds])
+}
+
+# file: lib/kinds.rego
+package lib
+
+allowed_kind(kind) if {
+	data.allowed_kinds[_] == kind
+}
+`
+
+	report := evaluatePlaygroundWithData(context.Background(), policy, `kind: Service`, `allowed_kinds: ["Deployment"]`)
+
+	require.False(t, report.Success)
+	require.Empty(t, report.Errors)
+	require.Equal(t, []string{"main.rego", "lib/kinds.rego"}, report.Modules)
+	require.Len(t, report.Violations, 1)
+	require.Equal(t, "kind must be one of [\"Deployment\"]", report.Violations[0].Message)
+}
+
+func TestEvaluatePlaygroundWithHelperModuleAndDataSuccess(t *testing.T) {
+	policy := `# file: main.rego
+package main
+
+import data.lib
+
+deny contains msg if {
+	not lib.allowed_kind(input.kind)
+	msg := sprintf("kind must be one of %v", [data.allowed_kinds])
+}
+
+# file: lib/kinds.rego
+package lib
+
+allowed_kind(kind) if {
+	data.allowed_kinds[_] == kind
+}
+`
+
+	report := evaluatePlaygroundWithData(context.Background(), policy, `kind: Deployment`, `allowed_kinds: ["Deployment"]`)
+
+	require.True(t, report.Success)
+	require.Empty(t, report.Errors)
+	require.Empty(t, report.Violations)
+}
