@@ -1,0 +1,8 @@
+name: Playground parity fixture
+description: Minimal local policy config for comparing the WASM playground with `ec validate input`.
+sources:
+  - name: local-conforma-shaped
+    policy:
+      - file://hack/playground-wasm/fixtures/conforma-shaped/cli-policy
+    data:
+      - file://hack/playground-wasm/fixtures/conforma-shaped/cli-data
