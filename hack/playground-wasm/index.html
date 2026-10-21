@@ -180,23 +180,58 @@
           <textarea id="policy" spellcheck="false"># file: main.rego
 package main
 
-import data.lib
+import rego.v1
 
-deny contains msg if {
-  not lib.allowed_kind(input.kind)
-  msg := sprintf("kind must be one of %v", [data.allowed_kinds])
+import data.lib.pipeline
+import data.lib.release
+
+deny contains result if {
+  not pipeline.has_required_task(input, "build-container")
+  result := {
+    "code": "main.required_task_missing",
+    "msg": "required task build-container is missing",
+    "metadata": {
+      "component": object.get(input, "component", "unknown"),
+    },
+  }
 }
 
-warn contains msg if {
-  not input.metadata.name
-  msg := "metadata.name is recommended"
+deny contains result if {
+  not release.allowed_signer(input.attestation.signer)
+  result := {
+    "code": "main.signer_not_allowed",
+    "msg": sprintf("attestation signer %q is not allowed", [input.attestation.signer]),
+    "metadata": {
+      "signer": input.attestation.signer,
+    },
+  }
 }
 
-# file: lib/kinds.rego
-package lib
+warn contains result if {
+  not input.metadata.labels["appstudio.openshift.io/application"]
+  result := {
+    "code": "main.application_label_missing",
+    "msg": "application label is recommended",
+  }
+}
 
-allowed_kind(kind) if {
-  data.allowed_kinds[_] == kind
+# file: lib/pipeline.rego
+package lib.pipeline
+
+import rego.v1
+
+has_required_task(snapshot, task_name) if {
+  some task in snapshot.pipeline.tasks
+  task.name == task_name
+}
+
+# file: lib/release.rego
+package lib.release
+
+import rego.v1
+
+allowed_signer(signer) if {
+  data.allowed_signers[_] == signer
 }</textarea>
         </div>
 
@@ -205,17 +240,22 @@ allowed_kind(kind) if {
             <h2>Input JSON or YAML</h2>
             <button id="run" disabled>Run</button>
           </div>
-          <textarea id="input" spellcheck="false">kind: Service
-metadata: {}</textarea>
+          <textarea id="input" spellcheck="false">component: demo-service
+metadata:
+  labels: {}
+pipeline:
+  tasks:
+    - name: unit-test
+attestation:
+  signer: https://untrusted.example/signer</textarea>
         </div>
 
         <div class="panel">
           <div class="panel-head">
             <h2>Data JSON or YAML</h2>
           </div>
-          <textarea id="data" spellcheck="false">allowed_kinds:
-  - Deployment
-  - Pipeline</textarea>
+          <textarea id="data" spellcheck="false">allowed_signers:
+  - https://tekton.dev/chains/trusted</textarea>
         </div>
       </section>
 
