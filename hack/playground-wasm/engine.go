@@ -25,6 +25,7 @@ import (
 
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/rego"
+	"github.com/open-policy-agent/opa/v1/storage/inmem"
 	"sigs.k8s.io/yaml"
 )
 
@@ -32,6 +33,7 @@ type playgroundReport struct {
 	Success    bool               `json:"success"`
 	Engine     string             `json:"engine"`
 	Package    string             `json:"package,omitempty"`
+	Modules    []string           `json:"modules,omitempty"`
 	Violations []playgroundResult `json:"violations,omitempty"`
 	Warnings   []playgroundResult `json:"warnings,omitempty"`
 	Errors     []playgroundError  `json:"errors,omitempty"`
@@ -48,28 +50,47 @@ type playgroundError struct {
 	Message string `json:"message"`
 }
 
+type playgroundModule struct {
+	Filename string
+	Source   string
+	Package  string
+}
+
 func evaluatePlayground(ctx context.Context, policyText string, inputText string) playgroundReport {
+	return evaluatePlaygroundWithData(ctx, policyText, inputText, "")
+}
+
+func evaluatePlaygroundWithData(ctx context.Context, policyText string, inputText string, dataText string) playgroundReport {
 	report := playgroundReport{
 		Engine: "opa",
 	}
 
-	input, err := parseInput(inputText)
+	input, err := parseDocument(inputText)
 	if err != nil {
 		report.Errors = append(report.Errors, playgroundError{Stage: "input", Message: err.Error()})
 		return report
 	}
 
-	module, err := ast.ParseModule("playground.rego", policyText)
+	data, err := parseOptionalDocument(dataText)
+	if err != nil {
+		report.Errors = append(report.Errors, playgroundError{Stage: "data", Message: err.Error()})
+		return report
+	}
+
+	modules, err := parsePolicyModules(policyText)
 	if err != nil {
 		report.Errors = append(report.Errors, playgroundError{Stage: "rego", Message: err.Error()})
 		return report
 	}
 
-	pkg := strings.TrimPrefix(module.Package.Path.String(), "data.")
+	pkg := modules[0].Package
 	report.Package = pkg
+	for _, module := range modules {
+		report.Modules = append(report.Modules, module.Filename)
+	}
 
 	for _, rule := range []string{"deny", "violation"} {
-		values, err := evalRule(ctx, policyText, input, pkg, rule)
+		values, err := evalRule(ctx, modules, input, data, pkg, rule)
 		if err != nil {
 			report.Errors = append(report.Errors, playgroundError{Stage: rule, Message: err.Error()})
 			continue
@@ -77,7 +98,7 @@ func evaluatePlayground(ctx context.Context, policyText string, inputText string
 		report.Violations = append(report.Violations, normalizeResults(rule, values)...)
 	}
 
-	values, err := evalRule(ctx, policyText, input, pkg, "warn")
+	values, err := evalRule(ctx, modules, input, data, pkg, "warn")
 	if err != nil {
 		report.Errors = append(report.Errors, playgroundError{Stage: "warn", Message: err.Error()})
 	} else {
@@ -88,7 +109,7 @@ func evaluatePlayground(ctx context.Context, policyText string, inputText string
 	return report
 }
 
-func parseInput(inputText string) (any, error) {
+func parseDocument(inputText string) (any, error) {
 	inputText = strings.TrimSpace(inputText)
 	if inputText == "" {
 		return map[string]any{}, nil
@@ -101,21 +122,90 @@ func parseInput(inputText string) (any, error) {
 
 	jsonBytes, err := yaml.YAMLToJSON([]byte(inputText))
 	if err != nil {
-		return nil, fmt.Errorf("input is not valid JSON or YAML: %w", err)
+		return nil, fmt.Errorf("document is not valid JSON or YAML: %w", err)
 	}
 	if err := json.Unmarshal(jsonBytes, &input); err != nil {
-		return nil, fmt.Errorf("input is not valid JSON or YAML: %w", err)
+		return nil, fmt.Errorf("document is not valid JSON or YAML: %w", err)
 	}
 	return input, nil
 }
 
-func evalRule(ctx context.Context, policyText string, input any, pkg string, rule string) ([]any, error) {
+func parseOptionalDocument(dataText string) (map[string]any, error) {
+	if strings.TrimSpace(dataText) == "" {
+		return nil, nil
+	}
+	data, err := parseDocument(dataText)
+	if err != nil {
+		return nil, err
+	}
+	dataMap, ok := data.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("data must be a JSON or YAML object")
+	}
+	return dataMap, nil
+}
+
+func parsePolicyModules(policyText string) ([]playgroundModule, error) {
+	var modules []playgroundModule
+	var current strings.Builder
+	currentName := "playground.rego"
+
+	flush := func() {
+		source := strings.TrimSpace(current.String())
+		if source == "" {
+			return
+		}
+		modules = append(modules, playgroundModule{
+			Filename: currentName,
+			Source:   source,
+		})
+		current.Reset()
+	}
+
+	for _, line := range strings.Split(policyText, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "# file:") {
+			flush()
+			currentName = strings.TrimSpace(strings.TrimPrefix(trimmed, "# file:"))
+			if currentName == "" {
+				return nil, fmt.Errorf("empty module filename in # file marker")
+			}
+			continue
+		}
+		current.WriteString(line)
+		current.WriteByte('\n')
+	}
+	flush()
+
+	if len(modules) == 0 {
+		return nil, fmt.Errorf("no Rego modules provided")
+	}
+
+	for i := range modules {
+		module, err := ast.ParseModule(modules[i].Filename, modules[i].Source)
+		if err != nil {
+			return nil, err
+		}
+		modules[i].Package = strings.TrimPrefix(module.Package.Path.String(), "data.")
+	}
+
+	return modules, nil
+}
+
+func evalRule(ctx context.Context, modules []playgroundModule, input any, data map[string]any, pkg string, rule string) ([]any, error) {
 	query := fmt.Sprintf("data.%s.%s", pkg, rule)
-	resultSet, err := rego.New(
+	opts := []func(*rego.Rego){
 		rego.Query(query),
-		rego.Module("playground.rego", policyText),
 		rego.Input(input),
-	).Eval(ctx)
+	}
+	for _, module := range modules {
+		opts = append(opts, rego.Module(module.Filename, module.Source))
+	}
+	if data != nil {
+		opts = append(opts, rego.Store(inmem.NewFromObject(data)))
+	}
+
+	resultSet, err := rego.New(opts...).Eval(ctx)
 	if err != nil {
 		return nil, err
 	}
