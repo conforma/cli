@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/conforma/cli/internal/evaluator"
+	"github.com/conforma/cli/internal/image"
 	"github.com/conforma/cli/internal/output"
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/policy/source"
@@ -57,7 +58,7 @@ func TestEvaluatorLifecycle(t *testing.T) {
 	ctx = context.WithValue(ctx, source.DownloaderFuncKey, &mdl)
 
 	// Use a mock validation function that doesn't actually call the evaluators
-	validate := func(_ context.Context, component app.SnapshotComponent, _ *app.SnapshotSpec, _ policy.Policy, evaluators []evaluator.Evaluator, _ bool) (*output.Output, error) {
+	validate := func(_ context.Context, component app.SnapshotComponent, _ *app.SnapshotSpec, _ policy.Policy, evaluators []evaluator.Evaluator, _ image.ValidationOptions) (*output.Output, error) {
 		// Just verify that the correct number of evaluators were created
 		if len(evaluators) != noEvaluators {
 			return nil, fmt.Errorf("expected %d evaluators, got %d", noEvaluators, len(evaluators))
