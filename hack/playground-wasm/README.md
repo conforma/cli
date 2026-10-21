@@ -38,6 +38,17 @@ ignored by Git.
 - A Conforma-like JSON result with `success`, `violations`, `warnings`, and
   parse/evaluation `errors`.
 
+## Fixture
+
+The browser opens with the fixture from
+`fixtures/conforma-shaped/policy.rego`, `input-fail.yaml`, and `data.yaml`.
+That fixture is still intentionally small, but it exercises helper modules,
+separate rule data, and structured violation/warning objects with `code`, `msg`,
+and `metadata`.
+
+See `PARITY.md` for the current parity notes and the recommended follow-up
+comparison with the real `ec validate input` path.
+
 ## What It Does Not Prove
 
 - Full `ec validate input` parity.

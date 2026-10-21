@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -121,4 +122,56 @@ allowed_kind(kind) if {
 	require.True(t, report.Success)
 	require.Empty(t, report.Errors)
 	require.Empty(t, report.Violations)
+}
+
+func TestEvaluatePlaygroundConformaShapedFixture(t *testing.T) {
+	policy := readFixture(t, "fixtures/conforma-shaped/policy.rego")
+	input := readFixture(t, "fixtures/conforma-shaped/input-fail.yaml")
+	data := readFixture(t, "fixtures/conforma-shaped/data.yaml")
+
+	report := evaluatePlaygroundWithData(context.Background(), policy, input, data)
+
+	require.False(t, report.Success)
+	require.Empty(t, report.Errors)
+	require.Equal(t, []string{"main.rego", "lib/pipeline.rego", "lib/release.rego"}, report.Modules)
+	require.Len(t, report.Violations, 2)
+	require.Len(t, report.Warnings, 1)
+	requireResult(t, report.Violations, "main.required_task_missing", "required task build-container is missing")
+	requireResult(t, report.Violations, "main.signer_not_allowed", "attestation signer \"https://untrusted.example/signer\" is not allowed")
+	requireResult(t, report.Warnings, "main.application_label_missing", "application label is recommended")
+}
+
+func TestEvaluatePlaygroundConformaShapedFixturePasses(t *testing.T) {
+	policy := readFixture(t, "fixtures/conforma-shaped/policy.rego")
+	input := readFixture(t, "fixtures/conforma-shaped/input-pass.yaml")
+	data := readFixture(t, "fixtures/conforma-shaped/data.yaml")
+
+	report := evaluatePlaygroundWithData(context.Background(), policy, input, data)
+
+	require.True(t, report.Success)
+	require.Empty(t, report.Errors)
+	require.Empty(t, report.Violations)
+	require.Empty(t, report.Warnings)
+}
+
+func readFixture(t *testing.T, path string) string {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return string(content)
+}
+
+func requireResult(t *testing.T, results []playgroundResult, code string, msg string) {
+	t.Helper()
+	for _, result := range results {
+		value, ok := result.Value.(map[string]any)
+		if !ok {
+			continue
+		}
+		if value["code"] == code {
+			require.Equal(t, msg, result.Message)
+			return
+		}
+	}
+	t.Fatalf("result with code %q not found in %#v", code, results)
 }
