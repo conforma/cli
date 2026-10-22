@@ -1,8 +1,0 @@
-component: demo-service
-metadata:
-  labels: {}
-pipeline:
-  tasks:
-    - name: unit-test
-attestation:
-  signer: https://untrusted.example/signer
