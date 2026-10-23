@@ -54,7 +54,7 @@ done
 if [[ ${#POSITIONAL[@]} -gt 0 ]]; then
   BRANCHES=("${POSITIONAL[@]}")
 else
-  BRANCHES=(release-v0.7 release-v0.8 main)
+  BRANCHES=(release-v0.7 release-v0.8 release-v0.9 main)
 fi
 
 # --- Configuration -----------------------------------------------------------
