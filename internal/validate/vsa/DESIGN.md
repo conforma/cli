@@ -1,5 +1,7 @@
 # VSA Design
 
+> **Deprecated:** VSA functionality remains available with unchanged behavior. Its use emits a deprecation warning. See the [VSA deprecation notice](../../../docs/modules/ROOT/pages/vsa-deprecation.adoc).
+
 ## Purpose
 
 A VSA (Verification Summary Attestation) is a cryptographically signed record that a specific

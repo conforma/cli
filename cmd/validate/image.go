@@ -170,6 +170,10 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 		`),
 
 		PreRunE: func(cmd *cobra.Command, args []string) (allErrors error) {
+			if imageCommandUsesVSA(cmd, data.output) {
+				warnVSADeprecated(cmd)
+			}
+
 			ctx := cmd.Context()
 			if trace.IsEnabled() {
 				var task *trace.Task
@@ -546,7 +550,7 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 	cmd.Flags().StringSliceVar(&data.output, "output", data.output, hd.Doc(`
 		write output to a file in a specific format. Use empty string path for stdout.
 		May be used multiple times. Possible formats are:
-		`+strings.Join(validOutputFormats, ", ")+`. In following format and file path
+		`+strings.Join(validOutputFormats, ", ")+`. The vsa output format is deprecated. In following format and file path
 		additional options can be provided in key=value form following the question
 		mark (?) sign, for example: --output text=output.txt?show-successes=false
 	`))
@@ -596,13 +600,13 @@ func validateImageCmd(validate imageValidationFunc) *cobra.Command {
 		- "include-exclude": Uses traditional include/exclude filtering without pipeline intentions
 		- "ec-policy": Uses Enterprise Contract policy filtering with pipeline intention support`))
 
-	cmd.Flags().BoolVar(&data.vsaEnabled, "vsa", false, "Generate a Verification Summary Attestation (VSA) for each validated image.")
-	cmd.Flags().StringVar(&data.attestationFormat, "attestation-format", "dsse", "Attestation output format: dsse (signed envelope), predicate (raw JSON)")
-	cmd.Flags().StringVar(&data.vsaSigningKey, "vsa-signing-key", "", "Path to the private key for signing the VSA. Supports file paths and Kubernetes secret references (k8s://namespace/secret-name/key-field).")
-	cmd.Flags().StringVar(&data.vsaPublicKey, "vsa-public-key", "", "Path to the public key for VSA signature verification. Required when --vsa-upload is set and --vsa-expiration is greater than 0.")
-	cmd.Flags().StringSliceVar(&data.vsaUpload, "vsa-upload", nil, "Storage backends for VSA upload. Format: backend@url?param=value. Examples: rekor@https://rekor.sigstore.dev, local@./vsa-dir")
-	cmd.Flags().DurationVar(&data.vsaExpiration, "vsa-expiration", data.vsaExpiration, "Expiration threshold for existing VSAs. If a valid VSA exists and is newer than this threshold, validation will be skipped. (default 168h)")
-	cmd.Flags().StringVar(&data.attestationOutputDir, "attestation-output-dir", "", "Directory for attestation output files. Defaults to a temp directory under /tmp. Must be under /tmp or the current working directory.")
+	cmd.Flags().BoolVar(&data.vsaEnabled, "vsa", false, "[DEPRECATED] Generate a Verification Summary Attestation (VSA) for each validated image.")
+	cmd.Flags().StringVar(&data.attestationFormat, "attestation-format", "dsse", "[DEPRECATED] VSA output format: dsse (signed envelope), predicate (raw JSON)")
+	cmd.Flags().StringVar(&data.vsaSigningKey, "vsa-signing-key", "", "[DEPRECATED] Path to the private key for signing the VSA. Supports file paths and Kubernetes secret references (k8s://namespace/secret-name/key-field).")
+	cmd.Flags().StringVar(&data.vsaPublicKey, "vsa-public-key", "", "[DEPRECATED] Path to the public key for VSA signature verification. Required when --vsa-upload is set and --vsa-expiration is greater than 0.")
+	cmd.Flags().StringSliceVar(&data.vsaUpload, "vsa-upload", nil, "[DEPRECATED] Storage backends for VSA upload. Format: backend@url?param=value. Examples: rekor@https://rekor.sigstore.dev, local@./vsa-dir")
+	cmd.Flags().DurationVar(&data.vsaExpiration, "vsa-expiration", data.vsaExpiration, "[DEPRECATED] Expiration threshold for existing VSAs. If a valid VSA exists and is newer than this threshold, validation will be skipped. (default 168h)")
+	cmd.Flags().StringVar(&data.attestationOutputDir, "attestation-output-dir", "", "[DEPRECATED] VSA output directory. Defaults to a temp directory under /tmp. Must be under /tmp or the current working directory.")
 
 	if len(data.input) > 0 || len(data.filePath) > 0 || len(data.images) > 0 {
 		if err := cmd.MarkFlagRequired("image"); err != nil {

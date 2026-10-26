@@ -109,7 +109,7 @@ gofmt -l internal/evaluator/evaluator.go            # Check formatting on a sing
 Read these before modifying the corresponding areas:
 
 - [internal/evaluator/DESIGN.md](internal/evaluator/DESIGN.md) — rule filtering: why two resolvers, two-pass design, scoring precedence, adding filters
-- [internal/validate/vsa/DESIGN.md](internal/validate/vsa/DESIGN.md) — VSA: storage backends, DSSE signing rationale, expiration model
+- [internal/validate/vsa/DESIGN.md](internal/validate/vsa/DESIGN.md) — deprecated VSA functionality: storage backends, DSSE signing rationale, expiration model
 - [acceptance/README.md](acceptance/README.md) — acceptance test framework, Testcontainers, WireMock, snapshot testing
 
 ## Claude Code Skills

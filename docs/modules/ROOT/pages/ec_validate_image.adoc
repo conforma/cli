@@ -114,8 +114,8 @@ Use a regular expression to match certificate attributes.
 --allow-past-effective-time:: Allow setting --effective-time to a date in the past. By default, dates
 in the past are rejected.
  (Default: false)
---attestation-format:: Attestation output format: dsse (signed envelope), predicate (raw JSON) (Default: dsse)
---attestation-output-dir:: Directory for attestation output files. Defaults to a temp directory under /tmp. Must be under /tmp or the current working directory.
+--attestation-format:: [DEPRECATED] VSA output format: dsse (signed envelope), predicate (raw JSON) (Default: dsse)
+--attestation-output-dir:: [DEPRECATED] VSA output directory. Defaults to a temp directory under /tmp. Must be under /tmp or the current working directory.
 --certificate-identity:: URL of the certificate identity for keyless verification
 --certificate-identity-regexp:: Regular expression for the URL of the certificate identity for keyless verification
 --certificate-oidc-issuer:: URL of the certificate OIDC issuer for keyless verification
@@ -143,7 +143,7 @@ rule. (Default: false)
 --no-color:: Disable color when using text output even when the current terminal supports it (Default: false)
 --output:: write output to a file in a specific format. Use empty string path for stdout.
 May be used multiple times. Possible formats are:
-json, yaml, text, appstudio, summary, summary-markdown, junit, attestation, policy-input, vsa. In following format and file path
+json, yaml, text, appstudio, summary, summary-markdown, junit, attestation, policy-input, vsa. The vsa output format is deprecated. In following format and file path
 additional options can be provided in key=value form following the question
 mark (?) sign, for example: --output text=output.txt?show-successes=false
  (Default: [])
@@ -160,11 +160,11 @@ mark (?) sign, for example: --output text=output.txt?show-successes=false
 --snapshot:: Provide the AppStudio Snapshot as a source of the images to validate, as inline
 JSON of the "spec" or a reference to a Kubernetes object [<namespace>/]<name>
 -s, --strict:: Return non-zero status on non-successful validation. Defaults to true. Use --strict=false to return a zero status code. (Default: true)
---vsa:: Generate a Verification Summary Attestation (VSA) for each validated image. (Default: false)
---vsa-expiration:: Expiration threshold for existing VSAs. If a valid VSA exists and is newer than this threshold, validation will be skipped. (default 168h) (Default: 168h0m0s)
---vsa-public-key:: Path to the public key for VSA signature verification. Required when --vsa-upload is set and --vsa-expiration is greater than 0.
---vsa-signing-key:: Path to the private key for signing the VSA. Supports file paths and Kubernetes secret references (k8s://namespace/secret-name/key-field).
---vsa-upload:: Storage backends for VSA upload. Format: backend@url?param=value. Examples: rekor@https://rekor.sigstore.dev, local@./vsa-dir (Default: [])
+--vsa:: [DEPRECATED] Generate a Verification Summary Attestation (VSA) for each validated image. (Default: false)
+--vsa-expiration:: [DEPRECATED] Expiration threshold for existing VSAs. If a valid VSA exists and is newer than this threshold, validation will be skipped. (default 168h) (Default: 168h0m0s)
+--vsa-public-key:: [DEPRECATED] Path to the public key for VSA signature verification. Required when --vsa-upload is set and --vsa-expiration is greater than 0.
+--vsa-signing-key:: [DEPRECATED] Path to the private key for signing the VSA. Supports file paths and Kubernetes secret references (k8s://namespace/secret-name/key-field).
+--vsa-upload:: [DEPRECATED] Storage backends for VSA upload. Format: backend@url?param=value. Examples: rekor@https://rekor.sigstore.dev, local@./vsa-dir (Default: [])
 --workers:: Number of workers to use for validation. Defaults to 5. (Default: 5)
 
 == Options inherited from parent commands

@@ -1,5 +1,7 @@
 = verify-conforma-vsa-release-ta
 
+NOTE: VSA functionality is deprecated. Existing behavior remains available and unchanged, and no removal date is announced. See xref:vsa-deprecation.adoc[VSA deprecation].
+
 Version: 0.1
 
 == Synopsis

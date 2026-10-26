@@ -9,6 +9,8 @@ This task verifies a signature and attestation for an image and then runs a poli
 It makes use of [Trusted Artifacts](https://github.com/konflux-ci/build-trusted-artifacts) to securely share the Snapshot between the calling Pipeline
 and this Task.
 
+NOTE: The VSA options and outputs supported by this task are deprecated. They remain available and unchanged, and use of VSA emits a warning. The task itself and its other validation and Trusted Artifact features are not deprecated. See the [VSA deprecation notice](../../../docs/modules/ROOT/pages/vsa-deprecation.adoc).
+
 ## Install the task
 kubectl apply -f https://raw.githubusercontent.com/conforma/cli/main/tasks/verify-conforma-konflux-ta/0.1/verify-conforma-konflux-ta.yaml
 

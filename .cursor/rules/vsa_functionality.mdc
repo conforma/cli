@@ -1,5 +1,7 @@
 # VSA (Verification Summary Attestation) Functionality
 
+> **Deprecated:** Existing functionality remains available and unchanged, but new integrations should avoid VSA. See [the deprecation notice](../../docs/modules/ROOT/pages/vsa-deprecation.adoc).
+
 ## Overview
 
 VSA (Verification Summary Attestation) is a critical feature that creates cryptographically signed attestations containing validation metadata and policy information after successful image validation. VSAs provide tamper-evident records of what policies were used and what validation results were achieved.

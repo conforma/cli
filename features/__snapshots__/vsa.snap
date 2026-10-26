@@ -47,6 +47,7 @@
 ---
 
 [TestFeatures/VSA expiration flag functionality:stderr - 1]
+Warning: VSA functionality is deprecated. Existing behavior remains available and unchanged; avoid VSA for new integrations.
 time="${TIMESTAMP}" level=warning msg="Failed to validate existing VSA for image ${REGISTRY}/acceptance/vsa-expiration-image@sha256:${REGISTRY_acceptance/vsa-expiration-image:latest_DIGEST}: failed to check existing VSA: failed to retrieve VSA envelope: no entries found in Rekor for image digest: sha256:${REGISTRY_acceptance/vsa-expiration-image:latest_DIGEST}"
 
 ---
@@ -99,6 +100,7 @@ time="${TIMESTAMP}" level=warning msg="Failed to validate existing VSA for image
 ---
 
 [TestFeatures/VSA generation with local storage backend:stderr - 1]
+Warning: VSA functionality is deprecated. Existing behavior remains available and unchanged; avoid VSA for new integrations.
 
 ---
 
@@ -150,6 +152,7 @@ time="${TIMESTAMP}" level=warning msg="Failed to validate existing VSA for image
 ---
 
 [TestFeatures/VSA expiration with existing valid VSA:stderr - 1]
+Warning: VSA functionality is deprecated. Existing behavior remains available and unchanged; avoid VSA for new integrations.
 
 ---
 
@@ -201,6 +204,7 @@ time="${TIMESTAMP}" level=warning msg="Failed to validate existing VSA for image
 ---
 
 [TestFeatures/VSA generation with Rekor storage backend:stderr - 1]
+Warning: VSA functionality is deprecated. Existing behavior remains available and unchanged; avoid VSA for new integrations.
 
 ---
 
@@ -252,6 +256,7 @@ time="${TIMESTAMP}" level=warning msg="Failed to validate existing VSA for image
 ---
 
 [TestFeatures/VSA generation with invalid storage backend configuration:stderr - 1]
+Warning: VSA functionality is deprecated. Existing behavior remains available and unchanged; avoid VSA for new integrations.
 time="${TIMESTAMP}" level=warning msg="invalid storage config 'invalid-backend@somewhere': unsupported backend 'invalid-backend'. Supported backends: rekor, local"
 time="${TIMESTAMP}" level=warning msg="invalid storage config 'invalid-backend@somewhere': unsupported backend 'invalid-backend'. Supported backends: rekor, local"
 
@@ -305,6 +310,7 @@ time="${TIMESTAMP}" level=warning msg="invalid storage config 'invalid-backend@s
 ---
 
 [TestFeatures/VSA generation with multiple storage backends:stderr - 1]
+Warning: VSA functionality is deprecated. Existing behavior remains available and unchanged; avoid VSA for new integrations.
 
 ---
 
@@ -356,6 +362,7 @@ time="${TIMESTAMP}" level=warning msg="invalid storage config 'invalid-backend@s
 ---
 
 [TestFeatures/VSA generation without upload backends shows warning:stderr - 1]
+Warning: VSA functionality is deprecated. Existing behavior remains available and unchanged; avoid VSA for new integrations.
 time="${TIMESTAMP}" level=error msg="[VSA] VSA files generated but not uploaded (no --vsa-upload backends specified)"
 
 ---

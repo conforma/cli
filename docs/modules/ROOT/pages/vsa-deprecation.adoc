@@ -1,0 +1,19 @@
+= VSA deprecation
+
+Verification Summary Attestation (VSA) functionality in Conforma CLI is deprecated. Existing VSA functionality remains available and unchanged, with a warning written to standard error when it is used. Avoid adopting VSA for new integrations. No removal date is announced as part of this deprecation.
+
+== Scope
+
+This deprecation applies to:
+
+* The `ec validate vsa` command, including retrieval, signature and policy checks, and fallback to image validation.
+* VSA generation and validation reuse in `ec validate image`, including `--vsa`, `--vsa-signing-key`, `--vsa-public-key`, `--vsa-upload`, `--vsa-expiration`, `--attestation-format`, and `--attestation-output-dir`.
+* The `vsa` report format for `ec validate image` (`--output vsa`, including file targets).
+* VSA predicates, signing, local and Rekor storage, and retrieval.
+* VSA-specific options and outputs in the `verify-conforma-konflux-ta` Tekton task, including `ENABLE_VSA`, `ATTESTATION_FORMAT`, `VSA_SIGNING_KEY`, `VSA_UPLOAD`, `VSA_GENERATED`, and VSA artifact data.
+
+The warning is emitted once per CLI invocation and does not change output, exit status, or validation behavior. Existing commands, options, reports, and task artifacts remain usable.
+
+== Not included
+
+Ordinary image validation, `ec compare`, general Trusted Artifact support, and `--output attestation` are not deprecated. New integrations that need policy validation should use `ec validate image`. Ordinary JSON or YAML reports provide report data and are not signed VSA replacements.

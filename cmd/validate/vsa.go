@@ -154,9 +154,11 @@ func NewValidateVSACmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "vsa <vsa-identifier>",
-		Short: "Validate VSA (Verification Summary Attestation)",
+		Short: "Validate VSA (deprecated)",
 		Long: hd.Doc(`
 			Validate VSA by comparing the embedded policy against a supplied policy configuration.
+
+			Deprecated: VSA functionality is deprecated. Existing behavior remains available and unchanged.
 			
 			By default, VSA signature verification is enabled and requires a public key.
 			Use --ignore-signature-verification to disable signature verification.
@@ -192,6 +194,8 @@ func NewValidateVSACmd() *cobra.Command {
 			return nil
 		},
 		PreRunE: func(cmd *cobra.Command, args []string) error {
+			warnVSADeprecated(cmd)
+
 			// Compute fallback behavior: enabled by default, disabled if --no-fallback is set
 			data.fallbackToImageValidation = !data.noFallback
 
