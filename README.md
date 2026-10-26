@@ -1,6 +1,6 @@
 # `ec` a command line client for verifying artifacts and evaluating policies
 
-this line shouldn't be here
+this line shouldn't be here!
 
 The `ec` tool is used to evaluate Conforma policies for Software
 Supply Chain. Various sub-commands can be used to assert facts about an artifact
