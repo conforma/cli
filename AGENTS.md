@@ -118,7 +118,7 @@ The project uses multiple Go modules:
 ## Testing Strategy
 
 ### Test Types
-- **Unit tests** (`-tags=unit`, 10s timeout) - Fast isolated tests
+- **Unit tests** (`-tags=unit`, 30s timeout) - Fast isolated tests
 - **Integration tests** (`-tags=integration`, 15s timeout) - Component integration
 - **Generative tests** (`-tags=generative`, 30s timeout) - Property-based testing
 - **Acceptance tests** (20m timeout) - End-to-end Cucumber scenarios with real artifacts
