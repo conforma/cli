@@ -116,13 +116,7 @@ cat > "${tmp}" <<'EOF'
 #
 EOF
 
-awk '
-    copy { print }
-    /^# SPDX-License-Identifier: Apache-2.0$/ {
-        getline
-        copy = 1
-    }
-' "${SOURCE}" >> "${tmp}"
+cat "${SOURCE}" >> "${tmp}"
 
 # The deprecated build-definitions copy can carry release-promotion digest pins
 # that intentionally differ from the unpinned source-of-truth pipeline.
