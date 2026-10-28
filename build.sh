@@ -83,6 +83,15 @@ build_kubectl() {
     cp "${kubectlbin}" "dist/$3_$1_$2"
 }
 
+build_yq() {
+    GOOS="$1" GOARCH="$2" CGO_ENABLED=0 GOCACHE="$GOCACHE" GOMODCACHE="$GOMODCACHE" go build \
+        -modfile tools/yq/go.mod \
+        -trimpath \
+        -mod=readonly \
+        -o "dist/yq_$1_$2" \
+        github.com/mikefarah/yq/v4
+}
+
 KUBECTL_VERSION="$(go list -modfile tools/kubectl/go.mod -mod=readonly -f '{{.Version}}' -m k8s.io/kubernetes)"
 
 for os_arch in ${BUILDS}; do
@@ -97,3 +106,12 @@ for os_arch in ${BUILDS}; do
     echo "Building ${GOOS}/${GOARCH} of ${KUBECTLBIN} version ${KUBECTL_VERSION}"
     build_kubectl "${GOOS}" "${GOARCH}" "${KUBECTLBIN}"
 done
+
+# yq runs inside the image; unlike ec and kubectl, it is not needed for downloads.
+IMAGE_OS="${TARGETOS:-$(go env GOOS)}"
+IMAGE_ARCH="${TARGETARCH:-$(go env GOARCH)}"
+if [[ "${IMAGE_OS}" == "linux" ]]; then
+    YQ_VERSION="$(go list -modfile tools/yq/go.mod -mod=readonly -f '{{.Version}}' -m github.com/mikefarah/yq/v4)"
+    echo "Building ${IMAGE_OS}/${IMAGE_ARCH} of yq version ${YQ_VERSION} for the image"
+    build_yq "${IMAGE_OS}" "${IMAGE_ARCH}"
+fi
