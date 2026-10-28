@@ -211,7 +211,7 @@ func (s stubCluster) Registry(ctx context.Context) (string, error) {
 	return registry.Url(ctx)
 }
 
-func (s stubCluster) BuildSnapshotArtifact(ctx context.Context, content string) (context.Context, error) {
+func (s stubCluster) BuildSnapshotArtifact(ctx context.Context, content string, _ map[string]string) (context.Context, error) {
 	return ctx, nil
 }
 
