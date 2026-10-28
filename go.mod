@@ -1,6 +1,6 @@
 module github.com/conforma/cli
 
-go 1.26.7
+go 1.27.3
 
 require (
 	cuelang.org/go v0.16.0
@@ -15,7 +15,7 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/go-openapi/strfmt v0.26.4
 	github.com/google/go-cmp v0.7.0
-	github.com/google/go-containerregistry v0.21.7
+	github.com/google/go-containerregistry v0.21.9
 	github.com/google/safearchive v0.0.0-20241025131057-f7ce9d7b6f9c
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
 	github.com/in-toto/in-toto-golang v0.11.0
@@ -33,7 +33,7 @@ require (
 	github.com/secure-systems-lab/go-securesystemslib v0.11.0
 	github.com/sigstore/cosign/v2 v2.4.1
 	github.com/sigstore/rekor v1.5.3
-	github.com/sigstore/sigstore v1.10.8
+	github.com/sigstore/sigstore v1.10.9
 	github.com/sirupsen/logrus v1.10.1
 	github.com/smarty/cproxy/v2 v2.1.1
 	github.com/spdx/tools-golang v0.5.7
@@ -43,14 +43,14 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
 	github.com/stuart-warren/yamlfmt v0.2.0
-	github.com/tektoncd/pipeline v1.12.0
+	github.com/tektoncd/pipeline v1.12.3
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.44.0
 	golang.org/x/benchmarks v0.0.0-20241115175113-a2b48b605b42
 	golang.org/x/exp v0.0.0-20260603202125-055de637280b
 	golang.org/x/net v0.58.0
 	golang.org/x/sync v0.23.0
-	k8s.io/apiextensions-apiserver v0.35.4
+	k8s.io/apiextensions-apiserver v0.35.9
 	k8s.io/apimachinery v0.36.3
 	k8s.io/client-go v0.36.3
 	k8s.io/klog/v2 v2.140.0
@@ -157,7 +157,7 @@ require (
 	github.com/containerd/stargz-snapshotter/estargz v0.18.2 // indirect
 	github.com/containerd/ttrpc v1.2.9 // indirect
 	github.com/containerd/typeurl/v2 v2.3.0 // indirect
-	github.com/coreos/go-oidc/v3 v3.19.0 // indirect
+	github.com/coreos/go-oidc/v3 v3.20.0 // indirect
 	github.com/cpuguy83/dockercfg v0.3.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
@@ -225,8 +225,8 @@ require (
 	github.com/goccy/go-yaml v1.18.0 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
-	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/cel-go v0.28.0 // indirect
+	github.com/golang/snappy v1.0.0 // indirect
+	github.com/google/cel-go v0.28.1 // indirect
 	github.com/google/certificate-transparency-go v1.3.3 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
