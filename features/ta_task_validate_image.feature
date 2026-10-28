@@ -139,6 +139,127 @@ Feature: Verify Conforma Trusted Artifact Tekton Task
      # The show-config step is enough to confirm the ECP was modified. No need
      # to look at the other output
 
+  Scenario: Inject runtime data from a trusted artifact
+    # This test packages "snapshotartifact" and "runtime_extra.json" in one trusted OCI artifact,
+    # supplied via SOURCE_DATA_ARTIFACT. build-trusted-artifacts can extract multiple artifacts,
+    # and in the real pipeline that may be how we do it, but here in this test the task currently
+    # extracts only SOURCE_DATA_ARTIFACT.
+    Given a working namespace
+    Given a runtime data file named "runtime_extra.json" in the snapshot trusted artifact with content:
+      ```
+      {"some_result":"whatever"}
+      ```
+    Given a snapshot artifact with content:
+      ```
+      {
+        "components": [
+          {
+            "containerImage": "quay.io/hacbs-contract-demo/golden-container@sha256:e76a4ae9dd8a52a0d191fd34ca133af5b4f2609536d32200a4a40a09fdc93a0d"
+          }
+        ]
+      }
+      ```
+    Given a cluster policy with content:
+      ```
+      {
+        "publicKey": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----",
+        "sources": [
+          {
+            "policy": ["file:///opt/acceptance/runtime-policy"],
+            "data": [],
+            "config": {"include": ["runtime_extra"]}
+          }
+        ]
+      }
+      ```
+    When version 0.1 of the task named "verify-conforma-konflux-ta" is run with parameters:
+      | SNAPSHOT_FILENAME       | snapshotartifact                                                                                    |
+      | SOURCE_DATA_ARTIFACT    | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST} |
+      | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                                                              |
+      | RUNTIME_DATA            | /var/workdir/conforma/runtime_extra.json                                                              |
+      | RUNTIME_DATA_KEY        | runtime_extra                                                                                          |
+      | STRICT                  | true                                                                                                   |
+      | IGNORE_REKOR            | true                                                                                                   |
+      | TRUSTED_ARTIFACTS_DEBUG | "true"                                                                                                 |
+      | ORAS_OPTIONS            | --plain-http                                                                                           |
+    Then the task should succeed
+     And the task logs for step "inject-runtime-data" should match the snapshot
+     And the task logs for step "show-config" should contain "file::/var/workdir/data-source-"
+     And the task logs for step "show-config" should match the snapshot
+     And the task logs for step "detailed-report" should match the snapshot
+
+  Scenario: Pin the policy bundle and inject runtime data
+    Given a working namespace
+    Given a runtime data file named "runtime_extra.json" in the snapshot trusted artifact with content:
+      ```
+      {"some_result":"whatever"}
+      ```
+    Given a snapshot artifact with content:
+      ```
+      {
+        "components": [
+          {
+            "containerImage": "quay.io/hacbs-contract-demo/golden-container@sha256:e76a4ae9dd8a52a0d191fd34ca133af5b4f2609536d32200a4a40a09fdc93a0d"
+          }
+        ]
+      }
+      ```
+    Given a cluster policy with content:
+      ```
+      {
+        "publicKey": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----",
+        "sources": [
+          {
+            "policy": [
+              "oci::quay.io/conforma/release-policy:konflux",
+              "file:///opt/acceptance/runtime-policy"
+            ],
+            "config": {"include": ["runtime_extra"]}
+          }
+        ]
+      }
+      ```
+    When version 0.1 of the task named "verify-conforma-konflux-ta" is run with parameters:
+      | SNAPSHOT_FILENAME       | snapshotartifact                                                                                    |
+      | SOURCE_DATA_ARTIFACT    | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST} |
+      | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                                                              |
+      | POLICY_BUNDLE_DIGEST    | sha256:2a851b5d56259ba46391f72bc4e75ed5475510dce5ae47d054b72baf1e908d26                       |
+      | RUNTIME_DATA            | /var/workdir/conforma/runtime_extra.json                                                              |
+      | RUNTIME_DATA_KEY        | runtime_extra                                                                                          |
+      | STRICT                  | true                                                                                                   |
+      | IGNORE_REKOR            | true                                                                                                   |
+      | TRUSTED_ARTIFACTS_DEBUG | "true"                                                                                                 |
+      | ORAS_OPTIONS            | --plain-http                                                                                           |
+    Then the task should succeed
+     And the task logs for step "pin-policy-bundle" should match the snapshot
+     And the task logs for step "inject-runtime-data" should match the snapshot
+     And the task logs for step "show-config" should match the snapshot
+     And the task logs for step "detailed-report" should match the snapshot
+
+  Scenario: Runtime data requires a top-level key
+    Given a working namespace
+    Given a runtime data file named "runtime_extra.json" in the snapshot trusted artifact with content:
+      ```
+      {"some_result":"whatever"}
+      ```
+    Given a snapshot artifact with content:
+      ```
+      {
+        "components": [
+          {
+            "containerImage": "quay.io/hacbs-contract-demo/golden-container@sha256:e76a4ae9dd8a52a0d191fd34ca133af5b4f2609536d32200a4a40a09fdc93a0d"
+          }
+        ]
+      }
+      ```
+    When version 0.1 of the task named "verify-conforma-konflux-ta" is run with parameters:
+      | SNAPSHOT_FILENAME    | snapshotartifact                                                                                    |
+      | SOURCE_DATA_ARTIFACT | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST} |
+      | RUNTIME_DATA         | /var/workdir/conforma/runtime_extra.json                                                               |
+      | ORAS_OPTIONS         | --plain-http                                                                                           |
+    Then the task should fail
+     And the task logs for step "inject-runtime-data" should contain "--top-level-key requires a value."
+
   Scenario: VSA generation with predicate format
     Given a working namespace
     Given a snapshot artifact with content:

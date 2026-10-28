@@ -161,6 +161,21 @@ spec:
       description: Merge additional Rego variables into the policy data. Use syntax "key=value,key2=value2..."
       default: ""
 
+    - name: RUNTIME_DATA
+      type: string
+      description: >-
+        Optional path to a JSON file accessible in the inject-runtime-data step
+        (for example, /var/workdir/conforma/extra/data.json in the extracted trusted artifact).
+        Its contents are added to the policy data under RUNTIME_DATA_KEY.
+        When set, POLICY_CONFIGURATION must be an ECP name, inline JSON, or a
+        local JSON file; YAML-formatted files and Git policy references are not supported.
+      default: ""
+
+    - name: RUNTIME_DATA_KEY
+      type: string
+      description: Top-level policy data key for RUNTIME_DATA. Required when RUNTIME_DATA is set.
+      default: ""
+
     - name: POLICY_BUNDLE_DIGEST
       type: string
       description: >-
@@ -358,6 +373,38 @@ spec:
       onError: continue
       command: [pin-konflux-policy-bundle.sh]
 
+    - name: inject-runtime-data
+      when:
+        - input: "$(params.RUNTIME_DATA)"
+          operator: notin
+          values: [""]
+      image: quay.io/conforma/cli:latest
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: POLICY_CONFIGURATION
+          value: "$(params.POLICY_CONFIGURATION)"
+        - name: RUNTIME_DATA
+          value: "$(params.RUNTIME_DATA)"
+        - name: RUNTIME_DATA_KEY
+          value: "$(params.RUNTIME_DATA_KEY)"
+        - name: HOMEDIR
+          value: "$(params.HOMEDIR)"
+        - name: TMPDIR
+          value: /var/workdir
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+
+        # The pinning step only writes a file when it changes the policy.
+        policy="${POLICY_CONFIGURATION}"
+        if [[ -f "${HOMEDIR}/policy-with-pinned-bundle.yaml" ]]; then
+          policy="${HOMEDIR}/policy-with-pinned-bundle.yaml"
+        fi
+
+        inject-data-source.sh --policy "${policy}" \
+          --policy-output /var/workdir/policy-with-runtime-data.yaml \
+          --data-file "${RUNTIME_DATA}" --top-level-key "${RUNTIME_DATA_KEY}"
+
     - name: validate
       image: quay.io/conforma/cli:latest
       imagePullPolicy: IfNotPresent
@@ -370,8 +417,10 @@ spec:
             export SSL_CERT_FILE="/mnt/trusted-ca/ca-bundle.crt"
         fi
 
-        # Use policy override file if pin-policy-bundle produced one
-        if [[ -f "${HOMEDIR}/policy-with-pinned-bundle.yaml" ]]; then
+        # Prefer runtime data policy, then the digest-pinned policy, if present.
+        if [[ -f /var/workdir/policy-with-runtime-data.yaml ]]; then
+          POLICY_CONFIGURATION=/var/workdir/policy-with-runtime-data.yaml
+        elif [[ -f "${HOMEDIR}/policy-with-pinned-bundle.yaml" ]]; then
           POLICY_CONFIGURATION="${HOMEDIR}/policy-with-pinned-bundle.yaml"
         fi
 
