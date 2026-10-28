@@ -10,6 +10,9 @@ facts about an artifact such as:
 * Validating container image provenance
 * Evaluating {pol}[policies] over the container image provenance
 
+To learn about the benefits of using Conforma over cosign directly, see
+xref:why-conforma.adoc[Why Conforma?].
+
 This documentation includes xref:ec.adoc[Conforma Command Line reference
 documentation], and documentation on the
 xref:verify-enterprise-contract.adoc[Verify Enterprise Contract Task]
