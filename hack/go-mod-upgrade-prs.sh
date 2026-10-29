@@ -70,7 +70,7 @@ PKG_SHORT="${PKG##*/}"
 if [[ ${#POSITIONAL[@]} -gt 1 ]]; then
   BRANCHES=("${POSITIONAL[@]:1}")
 else
-  BRANCHES=(release-v0.7 release-v0.8 release-v0.9 main)
+  BRANCHES=(release-v0.8 release-v0.9 main)
 fi
 
 # --- Configuration -----------------------------------------------------------
