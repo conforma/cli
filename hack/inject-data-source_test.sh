@@ -29,7 +29,13 @@ inject() {
     --data-file "$WORKDIR/runtime.json" --top-level-key runtime_extra
 }
 
-# A JSON policy file is copied, not modified, and only the first source is updated.
+PASS=0
+passed() {
+  printf '  PASS: %s\n' "$1"
+  ((PASS += 1))
+}
+
+echo 'Test 1: JSON policy file is copied and only the first source is updated'
 printf '%s\n' '{"sources":[{"data":["existing"]},{"data":["other"]}]}' > "$WORKDIR/policy.json"
 cp "$WORKDIR/policy.json" "$WORKDIR/original.json"
 inject "$WORKDIR/policy.json" "$WORKDIR/output.json" > /dev/null
@@ -38,26 +44,35 @@ jq -e '.sources[0].data[0] == "existing" and .sources[1].data == ["other"]' "$WO
 source_ref=$(jq -r '.sources[0].data[1]' "$WORKDIR/output.json")
 [[ "$source_ref" == file://"$WORKDIR"/data-source-* ]]
 jq -e '.runtime_extra.some_result == "whatever"' "${source_ref#file://}/data.json" > /dev/null
+passed 'original policy unchanged; wrapped data source added to the first source'
 
-# Inline JSON and an omitted or null data list both produce a JSON policy.
+echo 'Test 2: inline JSON policy with an omitted data list'
 inject '{"sources":[{}]}' "$WORKDIR/inline.json" > /dev/null
 jq -e '.sources[0].data | length == 1' "$WORKDIR/inline.json" > /dev/null
+passed 'data list created'
+
+echo 'Test 3: JSON policy with a null data list'
 printf '%s\n' '{"sources":[{"data":null}]}' > "$WORKDIR/null.json"
 inject "$WORKDIR/null.json" "$WORKDIR/null-output.json" > /dev/null
 jq -e '.sources[0].data | length == 1' "$WORKDIR/null-output.json" > /dev/null
+passed 'null data list replaced with a list'
 
-# A local YAML file and a non-list data field fail with actionable errors.
+echo 'Test 4: YAML-formatted policy is rejected'
 printf 'sources:\n  - policy: []\n' > "$WORKDIR/policy.yaml"
 if inject "$WORKDIR/policy.yaml" "$WORKDIR/yaml-output.json" > "$WORKDIR/stdout" 2> "$WORKDIR/stderr"; then
   echo 'Expected a YAML policy to be rejected' >&2
   exit 1
 fi
 grep -q 'Policy must contain a single JSON object' "$WORKDIR/stderr"
+passed 'JSON-only error reported'
+
+echo 'Test 5: non-list data field is rejected'
 printf '%s\n' '{"sources":[{"data":{}}]}' > "$WORKDIR/bad-data.json"
 if inject "$WORKDIR/bad-data.json" "$WORKDIR/bad-output.json" > "$WORKDIR/stdout" 2> "$WORKDIR/stderr"; then
   echo 'Expected a non-list data field to be rejected' >&2
   exit 1
 fi
 grep -q 'sources\[0\].data must be a list' "$WORKDIR/stderr"
+passed 'invalid data field reported'
 
-printf 'inject-data-source.sh tests passed\n'
+printf '\nResults: %d passed, 0 failed\n\n' "$PASS"
