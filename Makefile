@@ -104,8 +104,13 @@ clean: ## Delete build output
 # tests at all, or no tests matching the specified tag
 TEST_OUTPUT_FILTER=grep -vE '0.0% of statements|\[no test files\]'
 
+.PHONY: test-bash
+test-bash: ## Run Bash script tests
+	@bash hack/pin-konflux-policy-bundle_test.sh
+	@bash hack/inject-data-source_test.sh
+
 .PHONY: test
-test: ## Run all unit tests
+test: ## Run Go unit, integration, and generative tests
 	@echo "Unit tests:"
 	@set -o pipefail && go test -race -covermode=atomic -coverprofile=coverage-unit.out -timeout 30s -tags=unit ./... | $(TEST_OUTPUT_FILTER)
 	@echo "Integration tests:"
@@ -232,7 +237,7 @@ tools-ci: ## Ensure all tools build cleanly
 	go run -modfile tools/go.mod github.com/open-policy-agent/conftest --version
 
 .PHONY: ci
-ci: test lint-fix acceptance tools-ci ## Run the usual required CI tasks
+ci: test test-bash lint-fix acceptance tools-ci ## Run the usual required CI tasks
 
 ##@ Linters
 

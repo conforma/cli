@@ -36,7 +36,7 @@ type Cluster interface {
 	CreateNamedNamespace(context.Context, string) error
 	CreateConfigMap(context.Context, string, string, string) error
 	Registry(context.Context) (string, error)
-	BuildSnapshotArtifact(context.Context, string) (context.Context, error)
+	BuildSnapshotArtifact(context.Context, string, map[string]string) (context.Context, error)
 }
 
 type TaskInfo struct {

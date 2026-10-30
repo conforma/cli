@@ -229,3 +229,4 @@ echo "Results: ${PASS} passed, ${FAIL} failed"
 if (( FAIL > 0 )); then
   exit 1
 fi
+echo ""

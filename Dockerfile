@@ -80,6 +80,9 @@ COPY hack/reduce-snapshot.sh /usr/local/bin/
 # Copy pin-konflux-policy-bundle script needed for policy bundle digest pinning
 COPY hack/pin-konflux-policy-bundle.sh /usr/local/bin/
 
+# Copy inject-data-source script needed for adding local policy data
+COPY hack/inject-data-source.sh /usr/local/bin/
+
 # OpenShift preflight check requires a license
 COPY --from=build /build/LICENSE /licenses/LICENSE
 
