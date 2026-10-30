@@ -174,6 +174,8 @@ deny contains "bad input" if input.bad
 	require.False(t, response.Success)
 	require.Len(t, response.Violations, 1)
 	require.Equal(t, "bad input", response.Violations[0].Message)
+	require.Empty(t, response.Successes)
+	require.Equal(t, 0, response.SuccessCount)
 }
 
 func TestEvaluateReturnsParseErrors(t *testing.T) {
@@ -237,6 +239,78 @@ deny contains "bad input" if missing.reference == true
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tt.want)
 		})
+	}
+}
+
+func TestEvaluateRejectsRestrictedBuiltins(t *testing.T) {
+	tests := []struct {
+		name    string
+		policy  string
+		builtin string
+	}{
+		{
+			name: "http send",
+			policy: `package main
+
+import rego.v1
+
+deny contains "bad input" if {
+	http.send({"method": "get", "url": "https://example.com"})
+}
+`,
+			builtin: "http.send",
+		},
+		{
+			name: "net lookup",
+			policy: `package main
+
+import rego.v1
+
+deny contains "bad input" if {
+	net.lookup_ip_addr("localhost")
+}
+`,
+			builtin: "net.lookup_ip_addr",
+		},
+		{
+			name: "opa runtime",
+			policy: `package main
+
+import rego.v1
+
+deny contains "bad input" if {
+	opa.runtime()
+}
+`,
+			builtin: "opa.runtime",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Evaluate(context.Background(), Request{
+				Policy: tt.policy,
+				Input:  `{}`,
+			})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "compile policy:")
+			require.Contains(t, err.Error(), "undefined function "+tt.builtin)
+		})
+	}
+}
+
+func TestPlaygroundCapabilitiesRestrictNetworkAndBuiltins(t *testing.T) {
+	capabilities := playgroundCapabilities()
+
+	require.Empty(t, capabilities.AllowNet)
+
+	builtins := map[string]bool{}
+	for _, builtin := range capabilities.Builtins {
+		builtins[builtin.Name] = true
+	}
+
+	for builtin := range disallowedBuiltins {
+		require.False(t, builtins[builtin], "expected %s to be disabled", builtin)
 	}
 }
 

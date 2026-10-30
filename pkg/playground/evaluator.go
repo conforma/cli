@@ -52,6 +52,12 @@ var (
 	warningRulePattern = regexp.MustCompile("^warn(_[a-zA-Z0-9]+)*$")
 )
 
+var disallowedBuiltins = map[string]bool{
+	"opa.runtime":        true,
+	"http.send":          true,
+	"net.lookup_ip_addr": true,
+}
+
 // Request contains inline policy playground inputs.
 type Request struct {
 	Policy  string
@@ -78,6 +84,8 @@ type Result struct {
 	Message  string         `json:"msg"`
 	Metadata map[string]any `json:"metadata,omitempty"`
 	Outputs  []string       `json:"outputs,omitempty"`
+
+	ruleName string
 }
 
 type module struct {
@@ -146,6 +154,7 @@ func Evaluate(ctx context.Context, request Request) (Response, error) {
 			return Response{}, fmt.Errorf("evaluate %s.%s: %w", pkg, ruleName, err)
 		}
 		for _, result := range results {
+			result.ruleName = ruleName
 			metadata := metadataForResult(result, rules, ruleName)
 			addRuleMetadata(&result, metadata.Info)
 			switch metadata.Kind {
@@ -239,6 +248,7 @@ func parseModules(policyText string) ([]module, error) {
 
 	for i := range modules {
 		parsed, err := ast.ParseModuleWithOpts(modules[i].Filename, modules[i].Source, ast.ParserOptions{
+			Capabilities:      playgroundCapabilities(),
 			ProcessAnnotation: true,
 		})
 		if err != nil {
@@ -257,7 +267,7 @@ func compileModules(modules []module) (*ast.Compiler, error) {
 		parsed[module.Filename] = module.AST
 	}
 
-	compiler := ast.NewCompiler()
+	compiler := ast.NewCompiler().WithCapabilities(playgroundCapabilities())
 	compiler.Compile(parsed)
 	if compiler.Failed() {
 		return nil, compiler.Errors
@@ -344,6 +354,7 @@ func evalRule(ctx context.Context, compiler *ast.Compiler, data map[string]any, 
 		rego.Input(input),
 		rego.Query(query),
 		rego.Store(inmem.NewFromObject(data)),
+		rego.Capabilities(playgroundCapabilities()),
 		rego.PrintHook(printHook),
 	}
 
@@ -463,6 +474,9 @@ func addRuleMetadata(result *Result, rule rule.Info) {
 func successes(rules []ruleMetadata, violations []Result, warnings []Result) []Result {
 	seen := map[string]bool{}
 	for _, result := range append(append([]Result{}, violations...), warnings...) {
+		if result.ruleName != "" {
+			seen[result.ruleName] = true
+		}
 		if code, ok := result.Metadata[metadataCode].(string); ok {
 			seen[code] = true
 		}
@@ -489,6 +503,20 @@ func successes(rules []ruleMetadata, violations []Result, warnings []Result) []R
 		results = append(results, result)
 	}
 	return results
+}
+
+func playgroundCapabilities() *ast.Capabilities {
+	capabilities := ast.CapabilitiesForThisVersion()
+	capabilities.AllowNet = []string{}
+
+	builtins := make([]*ast.Builtin, 0, len(capabilities.Builtins))
+	for _, builtin := range capabilities.Builtins {
+		if !disallowedBuiltins[builtin.Name] {
+			builtins = append(builtins, builtin)
+		}
+	}
+	capabilities.Builtins = builtins
+	return capabilities
 }
 
 // MarshalResponse renders the playground response in the same stable format the
