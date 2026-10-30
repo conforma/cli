@@ -105,7 +105,7 @@ clean: ## Delete build output
 TEST_OUTPUT_FILTER=grep -vE '0.0% of statements|\[no test files\]'
 
 .PHONY: test
-test: hack-test ## Run all unit tests
+test: ## Run Go unit, integration, and generative tests
 	@echo "Unit tests:"
 	@set -o pipefail && go test -race -covermode=atomic -coverprofile=coverage-unit.out -timeout 30s -tags=unit ./... | $(TEST_OUTPUT_FILTER)
 	@echo "Integration tests:"
@@ -115,9 +115,13 @@ test: hack-test ## Run all unit tests
 	@echo "Generative tests:"
 	@set -o pipefail && go test -race -covermode=atomic -coverprofile=coverage-generative.out -timeout 30s -tags=generative ./... | $(TEST_OUTPUT_FILTER)
 
-.PHONY: hack-test
-hack-test:
-	@bash hack/sync-build-definitions-pipeline_test.sh
+.PHONY: test-bash
+test-bash: ## Run bash script tests in hack directory
+	@for t in hack/*_test.sh; do \
+	  echo "---- $$t ----"; \
+	  bash "$$t"; \
+	  echo ""
+	done
 
 ACCEPTANCE_TIMEOUT:=20m
 .ONESHELL:
@@ -236,7 +240,7 @@ tools-ci: ## Ensure all tools build cleanly
 	go run -modfile tools/go.mod github.com/open-policy-agent/conftest --version
 
 .PHONY: ci
-ci: test lint-fix acceptance tools-ci ## Run the usual required CI tasks
+ci: test test-bash lint-fix acceptance tools-ci ## Run the usual required CI tasks
 
 ##@ Linters
 
