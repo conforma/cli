@@ -20,8 +20,12 @@ package playground
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
+	"github.com/open-policy-agent/opa/v1/ast"
+	"github.com/open-policy-agent/opa/v1/topdown/print"
 	"github.com/stretchr/testify/require"
 )
 
@@ -170,6 +174,142 @@ deny contains "bad input" if input.bad
 	require.False(t, response.Success)
 	require.Len(t, response.Violations, 1)
 	require.Equal(t, "bad input", response.Violations[0].Message)
+}
+
+func TestEvaluateReturnsParseErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		request Request
+		want    string
+	}{
+		{
+			name: "input",
+			request: Request{
+				Policy: `package main
+
+import rego.v1
+
+deny contains "bad input" if input.bad
+`,
+				Input: `{"bad":`,
+			},
+			want: "parse input:",
+		},
+		{
+			name: "data must be object",
+			request: Request{
+				Policy: `package main
+
+import rego.v1
+
+deny contains "bad input" if input.bad
+`,
+				Input: `{}`,
+				Data:  `["not", "an", "object"]`,
+			},
+			want: "parse data: data must be a JSON or YAML object",
+		},
+		{
+			name: "empty policy",
+			request: Request{
+				Input: `{}`,
+			},
+			want: "parse policy: no Rego modules provided",
+		},
+		{
+			name: "compile policy",
+			request: Request{
+				Policy: `package main
+
+import rego.v1
+
+deny contains "bad input" if missing.reference == true
+`,
+				Input: `{}`,
+			},
+			want: "compile policy:",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Evaluate(context.Background(), tt.request)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tt.want)
+		})
+	}
+}
+
+func TestAppendValueHandlesScalarAndNestedResults(t *testing.T) {
+	results := appendValue(nil, []any{
+		nil,
+		true,
+		false,
+		"bad input",
+		[]any{"nested"},
+		42,
+		map[string]any{
+			"msg":  "object result",
+			"code": "main.object",
+		},
+	})
+
+	require.Len(t, results, 5)
+	require.Empty(t, results[0].Message)
+	require.Equal(t, "bad input", results[1].Message)
+	require.Equal(t, "nested", results[2].Message)
+	require.Equal(t, "unexpected policy result type int: 42", results[3].Message)
+	require.Equal(t, "object result", results[4].Message)
+	require.Equal(t, "main.object", results[4].Metadata["code"])
+}
+
+func TestMarshalResponse(t *testing.T) {
+	out := MarshalResponse(Response{
+		Success:      true,
+		SuccessCount: 1,
+		Successes: []Result{{
+			Message: "Pass",
+			Metadata: map[string]any{
+				"code": "main.ok",
+			},
+		}},
+	})
+
+	var response Response
+	require.NoError(t, json.Unmarshal([]byte(out), &response))
+	require.True(t, response.Success)
+	require.Equal(t, 1, response.SuccessCount)
+	require.Equal(t, "main.ok", response.Successes[0].Metadata["code"])
+}
+
+func TestMarshalResponseFallback(t *testing.T) {
+	out := MarshalResponse(Response{
+		Violations: []Result{{
+			Metadata: map[string]any{
+				"unsupported": func() {},
+			},
+		}},
+	})
+
+	require.Contains(t, out, "json: unsupported type: func()")
+}
+
+func TestOpaPrintHookIncludesLocation(t *testing.T) {
+	outputs := []string{}
+	hook := opaPrintHook{s: &outputs}
+
+	err := hook.Print(print.Context{
+		Location: &ast.Location{
+			File: "playground.rego",
+			Row:  12,
+			Col:  3,
+		},
+	}, "hello")
+
+	require.NoError(t, err)
+	require.Len(t, outputs, 1)
+	require.True(t, strings.HasSuffix(outputs[0], "hello"))
+	require.Contains(t, outputs[0], "playground.rego")
 }
 
 func requireResult(t *testing.T, results []Result, code string, msg string) {
