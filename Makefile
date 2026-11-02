@@ -105,7 +105,7 @@ clean: ## Delete build output
 TEST_OUTPUT_FILTER=grep -vE '0.0% of statements|\[no test files\]'
 
 .PHONY: test
-test: ## Run all unit tests
+test: hack-test ## Run all unit tests
 	@echo "Unit tests:"
 	@set -o pipefail && go test -race -covermode=atomic -coverprofile=coverage-unit.out -timeout 30s -tags=unit ./... | $(TEST_OUTPUT_FILTER)
 	@echo "Integration tests:"
@@ -114,6 +114,10 @@ test: ## Run all unit tests
 # to 30s to accommodate many samples being generated and test cases being run.
 	@echo "Generative tests:"
 	@set -o pipefail && go test -race -covermode=atomic -coverprofile=coverage-generative.out -timeout 30s -tags=generative ./... | $(TEST_OUTPUT_FILTER)
+
+.PHONY: hack-test
+hack-test:
+	@bash hack/sync-build-definitions-pipeline_test.sh
 
 ACCEPTANCE_TIMEOUT:=20m
 .ONESHELL:
