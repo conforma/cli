@@ -42,6 +42,8 @@ import (
 
 type key int
 
+type trustedArtifactFilesKey struct{}
+
 const (
 	clusterStateKey = key(0) // we store the ClusterState struct under this key in Context and when persisted
 	stopStateKey    = key(iota)
@@ -113,6 +115,20 @@ func createNamespace(ctx context.Context) (context.Context, error) {
 	return c.cluster.CreateNamespace(ctx)
 }
 
+func addTrustedArtifactFile(ctx context.Context, filename string, content *godog.DocString) (context.Context, error) {
+	if filename == "snapshotartifact" || filename == "snapshotartifact.tar.gz" || filename == "." || filename == ".." || strings.Contains(filename, "/") {
+		return ctx, fmt.Errorf("invalid trusted artifact filename: %q", filename)
+	}
+
+	files, _ := ctx.Value(trustedArtifactFilesKey{}).(map[string]string)
+	files = maps.Clone(files)
+	if files == nil {
+		files = make(map[string]string)
+	}
+	files[filename] = content.Content
+	return context.WithValue(ctx, trustedArtifactFilesKey{}, files), nil
+}
+
 func buildSnapshotArtifact(ctx context.Context, specification *godog.DocString) (context.Context, error) {
 	c := testenv.FetchState[ClusterState](ctx)
 
@@ -120,8 +136,8 @@ func buildSnapshotArtifact(ctx context.Context, specification *godog.DocString) 
 		return ctx, err
 	}
 
-	return c.cluster.BuildSnapshotArtifact(ctx, specification.Content)
-
+	files, _ := ctx.Value(trustedArtifactFilesKey{}).(map[string]string)
+	return c.cluster.BuildSnapshotArtifact(ctx, specification.Content, files)
 }
 
 func createNamedPolicy(ctx context.Context, name string, specification *godog.DocString) error {
@@ -499,6 +515,7 @@ func AddStepsTo(sc *godog.ScenarioContext) {
 	sc.Step(`^a cluster running$`, startAndSetupState(kind.Start))
 	sc.Step(`^a working namespace$`, createNamespace)
 	sc.Step(`^a snapshot artifact with content:$`, buildSnapshotArtifact)
+	sc.Step(`^a runtime data file named "([^"]*)" in the snapshot trusted artifact with content:$`, addTrustedArtifactFile)
 	sc.Step(`^policy configuration named "([^"]*)" with specification$`, createNamedPolicy)
 	sc.Step(`^a cluster policy with content:$`, createPolicy)
 	sc.Step(`^version ([\d.]+) of the task named "([^"]*)" is run with parameters:$`, runTask)

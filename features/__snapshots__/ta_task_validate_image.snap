@@ -202,3 +202,110 @@ Modified policy written to: /tekton/home/policy-with-pinned-bundle.yaml
   "effective-time": "${TIMESTAMP}"
 }
 ---
+
+[TestFeatures/Inject runtime data from a trusted artifact:show-config - 1]
+{
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "file::/opt/acceptance/runtime-policy"
+        ],
+        "data": [
+          "file::/var/workdir/data-source-${RANDOM}"
+        ],
+        "config": {
+          "include": [
+            "runtime_extra"
+          ]
+        }
+      }
+    ],
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----"
+  },
+  "key": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----\n",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[TestFeatures/Pin the policy bundle and inject runtime data:show-config - 1]
+{
+  "policy": {
+    "sources": [
+      {
+        "policy": [
+          "oci::quay.io/conforma/release-policy@sha256:2a851b5d56259ba46391f72bc4e75ed5475510dce5ae47d054b72baf1e908d26",
+          "file::/opt/acceptance/runtime-policy"
+        ],
+        "data": [
+          "file::/var/workdir/data-source-${RANDOM}"
+        ],
+        "config": {
+          "include": [
+            "runtime_extra"
+          ]
+        }
+      }
+    ],
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----"
+  },
+  "key": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\n-----END PUBLIC KEY-----\n",
+  "effective-time": "${TIMESTAMP}"
+}
+---
+
+[TestFeatures/Inject runtime data from a trusted artifact:detailed-report - 1]
+Success: true
+Result: WARNING
+Violations: 0, Warnings: 1, Successes: 4
+Component: 
+ImageRef: quay.io/hacbs-contract-demo/golden-container@sha256:e76a4ae9dd8a52a0d191fd34ca133af5b4f2609536d32200a4a40a09fdc93a0d
+
+Results:
+› [Warning] runtime_extra.bacon_check
+  ImageRef: quay.io/hacbs-contract-demo/golden-container@sha256:e76a4ae9dd8a52a0d191fd34ca133af5b4f2609536d32200a4a40a09fdc93a0d
+  Reason: Bacon not found
+  Title: Runtime extra data warning
+  Description: Just so we can see something in the text output snaps
+
+For more information about policy issues, see the policy documentation: https://conforma.dev/docs/policy/
+
+---
+
+[TestFeatures/Pin the policy bundle and inject runtime data:detailed-report - 1]
+Success: true
+Result: WARNING
+Violations: 0, Warnings: 1, Successes: 4
+Component: 
+ImageRef: quay.io/hacbs-contract-demo/golden-container@sha256:e76a4ae9dd8a52a0d191fd34ca133af5b4f2609536d32200a4a40a09fdc93a0d
+
+Results:
+› [Warning] runtime_extra.bacon_check
+  ImageRef: quay.io/hacbs-contract-demo/golden-container@sha256:e76a4ae9dd8a52a0d191fd34ca133af5b4f2609536d32200a4a40a09fdc93a0d
+  Reason: Bacon not found
+  Title: Runtime extra data warning
+  Description: Just so we can see something in the text output snaps
+
+For more information about policy issues, see the policy documentation: https://conforma.dev/docs/policy/
+
+---
+
+[TestFeatures/Inject runtime data from a trusted artifact:inject-runtime-data - 1]
+Data from /var/workdir/conforma/runtime_extra.json written to /var/workdir/data-source-${RANDOM}/data.json
+Data source file:///var/workdir/data-source-${RANDOM} added to /var/workdir/policy-with-runtime-data.yaml
+
+---
+
+[TestFeatures/Pin the policy bundle and inject runtime data:pin-policy-bundle - 1]
+Applying policy bundle digest override: sha256:2a851b5d56259ba46391f72bc4e75ed5475510dce5ae47d054b72baf1e908d26
+Replaced: oci::quay.io/conforma/release-policy:konflux
+    with: oci::quay.io/conforma/release-policy@sha256:2a851b5d56259ba46391f72bc4e75ed5475510dce5ae47d054b72baf1e908d26
+Modified policy written to: /tekton/home/policy-with-pinned-bundle.yaml
+
+---
+
+[TestFeatures/Pin the policy bundle and inject runtime data:inject-runtime-data - 1]
+Data from /var/workdir/conforma/runtime_extra.json written to /var/workdir/data-source-${RANDOM}/data.json
+Data source file:///var/workdir/data-source-${RANDOM} added to /var/workdir/policy-with-runtime-data.yaml
+
+---

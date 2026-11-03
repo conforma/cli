@@ -61,6 +61,8 @@ paths can be provided by using the `:` separator.
 +
 *Default*: `false`
 *EXTRA_RULE_DATA* (`string`):: Merge additional Rego variables into the policy data. Use syntax "key=value,key2=value2..."
+*RUNTIME_DATA* (`string`):: Optional path to a JSON file accessible in the inject-runtime-data step (for example, /var/workdir/conforma/extra/data.json in the extracted trusted artifact). Its contents are added to the policy data under RUNTIME_DATA_KEY. When set, POLICY_CONFIGURATION must be an ECP name, inline JSON, or a local JSON file; YAML-formatted files and Git policy references are not supported.
+*RUNTIME_DATA_KEY* (`string`):: Top-level policy data key for RUNTIME_DATA. Required when RUNTIME_DATA is set.
 *POLICY_BUNDLE_DIGEST* (`string`):: Optional OCI digest to pin the release policy bundle. When provided, the policy configuration is resolved and the reference oci::quay.io/conforma/release-policy:konflux is replaced with oci::quay.io/conforma/release-policy@<digest>. Accepts a full digest (sha256:abc123...) or just the hex hash (abc123...).
 *WORKERS* (`string`):: Number of parallel workers to use for policy evaluation.
 

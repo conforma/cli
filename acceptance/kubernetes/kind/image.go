@@ -28,6 +28,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	imagespecv1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -147,8 +148,8 @@ func (k *kindCluster) buildCliImage(ctx context.Context) error {
 }
 
 // computeSourceHash computes a SHA-256 hash of all build inputs for the CLI
-// image: Go source files, go.mod, go.sum, Dockerfile, build.sh, Makefile, and
-// hack/reduce-snapshot.sh. Returns a hex-encoded digest string.
+// image: Go source files, module files, Dockerfiles, build scripts, and
+// scripts copied into the image. Returns a hex-encoded digest string.
 func computeSourceHash() (string, error) {
 	h := sha256.New()
 
@@ -161,8 +162,11 @@ func computeSourceHash() (string, error) {
 		"Makefile",
 		"hack/derive-version.sh",
 		"hack/reduce-snapshot.sh",
+		"hack/pin-konflux-policy-bundle.sh",
+		"hack/inject-data-source.sh",
 		"tools/kubectl/go.mod",
 		"tools/kubectl/go.sum",
+		"acceptance/examples/runtime_extra.rego",
 		"acceptance/kubernetes/kind/acceptance.Dockerfile",
 	}
 	for _, f := range buildFiles {
@@ -318,8 +322,8 @@ func (k *kindCluster) buildTaskBundleImage(ctx context.Context) error {
 	return g.Wait()
 }
 
-// builds a snapshot oci artifact for use with build trusted artifacts
-func (k *kindCluster) BuildSnapshotArtifact(ctx context.Context, content string) (context.Context, error) {
+// BuildSnapshotArtifact packages the Snapshot and any extra files in one OCI trusted artifact.
+func (k *kindCluster) BuildSnapshotArtifact(ctx context.Context, content string, extraFiles map[string]string) (context.Context, error) {
 	filePath := "snapshotartifact"
 
 	// #nosec G306 -- reduce-snapshot.sh needs these permissions
@@ -328,7 +332,7 @@ func (k *kindCluster) BuildSnapshotArtifact(ctx context.Context, content string)
 	}
 
 	tarGzPath := filePath + ".tar.gz"
-	if err := tarGzipFile(filePath, tarGzPath); err != nil {
+	if err := tarGzipFile(filePath, tarGzPath, extraFiles); err != nil {
 		return ctx, fmt.Errorf("failed to tar and gzip file: %w", err)
 	}
 
@@ -418,8 +422,8 @@ func copyFile(src, dst string) error {
 	return err
 }
 
-// Tar and gzip a file. Used with trusted artifacts.
-func tarGzipFile(source, target string) error {
+// Tar and gzip a file and any extra files in a trusted artifact.
+func tarGzipFile(source, target string, extraFiles map[string]string) error {
 	srcFile, err := os.Open(source)
 	if err != nil {
 		return fmt.Errorf("opening source file: %w", err)
@@ -456,6 +460,21 @@ func tarGzipFile(source, target string) error {
 
 	if _, err := io.Copy(tw, srcFile); err != nil {
 		return fmt.Errorf("copying file content into tar: %w", err)
+	}
+
+	names := make([]string, 0, len(extraFiles))
+	for name := range extraFiles {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		content := []byte(extraFiles[name])
+		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(content))}); err != nil {
+			return fmt.Errorf("writing tar header for %s: %w", name, err)
+		}
+		if _, err := tw.Write(content); err != nil {
+			return fmt.Errorf("writing %s into tar: %w", name, err)
+		}
 	}
 
 	return nil

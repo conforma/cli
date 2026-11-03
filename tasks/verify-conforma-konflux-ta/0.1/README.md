@@ -33,6 +33,8 @@ kubectl apply -f https://raw.githubusercontent.com/conforma/cli/main/tasks/verif
 * **HOMEDIR**: Value for the HOME environment variable. (default: "/tekton/home")
 * **EFFECTIVE_TIME**: Run policy checks with the provided time. (default: "now")
 * **EXTRA_RULE_DATA**: Merge additional Rego variables into the policy data. Use syntax "key=value,key2=value2..." (default: "")
+* **RUNTIME_DATA**: Optional path to a JSON file accessible to the inject-runtime-data step, such as one extracted from a trusted artifact. When set, POLICY_CONFIGURATION must be an ECP name, inline JSON, or a local JSON file; YAML-formatted files and Git policy references are not supported. (default: "")
+* **RUNTIME_DATA_KEY**: Top-level policy data key for RUNTIME_DATA; required when RUNTIME_DATA is set. (default: "")
 * **WORKERS**: Number of parallel workers to use for policy evaluation. Note: managed release pipelines in `release-service-catalog` override this to 35 via `conforma.workerCount` in `konflux-release-data`. (default: "5")
 * **SINGLE_COMPONENT**: Reduce the Snapshot to only the component whose build caused the Snapshot to be created (default: "false")
 * **SINGLE_COMPONENT_CUSTOM_RESOURCE**: Name, including kind, of the Kubernetes resource to query for labels when single component mode is enabled, e.g. pr/somepipeline. (default: "unknown")
