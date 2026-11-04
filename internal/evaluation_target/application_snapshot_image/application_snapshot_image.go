@@ -38,6 +38,7 @@ import (
 
 	"github.com/conforma/cli/internal/attestation"
 	"github.com/conforma/cli/internal/evaluator"
+	"github.com/conforma/cli/internal/evidence"
 	"github.com/conforma/cli/internal/fetchers/oci/config"
 	"github.com/conforma/cli/internal/fetchers/oci/files"
 	"github.com/conforma/cli/internal/policy"
@@ -54,31 +55,33 @@ var attestationSchemas = map[string]*jsonschema.Schema{
 
 // ApplicationSnapshotImage represents the structure needed to evaluate an Application Snapshot Image
 type ApplicationSnapshotImage struct {
-	reference        name.Reference
-	checkOpts        cosign.CheckOpts
-	signatures       []signature.EntitySignature
-	configJSON       json.RawMessage
-	parentConfigJSON json.RawMessage
-	parentRef        name.Reference
-	attestations     []attestation.Attestation
-	Evaluators       []evaluator.Evaluator
-	files            map[string]json.RawMessage
-	component        app.SnapshotComponent
-	snapshot         app.SnapshotSpec
-	policySpec       ecc.EnterpriseContractPolicySpec
+	reference          name.Reference
+	checkOpts          cosign.CheckOpts
+	signatures         []signature.EntitySignature
+	configJSON         json.RawMessage
+	parentConfigJSON   json.RawMessage
+	parentRef          name.Reference
+	attestations       []attestation.Attestation
+	attestationSources []evidence.AttestationSource
+	Evaluators         []evaluator.Evaluator
+	files              map[string]json.RawMessage
+	component          app.SnapshotComponent
+	snapshot           app.SnapshotSpec
+	policySpec         ecc.EnterpriseContractPolicySpec
 }
 
 // NewApplicationSnapshotImage returns an ApplicationSnapshotImage struct with reference, checkOpts, and evaluator ready to use.
-func NewApplicationSnapshotImage(ctx context.Context, component app.SnapshotComponent, p policy.Policy, snap app.SnapshotSpec) (*ApplicationSnapshotImage, error) {
+func NewApplicationSnapshotImage(ctx context.Context, component app.SnapshotComponent, p policy.Policy, snap app.SnapshotSpec, sources ...evidence.AttestationSource) (*ApplicationSnapshotImage, error) {
 	opts, err := p.CheckOpts()
 	if err != nil {
 		return nil, err
 	}
 	a := &ApplicationSnapshotImage{
-		checkOpts:  *opts,
-		component:  component,
-		snapshot:   snap,
-		policySpec: p.Spec(),
+		checkOpts:          *opts,
+		component:          component,
+		snapshot:           snap,
+		policySpec:         p.Spec(),
+		attestationSources: sources,
 	}
 
 	if err := a.SetImageURL(component.ContainerImage); err != nil {
@@ -210,6 +213,27 @@ func (a *ApplicationSnapshotImage) ValidateImageSignature(ctx context.Context) e
 // ValidateAttestationSignature verifies and collects in-toto attestations
 // attached to the image.
 func (a *ApplicationSnapshotImage) ValidateAttestationSignature(ctx context.Context) error {
+	if len(a.attestationSources) > 0 {
+		ref, err := name.NewDigest(a.reference.Name())
+		if err != nil {
+			return fmt.Errorf("attestation sources require a resolved image digest: %w", err)
+		}
+		var collected []attestation.Attestation
+		var failures error
+		for _, source := range a.attestationSources {
+			records, err := source.Collect(ctx, ref)
+			if err != nil {
+				failures = errors.Join(failures, fmt.Errorf("attestation source %v: %w", source, err))
+				continue
+			}
+			collected = append(collected, records...)
+		}
+		if failures != nil {
+			return failures
+		}
+		a.attestations = collected
+		return nil
+	}
 	opts := a.checkOpts
 	opts.ClaimVerifier = cosign.IntotoSubjectClaimVerifier
 

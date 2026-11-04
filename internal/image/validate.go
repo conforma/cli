@@ -31,24 +31,35 @@ import (
 	"github.com/conforma/cli/internal/attestation"
 	"github.com/conforma/cli/internal/evaluation_target/application_snapshot_image"
 	"github.com/conforma/cli/internal/evaluator"
+	"github.com/conforma/cli/internal/evidence"
 	"github.com/conforma/cli/internal/output"
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/validate/vsa"
 )
 
+// ValidationOptions supplies immutable attestation sources shared by workers.
+// A nil source set preserves the existing OCI-only verification path.
+type ValidationOptions struct {
+	Detailed           bool
+	AttestationSources []evidence.AttestationSource
+}
+
 // ValidateImage executes the required method calls to evaluate a given policy
 // against a given image url.
-func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.SnapshotSpec, p policy.Policy, evaluators []evaluator.Evaluator, detailed bool) (*output.Output, error) {
+func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.SnapshotSpec, p policy.Policy, evaluators []evaluator.Evaluator, options ValidationOptions) (*output.Output, error) {
 	if trace.IsEnabled() {
 		region := trace.StartRegion(ctx, "ec:validate-image")
 		defer region.End()
 		trace.Logf(ctx, "", "image=%q", comp.ContainerImage)
 	}
 
+	if len(options.AttestationSources) > 0 && p.SkipAttSigCheck() {
+		return nil, fmt.Errorf("attestation sources cannot be used with --skip-att-sig-check")
+	}
 	log.Debugf("Validating image %s", comp.ContainerImage)
 
-	out := &output.Output{ImageURL: comp.ContainerImage, Detailed: detailed, Policy: p}
-	a, err := application_snapshot_image.NewApplicationSnapshotImage(ctx, comp, p, *snap)
+	out := &output.Output{ImageURL: comp.ContainerImage, Detailed: options.Detailed, Policy: p}
+	a, err := application_snapshot_image.NewApplicationSnapshotImage(ctx, comp, p, *snap, options.AttestationSources...)
 	if err != nil {
 		log.Debug("Failed to create application snapshot image!")
 		return nil, err
@@ -173,11 +184,16 @@ func ValidateImage(ctx context.Context, comp app.SnapshotComponent, snap *app.Sn
 // ValidateImageWithVSACheck executes validation with full VSA verification.
 // If a valid VSA exists (signature verified, predicate passed, policy equivalent),
 // validation is skipped. Otherwise, full image validation proceeds.
-func ValidateImageWithVSACheck(ctx context.Context, comp app.SnapshotComponent, snap *app.SnapshotSpec, p policy.Policy, evaluators []evaluator.Evaluator, detailed bool, vsaConfig *vsa.VSAValidationConfig) (*output.Output, error) {
+func ValidateImageWithVSACheck(ctx context.Context, comp app.SnapshotComponent, snap *app.SnapshotSpec, p policy.Policy, evaluators []evaluator.Evaluator, options ValidationOptions, vsaConfig *vsa.VSAValidationConfig) (*output.Output, error) {
 	if trace.IsEnabled() {
 		region := trace.StartRegion(ctx, "ec:validate-image-with-vsa-check")
 		defer region.End()
 		trace.Logf(ctx, "", "image=%q vsa-expiration=%v", comp.ContainerImage, vsaConfig.VSAExpiration)
+	}
+
+	// A VSA does not bind filesystem evidence. Always run full validation.
+	if len(options.AttestationSources) > 0 {
+		return ValidateImage(ctx, comp, snap, p, evaluators, options)
 	}
 
 	// Run full VSA validation: signature, predicate status, policy equivalence
@@ -200,7 +216,7 @@ func ValidateImageWithVSACheck(ctx context.Context, comp app.SnapshotComponent, 
 
 	// Perform normal validation when no valid VSA is found
 	log.Debugf("Performing full validation for image %s", comp.ContainerImage)
-	return ValidateImage(ctx, comp, snap, p, evaluators, detailed)
+	return ValidateImage(ctx, comp, snap, p, evaluators, options)
 }
 
 func resolveAndSetImageUrl(ctx context.Context, url string, asi *application_snapshot_image.ApplicationSnapshotImage) (string, error) {

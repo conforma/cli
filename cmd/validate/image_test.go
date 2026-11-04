@@ -48,6 +48,7 @@ import (
 
 	"github.com/conforma/cli/internal/applicationsnapshot"
 	"github.com/conforma/cli/internal/evaluator"
+	"github.com/conforma/cli/internal/image"
 	"github.com/conforma/cli/internal/output"
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/policy/source"
@@ -110,7 +111,7 @@ var rootArgs = []string{
 }
 
 func happyValidator() imageValidationFunc {
-	return func(_ context.Context, component app.SnapshotComponent, _ *app.SnapshotSpec, _ policy.Policy, _ []evaluator.Evaluator, _ bool) (*output.Output, error) {
+	return func(_ context.Context, component app.SnapshotComponent, _ *app.SnapshotSpec, _ policy.Policy, _ []evaluator.Evaluator, _ image.ValidationOptions) (*output.Output, error) {
 		return &output.Output{
 			ImageSignatureCheck: output.VerificationStatus{
 				Passed: true,
@@ -480,7 +481,7 @@ func Test_ValidateImageCommandImages(t *testing.T) {
 
 func Test_ValidateImageCommandKeyless(t *testing.T) {
 	called := false
-	validateImageCmd := validateImageCmd(func(_ context.Context, _ app.SnapshotComponent, _ *app.SnapshotSpec, p policy.Policy, _ []evaluator.Evaluator, _ bool) (*output.Output, error) {
+	validateImageCmd := validateImageCmd(func(_ context.Context, _ app.SnapshotComponent, _ *app.SnapshotSpec, p policy.Policy, _ []evaluator.Evaluator, _ image.ValidationOptions) (*output.Output, error) {
 		assert.Equal(t, cosign.Identity{
 			Issuer:        "my-certificate-oidc-issuer",
 			Subject:       "my-certificate-identity",
@@ -949,7 +950,7 @@ unable to parse EnterpriseContractPolicySpec: error converting YAML to JSON: yam
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			validate := func(context.Context, app.SnapshotComponent, *app.SnapshotSpec, policy.Policy, []evaluator.Evaluator, bool) (*output.Output, error) {
+			validate := func(context.Context, app.SnapshotComponent, *app.SnapshotSpec, policy.Policy, []evaluator.Evaluator, image.ValidationOptions) (*output.Output, error) {
 				return nil, errors.New("expected")
 			}
 
@@ -979,7 +980,7 @@ unable to parse EnterpriseContractPolicySpec: error converting YAML to JSON: yam
 }
 
 func Test_FailureImageAccessibility(t *testing.T) {
-	validate := func(_ context.Context, component app.SnapshotComponent, _ *app.SnapshotSpec, _ policy.Policy, _ []evaluator.Evaluator, _ bool) (*output.Output, error) {
+	validate := func(_ context.Context, component app.SnapshotComponent, _ *app.SnapshotSpec, _ policy.Policy, _ []evaluator.Evaluator, _ image.ValidationOptions) (*output.Output, error) {
 		return &output.Output{
 			ImageSignatureCheck: output.VerificationStatus{
 				Passed: false,
@@ -1050,7 +1051,7 @@ func Test_FailureImageAccessibility(t *testing.T) {
 }
 
 func Test_FailureOutput(t *testing.T) {
-	validate := func(_ context.Context, component app.SnapshotComponent, _ *app.SnapshotSpec, _ policy.Policy, _ []evaluator.Evaluator, _ bool) (*output.Output, error) {
+	validate := func(_ context.Context, component app.SnapshotComponent, _ *app.SnapshotSpec, _ policy.Policy, _ []evaluator.Evaluator, _ image.ValidationOptions) (*output.Output, error) {
 		return &output.Output{
 			ImageSignatureCheck: output.VerificationStatus{
 				Passed: false,
@@ -1119,7 +1120,7 @@ func Test_FailureOutput(t *testing.T) {
 }
 
 func Test_WarningOutput(t *testing.T) {
-	validate := func(_ context.Context, component app.SnapshotComponent, _ *app.SnapshotSpec, _ policy.Policy, _ []evaluator.Evaluator, _ bool) (*output.Output, error) {
+	validate := func(_ context.Context, component app.SnapshotComponent, _ *app.SnapshotSpec, _ policy.Policy, _ []evaluator.Evaluator, _ image.ValidationOptions) (*output.Output, error) {
 		return &output.Output{
 			ImageSignatureCheck: output.VerificationStatus{
 				Passed: true,
@@ -1193,7 +1194,7 @@ func Test_WarningOutput(t *testing.T) {
 }
 
 func Test_FailureImageAccessibilityNonStrict(t *testing.T) {
-	validate := func(_ context.Context, component app.SnapshotComponent, _ *app.SnapshotSpec, _ policy.Policy, _ []evaluator.Evaluator, _ bool) (*output.Output, error) {
+	validate := func(_ context.Context, component app.SnapshotComponent, _ *app.SnapshotSpec, _ policy.Policy, _ []evaluator.Evaluator, _ image.ValidationOptions) (*output.Output, error) {
 		return &output.Output{
 			ImageSignatureCheck: output.VerificationStatus{
 				Passed: true,
@@ -1579,7 +1580,7 @@ func TestValidateImageCommand_VSAPublicKeyRequired(t *testing.T) {
 
 func TestValidateImageCommand_ShowWarningsFlag(t *testing.T) {
 	// Create a validator that returns warnings
-	warningValidator := func(_ context.Context, component app.SnapshotComponent, _ *app.SnapshotSpec, _ policy.Policy, _ []evaluator.Evaluator, _ bool) (*output.Output, error) {
+	warningValidator := func(_ context.Context, component app.SnapshotComponent, _ *app.SnapshotSpec, _ policy.Policy, _ []evaluator.Evaluator, _ image.ValidationOptions) (*output.Output, error) {
 		return &output.Output{
 			ImageSignatureCheck: output.VerificationStatus{
 				Passed: true,
@@ -2239,4 +2240,29 @@ func TestVSAGeneration_WithOutputDir(t *testing.T) {
 			// but we're testing that the output directory logic is executed correctly
 		})
 	}
+}
+
+func TestEvidenceOptionGuards(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"missing keys", []string{"--evidence", "chi.json"}, "requires --evidence-key"},
+		{"keys without files", []string{"--evidence-key", "https://example.invalid/chi/v1=chi.pub"}, "requires --evidence"},
+		{"verification bypass", []string{"--evidence", "chi.json", "--evidence-key", "https://example.invalid/chi/v1=chi.pub", "--skip-att-sig-check"}, "cannot be used with --skip-att-sig-check"},
+		{"VSA generation", []string{"--evidence", "chi.json", "--evidence-key", "https://example.invalid/chi/v1=chi.pub", "--vsa"}, "does not yet support VSA"},
+		{"VSA output", []string{"--evidence", "chi.json", "--evidence-key", "https://example.invalid/chi/v1=chi.pub", "--output", "vsa=out.json"}, "does not yet support --output vsa"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := validateImageCmd(happyValidator())
+			require.NoError(t, cmd.ParseFlags(tc.args))
+			require.ErrorContains(t, cmd.PreRunE(cmd, nil), tc.want)
+		})
+	}
+	cmd := validateImageCmd(happyValidator())
+	require.NoError(t, cmd.ParseFlags([]string{"--evidence", "a,b.json", "--evidence", "c.json"}))
+	paths, err := cmd.Flags().GetStringArray("evidence")
+	require.NoError(t, err)
+	require.Equal(t, []string{"a,b.json", "c.json"}, paths)
 }
