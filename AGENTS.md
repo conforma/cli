@@ -54,6 +54,17 @@ Go source files in this repository place the SPDX license header comment
 before the `//go:build` tag. This is the established convention across
 all Go files — do not flag build tag placement as a style violation.
 
+## License Header Enforcement
+
+`make lint` runs `addlicense -check` on all git-tracked files. Every tracked file
+must have an Apache 2.0 SPDX license header unless it is in the ignore list:
+`dist/`, `acceptance/examples/`, `configs/`, `node_modules/`, `hack/**/charts/`,
+`.tekton/`, `.ec/`.
+
+This includes non-Go files such as `rpms.lock.yaml` and other YAML/JSON files.
+When reviewing PRs that regenerate files (e.g., bot lockfile refreshes), verify
+that license headers are preserved. A missing header will fail `make lint`.
+
 ## Security fix review expectations
 
 Security bug fixes and vulnerability mitigations (PRs labeled `bug` +
