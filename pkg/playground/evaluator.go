@@ -267,7 +267,9 @@ func compileModules(modules []module) (*ast.Compiler, error) {
 		parsed[module.Filename] = module.AST
 	}
 
-	compiler := ast.NewCompiler().WithCapabilities(playgroundCapabilities())
+	compiler := ast.NewCompiler().
+		WithCapabilities(playgroundCapabilities()).
+		WithEnablePrintStatements(true)
 	compiler.Compile(parsed)
 	if compiler.Failed() {
 		return nil, compiler.Errors

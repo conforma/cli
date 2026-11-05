@@ -178,6 +178,26 @@ deny contains "bad input" if input.bad
 	require.Equal(t, 0, response.SuccessCount)
 }
 
+func TestEvaluateCapturesPrintOutput(t *testing.T) {
+	response, err := Evaluate(context.Background(), Request{
+		Policy: `package main
+
+import rego.v1
+
+deny contains "bad input" if {
+	print("x")
+	input.bad
+}
+`,
+		Input: `bad: true`,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, response.Violations, 1)
+	require.Len(t, response.Violations[0].Outputs, 1)
+	require.True(t, strings.HasSuffix(response.Violations[0].Outputs[0], "x"))
+}
+
 func TestEvaluateReturnsParseErrors(t *testing.T) {
 	tests := []struct {
 		name    string
