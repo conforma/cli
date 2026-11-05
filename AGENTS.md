@@ -47,6 +47,12 @@ Tests use build tags with different timeouts:
   user-facing strings, error messages, and documentation. Legacy identifiers required for
   compatibility (e.g., `quay.io/enterprise-contract/ec-cli`, Tekton parameter names) must be
   preserved as-is.
+- **ITS pipeline sync:** `pipelines/enterprise-contract/0.1/enterprise-contract.yaml` is the
+  source of truth for the Enterprise Contract ITS pipeline. When changing it, run
+  `hack/sync-build-definitions-pipeline.sh --check <build-definitions checkout>` and, if drift is
+  reported, run the sync script and open a companion `konflux-ci/build-definitions` PR. See
+  `hack/sync-build-definitions-pipeline.sh --help` for options, including preserving
+  build-definitions task bundle digest pins.
 
 ## Go file header convention
 

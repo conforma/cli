@@ -15,8 +15,9 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# Updates a local clone of redhat-appstudio/build-definitions to use the latest
-# Task bundle produced by this repository.
+# Updates a local clone of redhat-appstudio/build-definitions to sync the
+# deprecated ITS pipeline copy and use the latest Task bundle produced by this
+# repository.
 # Usage:
 #   update-build-definitions.sh <PATH_TO_BUILD_DEFINITIONS> [<TAG>]
 
@@ -27,6 +28,8 @@ set -o nounset
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
 TARGET_DIR="${1}"
+"${ROOT}/hack/sync-build-definitions-pipeline.sh" "${TARGET_DIR}"
+
 cd "${TARGET_DIR}" || exit 1
 
 echo 'Resolving task bundle...'
@@ -69,9 +72,9 @@ function update() {
         'contains($pipeline[0])' \
         <(cd "${ROOT}"; go run -modfile tools/go.mod github.com/tektoncd/cli/cmd/tkn bundle list --output json "${TASK_BUNDLE_REF}" task verify-enterprise-contract 2>/dev/null| jq '.spec.params | map(.name)')
 
-    echo 'Updating build-deployments...'
+    echo 'Updating build-definitions...'
     REF="${TASK_BUNDLE_REF}" yq e -i \
-        '.spec.tasks[] |= select(.name == "verify").taskRef.params[] |= select(.name == "bundle").value |= env(REF)' \
+        '(.spec.tasks[].taskRef.params[]? | select(.name == "bundle").value) = env(REF)' \
         "${definition}"
     echo
 }
