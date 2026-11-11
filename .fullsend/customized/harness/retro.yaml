@@ -15,7 +15,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Derived retro harness: retain upstream analysis and append the Conforma gate.
-base: https://raw.githubusercontent.com/fullsend-ai/agents/ce2eedd097dcccf17e29f4a7cd337ec4d95d7194/harness/retro.yaml#sha256=510c52c1f662c876e81f13e5208302abaad4dd8b8d3705fdef21b908fa63d551
+base: https://raw.githubusercontent.com/fullsend-ai/agents/3b40ac718d29c3190b71e68447b9f4e938f19974/harness/retro.yaml#sha256=762cb6f889f7aa1ecdf67b52176c61ccf54d3a6bd2a9c3814e04b4322a3919cf
 
 skills:
     - customized/skills/retro-filing-policy

@@ -29,6 +29,10 @@ roles:
     - retro
     - prioritize
 agents:
+    - name: code
+      source: customized/harness/code.yaml
+    - name: fix
+      source: customized/harness/fix.yaml
     - name: review
       source: customized/harness/review.yaml
     - name: retro
@@ -36,11 +40,12 @@ agents:
 allowed_remote_resources:
     - https://raw.githubusercontent.com/fullsend-ai/fullsend/
     - https://raw.githubusercontent.com/fullsend-ai/agents/
-create_issues:
-    allow_targets:
-        repos:
-            - conforma/cli
-            - fullsend-ai/fullsend
+tracker:
+    github:
+        allowed_targets:
+            repos:
+                - conforma/cli
+                - fullsend-ai/fullsend
 status_notifications:
     comment:
         completion: on_failure
