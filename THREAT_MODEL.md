@@ -207,6 +207,7 @@ to this flag.
 | CA-4 | **`--extra-rule-data` injection**: this parameter merges key=value pairs into ruleData for every policy source. Values are resolved via `GetPolicyConfig`, which supports K8s, file, git, and inline JSON references. An attacker who controls this parameter could override thresholds or inject new data keys. | High -- weakens specific policy rules by changing their data inputs. | Low at release gate -- `EXTRA_RULE_DATA` is a pipeline parameter. Medium at integration gate -- user controls ITS params. | The merge operates on the top-level ruleData object. Existing keys in ruleData are overwritten (not deep-merged), which is both a risk and a constraint. |
 | CA-5 | **Policy configuration from user-controlled source**: the `--policy` flag accepts K8s references, file paths, git URLs, and inline JSON. In integration testing, the user chooses the ECP, which means they can point to a permissive policy. | Critical -- user defines what is enforced. | Integration: certain (by design). Release: not applicable (RPA controls the ECP). | The two-gate architecture is the mitigation. Integration testing uses user-controlled ECP by design. The release gate uses SRE-controlled ECP. |
 | CA-6 | **VSA-based validation skip**: if an attacker can forge or inject a valid-looking VSA, the CLI will skip re-validation for that image. | High -- policy enforcement bypassed for the lifetime of the VSA. | Low -- VSAs require DSSE signature verification. The signing key must match. Expiration limits the window. | DSSE signing is mandatory for VSAs. Configurable expiration (default 7 days, production typically 24h). |
+| CA-7 | **`COLLECTOR_DATA` injection**: the Tekton task's `COLLECTOR_DATA` parameter reads a JSON file from the trusted artifact (application-controlled) and injects its contents into policy evaluation under `data.rule_data__runtime__.collector_data`. An attacker who controls the application's build pipeline can craft the JSON file to influence policy rule outcomes. Unlike `EXTRA_RULE_DATA` (CA-4), which merges key=value pairs into `rule_data`, `COLLECTOR_DATA` injects an entire JSON document. | High -- application-controlled data participates in policy evaluation. If the reserved namespace boundary is not enforced, injected data could override trusted policy values via key collision in the deep merge. | Low at release gate -- `COLLECTOR_DATA` is a pipeline parameter set by the Tekton task. Medium at integration gate -- user controls the build pipeline and the trusted artifact contents. | Data is placed under the reserved `rule_data__runtime__` namespace, which does not collide with `rule_data__configuration__`. The generated policy file is written to `$HOMEDIR` outside the trusted-artifact directory, preventing the injected data from being treated as a trusted artifact. Policy rules must explicitly read the `rule_data__runtime__` namespace to access this data; the existing `rule_data.get()` lookup does not return it. The `inject-data-source.sh` helper operates on a copy of the policy configuration -- the original is not modified. **Residual risk**: the namespace boundary (`rule_data__runtime__` vs `rule_data__configuration__`) is enforced by convention (documentation, code review, and the `rule_data.get()` function in the policy repo) rather than by the CLI's data merge implementation. A policy rule that reads the OPA data tree directly (bypassing `rule_data.get()`) could access or be influenced by injected data. |
 
 ### 4.4 Network
 
@@ -231,7 +232,7 @@ to this flag.
 |----|--------|--------|------------|---------------------|
 | RT-1 | **Denial of service via large input**: server mode accepts up to 80MB request bodies. Concurrent large requests could exhaust memory or disk. | Medium -- server instance becomes unresponsive. | Medium -- no rate limiting or concurrent request limits. | 80MB body size limit. 90-second evaluation timeout. Temp files cleaned up after each request. |
 | RT-2 | **Stale policies in server mode**: policies are loaded once at startup. Policy changes require a server restart. A long-running server may enforce outdated policies. | Medium -- new policy rules or data are not applied until restart. | Medium -- depends on operational procedures. | Documented behavior: "Restart the server to pick up policy changes." |
-| RT-3 | **Temp file leakage**: server-mode input files and `ec-work-*` directories may contain sensitive data (attestation content, policy configuration). | Low -- temp files are cleaned up after each request/evaluation. | Low -- files are created with default permissions, removed on completion. Setting `EC_DEBUG` env var preserves work directories for inspection. | `defer os.Remove(tmpPath)` in handler. Config files written with 0444 (world-readable) permissions; see mitigation #10 for the recommendation to restrict to 0600. |
+| RT-3 | **Temp file leakage**: server-mode input files and `ec-work-*` directories may contain sensitive data (attestation content, policy configuration). | Low -- temp files are cleaned up after each request/evaluation. | Low -- files are created with default permissions, removed on completion. Setting `EC_DEBUG` env var preserves work directories for inspection. | `defer os.Remove(tmpPath)` in handler. Config files written with 0444 (world-readable) permissions; see mitigation #11 for the recommendation to restrict to 0600. |
 | RT-4 | **Panic recovery exposes internal state**: the recovery middleware catches panics and returns a generic error, but stack traces are logged. | Low -- stack traces go to server logs, not to the HTTP response. | Low -- panics are exceptional. | Recovery middleware returns generic "internal server error". Stack trace logged at error level (not returned to caller). |
 
 ## 5. Deprioritized Threats
@@ -286,6 +287,15 @@ to this flag.
    merges nested maps but overwrites non-map values at the same key path. Is
    the set of config struct fields serialized by the CLI complete enough that
    no security-relevant fields can be overwritten or injected via deep merge?
+
+9. **`COLLECTOR_DATA` namespace isolation enforcement**: the
+   `rule_data__runtime__` namespace boundary that separates untrusted
+   collector data from trusted policy data (`rule_data__configuration__`) is
+   enforced by convention — the policy repo's `rule_data.get()` function and
+   code review — not by the CLI's data merge implementation. Should the CLI
+   enforce namespace isolation at merge time (e.g., reject or warn when
+   runtime data keys overlap with configuration data keys), analogous to open
+   question 6 about `EXTRA_RULE_DATA` auditing?
 
 ## 7. Provenance
 
@@ -356,21 +366,28 @@ specified in EC-2001.
    injected, so that release pipeline audits can detect unexpected data
    manipulation. (Addresses CA-4, open question 6.)
 
-8. **Effective time constraints**: consider restricting `--effective-time` to
+8. **`COLLECTOR_DATA` namespace isolation**: enforce the
+   `rule_data__runtime__` / `rule_data__configuration__` namespace boundary
+   at merge time in the CLI, rather than relying solely on convention.
+   Consider rejecting or warning when runtime data keys overlap with
+   configuration data keys, or when policy rules access the runtime namespace
+   without an explicit opt-in. (Addresses CA-7, open question 9.)
+
+9. **Effective time constraints**: consider restricting `--effective-time` to
    values within a bounded window (e.g., +/- 24 hours from now) at the release
    gate, or logging when a non-`"now"` value is used. (Addresses CA-2.)
 
 ### Low priority
 
-9. **Server mode policy reload**: add a mechanism to reload policies without
-   restarting the server (e.g., SIGHUP handler, reload endpoint), so that
-   long-running servers can pick up policy changes. (Addresses RT-2.)
+10. **Server mode policy reload**: add a mechanism to reload policies without
+    restarting the server (e.g., SIGHUP handler, reload endpoint), so that
+    long-running servers can pick up policy changes. (Addresses RT-2.)
 
-10. **Temp file permissions**: ensure server-mode temp files are created with
+11. **Temp file permissions**: ensure server-mode temp files are created with
     restrictive permissions (0600) rather than relying on umask. (Addresses
     RT-3.)
 
-11. **Document custom builtin network access**: clearly document that
+12. **Document custom builtin network access**: clearly document that
     `ec.oci.*` builtins bypass OPA's `AllowNet` restrictions by design, so
     that policy authors understand the security implications when writing
     custom rules. (Addresses NW-4.)
