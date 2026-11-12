@@ -41,6 +41,7 @@ var (
 	logTimestampRegex  = regexp.MustCompile(`^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}`)                                        // timestamp as it apears in the logs
 	tempPathRegex      = regexp.MustCompile(`\$\{TEMP\}([^: \\"]+)[: ]?`)                                                    // starts with "${TEMP}" and ends with something not in path, perhaps breaks on Windows due to the colon
 	randomBitsRegex    = regexp.MustCompile(`([a-f0-9]+)$`)                                                                  // in general, we add random bits to paths as suffixes
+	rtDataDirRegex     = regexp.MustCompile(`/var/workdir/data-source-[A-Za-z0-9]{6}`)                                       // mktemp directory for runtime policy data
 	unixTimestamp      = regexp.MustCompile(`("| )(?:\d{10})(\\"|"|$)`)                                                      // Recent Unix timestamp in second resolution
 	tektonTimestamp    = regexp.MustCompile(`\b\d{10}\.\d+\b`)                                                               // timestamp used in Tekton logs
 )
@@ -144,6 +145,9 @@ func MatchSnapshot(ctx context.Context, qualifier, text string, vars map[string]
 		// systems
 		text = strings.ReplaceAll(text, path, strings.Join(parts, "/"))
 	}
+
+	// The data source directory is shared across Tekton steps and is not under /tmp.
+	text = rtDataDirRegex.ReplaceAllString(text, "/var/workdir/data-source-$${RANDOM}")
 
 	wd, err := os.Getwd()
 	if err != nil {

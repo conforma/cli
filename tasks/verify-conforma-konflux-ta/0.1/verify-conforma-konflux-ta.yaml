@@ -161,6 +161,19 @@ spec:
       description: Merge additional Rego variables into the policy data. Use syntax "key=value,key2=value2..."
       default: ""
 
+    - name: COLLECTOR_DATA
+      type: string
+      description: >-
+        Optional path to a JSON file accessible in the inject-runtime-data step
+        (for example, /var/workdir/conforma/extra/data.json in the extracted trusted
+        artifact). Its contents are added under the reserved, untrusted policy data
+        namespace at rule_data__runtime__.collector_data. When COLLECTOR_DATA is
+        set, POLICY_CONFIGURATION must be an ECP name, inline JSON, or a local JSON
+        file; Git policy references are not supported. YAML-formatted ECPs are not
+        supported currently since the inject-data-source.sh script uses jq to modify
+        the ECP.
+      default: ""
+
     - name: POLICY_BUNDLE_DIGEST
       type: string
       description: >-
@@ -358,6 +371,36 @@ spec:
       onError: continue
       command: [pin-konflux-policy-bundle.sh]
 
+    - name: inject-runtime-data
+      when:
+        - input: "$(params.COLLECTOR_DATA)"
+          operator: notin
+          values: [""]
+      image: quay.io/conforma/cli:latest
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: POLICY_CONFIGURATION
+          value: "$(params.POLICY_CONFIGURATION)"
+        - name: COLLECTOR_DATA
+          value: "$(params.COLLECTOR_DATA)"
+        - name: HOMEDIR
+          value: "$(params.HOMEDIR)"
+        - name: TMPDIR
+          value: /var/workdir
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+
+        # The pinning step only writes a file when it changes the policy.
+        policy="${POLICY_CONFIGURATION}"
+        if [[ -f "${HOMEDIR}/policy-with-pinned-bundle.yaml" ]]; then
+          policy="${HOMEDIR}/policy-with-pinned-bundle.yaml"
+        fi
+
+        inject-data-source.sh --policy "${policy}" \
+          --policy-output "${HOMEDIR}/policy-with-runtime-data.yaml" \
+          --data-file "${COLLECTOR_DATA}" --data-key collector_data
+
     - name: validate
       image: quay.io/conforma/cli:latest
       imagePullPolicy: IfNotPresent
@@ -370,8 +413,11 @@ spec:
             export SSL_CERT_FILE="/mnt/trusted-ca/ca-bundle.crt"
         fi
 
-        # Use policy override file if pin-policy-bundle produced one
-        if [[ -f "${HOMEDIR}/policy-with-pinned-bundle.yaml" ]]; then
+        # Only use the runtime data policy when injection was requested; otherwise
+        # prefer the digest-pinned policy, if present.
+        if [[ -n "${COLLECTOR_DATA}" && -f "${HOMEDIR}/policy-with-runtime-data.yaml" ]]; then
+          POLICY_CONFIGURATION="${HOMEDIR}/policy-with-runtime-data.yaml"
+        elif [[ -f "${HOMEDIR}/policy-with-pinned-bundle.yaml" ]]; then
           POLICY_CONFIGURATION="${HOMEDIR}/policy-with-pinned-bundle.yaml"
         fi
 
@@ -498,6 +544,8 @@ spec:
       env:
         - name: POLICY_CONFIGURATION
           value: "$(params.POLICY_CONFIGURATION)"
+        - name: COLLECTOR_DATA
+          value: "$(params.COLLECTOR_DATA)"
         - name: PUBLIC_KEY
           value: "$(params.PUBLIC_KEY)"
         - name: CERTIFICATE_IDENTITY
