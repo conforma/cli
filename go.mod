@@ -1,6 +1,9 @@
 module github.com/conforma/cli
 
-go 1.26.7
+go 1.27.3
+
+// use forked version until we can get the fixes merged see https://github.com/conforma/go-containerregistry/blob/main/hack/ec-patches.sh for a list of patches we carry
+replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry v0.21.8-0.20260702142841-f9eefe19c7b2
 
 require (
 	cuelang.org/go v0.16.0
@@ -13,10 +16,12 @@ require (
 	github.com/gkampitakis/go-snaps v0.5.19
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/go-logr/logr v1.4.4
+	github.com/go-openapi/runtime v0.32.4
 	github.com/go-openapi/strfmt v0.26.4
 	github.com/google/go-cmp v0.7.0
-	github.com/google/go-containerregistry v0.21.7
+	github.com/google/go-containerregistry v0.21.9
 	github.com/google/safearchive v0.0.0-20241025131057-f7ce9d7b6f9c
+	github.com/google/uuid v1.6.0
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
 	github.com/in-toto/in-toto-golang v0.11.0
 	github.com/jstemmer/go-junit-report/v2 v2.1.0
@@ -24,15 +29,17 @@ require (
 	github.com/leanovate/gopter v0.2.11
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mitchellh/go-wordwrap v1.0.1
+	github.com/moby/moby/api v1.55.0
 	github.com/open-policy-agent/conftest v0.68.2
 	github.com/open-policy-agent/opa v1.15.2
 	github.com/package-url/packageurl-go v0.1.3
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/qri-io/jsonpointer v0.1.1
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/secure-systems-lab/go-securesystemslib v0.11.0
 	github.com/sigstore/cosign/v3 v3.0.4
 	github.com/sigstore/rekor v1.5.3
-	github.com/sigstore/sigstore v1.10.8
+	github.com/sigstore/sigstore v1.10.9
 	github.com/sirupsen/logrus v1.10.1
 	github.com/smarty/cproxy/v2 v2.1.1
 	github.com/spdx/tools-golang v0.5.7
@@ -42,13 +49,15 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
 	github.com/stuart-warren/yamlfmt v0.2.0
-	github.com/tektoncd/pipeline v1.12.0
+	github.com/tektoncd/pipeline v1.12.3
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.44.0
 	golang.org/x/benchmarks v0.0.0-20241115175113-a2b48b605b42
 	golang.org/x/exp v0.0.0-20260603202125-055de637280b
-	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.23.0
+	golang.org/x/text v0.42.0
+	gopkg.in/yaml.v3 v3.0.1
+	k8s.io/api v0.36.3
 	k8s.io/apiextensions-apiserver v0.36.0
 	k8s.io/apimachinery v0.36.3
 	k8s.io/client-go v0.36.3
@@ -56,19 +65,6 @@ require (
 	k8s.io/kube-openapi v0.0.0-20260319004828-5883c5ee87b9
 	oras.land/oras-go/v2 v2.6.2
 	sigs.k8s.io/yaml v1.6.0
-)
-
-// use forked version until we can get the fixes merged see https://github.com/conforma/go-containerregistry/blob/main/hack/ec-patches.sh for a list of patches we carry
-replace github.com/google/go-containerregistry => github.com/conforma/go-containerregistry v0.21.8-0.20260702142841-f9eefe19c7b2
-
-require (
-	github.com/go-openapi/runtime v0.32.4
-	github.com/google/uuid v1.6.0
-	github.com/moby/moby/api v1.55.0
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
-	golang.org/x/text v0.42.0
-	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.36.3
 )
 
 require (
@@ -164,7 +160,7 @@ require (
 	github.com/containerd/platforms v1.0.0-rc.5 // indirect
 	github.com/containerd/ttrpc v1.2.9 // indirect
 	github.com/containerd/typeurl/v2 v2.3.0 // indirect
-	github.com/coreos/go-oidc/v3 v3.19.0 // indirect
+	github.com/coreos/go-oidc/v3 v3.20.0 // indirect
 	github.com/cpuguy83/dockercfg v0.3.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
@@ -228,8 +224,8 @@ require (
 	github.com/goccy/go-yaml v1.18.0 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
-	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/cel-go v0.28.0 // indirect
+	github.com/golang/snappy v1.0.0 // indirect
+	github.com/google/cel-go v0.28.1 // indirect
 	github.com/google/certificate-transparency-go v1.3.3 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
@@ -269,13 +265,13 @@ require (
 	github.com/lestrrat-go/httprc/v3 v3.0.2 // indirect
 	github.com/lestrrat-go/jwx/v3 v3.0.13 // indirect
 	github.com/lestrrat-go/option/v2 v2.0.0 // indirect
-	github.com/letsencrypt/boulder v0.20260309.0 // indirect
 	github.com/logrusorgru/aurora v2.0.3+incompatible // indirect
 	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/maruel/natural v1.1.1 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
+	github.com/miekg/dns v1.1.62 // indirect
 	github.com/miekg/pkcs11 v1.1.2 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/moby/buildkit v0.33.0 // indirect
@@ -345,7 +341,6 @@ require (
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
-	github.com/titanous/rocacheck v0.0.0-20171023193734-afe73141d399 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
@@ -390,6 +385,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/mod v0.41.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
