@@ -90,19 +90,23 @@ ORIGINALS=(
 
 REPLACED=0
 for ORIGINAL in "${ORIGINALS[@]}"; do
-  # If the reference is already digest-pinned (e.g. :konflux@sha256:...),
-  # respect the existing pin rather than overriding it.
-  if grep -q "${ORIGINAL}@sha256:" "$WORKING_POLICY"; then
-    echo "'${ORIGINAL}' already has a pinned digest, skipping override."
-    continue
-  fi
   if ! grep -q "${ORIGINAL}" "$WORKING_POLICY"; then
     continue
   fi
-  sed -i "s|${ORIGINAL}|${REPLACEMENT}|g" "$WORKING_POLICY"
-  echo "Replaced: ${ORIGINAL}"
-  echo "    with: ${REPLACEMENT}"
-  REPLACED=1
+  # Hide occurrences that are already pinned to a digest behind a marker
+  # so that only floating references are replaced. A global sed alone
+  # cannot distinguish them: ORIGINAL@sha256:<old> contains ORIGINAL.
+  sed -i "s|${ORIGINAL}@sha256:|__PINNED_POLICY_REF__@sha256:|g" "$WORKING_POLICY"
+  if grep -q "${ORIGINAL}" "$WORKING_POLICY"; then
+    sed -i "s|${ORIGINAL}|${REPLACEMENT}|g" "$WORKING_POLICY"
+    echo "Replaced: ${ORIGINAL}"
+    echo "    with: ${REPLACEMENT}"
+    REPLACED=1
+  else
+    echo "'${ORIGINAL}' already has a pinned digest, skipping override."
+  fi
+  # Restore the hidden pinned occurrences.
+  sed -i "s|__PINNED_POLICY_REF__@sha256:|${ORIGINAL}@sha256:|g" "$WORKING_POLICY"
 done
 
 if [ "$REPLACED" -eq 0 ]; then
