@@ -285,6 +285,29 @@ assert_contains "${HOME}/policy-with-pinned-bundle.yaml" \
 rm -rf "$TMPDIR"
 
 # -------------------------------------------------------------------
+echo "Test 12: pinned and floating mirror references in one config"
+# -------------------------------------------------------------------
+TMPDIR="$(mktemp -d)"
+export HOME="${TMPDIR}"
+POLICY_FILE="${TMPDIR}/policy.json"
+cat > "$POLICY_FILE" <<EOF
+{"sources":[
+  {"policy":["oci::quay.io/enterprise-contract/ec-release-policy:konflux@${OLD_DIGEST}"]},
+  {"policy":["oci::quay.io/enterprise-contract/ec-release-policy:konflux"]}
+]}
+EOF
+POLICY_CONFIGURATION="$POLICY_FILE" POLICY_BUNDLE_DIGEST="$NEW_DIGEST" \
+  bash "$SCRIPT" > /dev/null
+
+assert_contains "${HOME}/policy-with-pinned-bundle.yaml" \
+  "oci::quay.io/enterprise-contract/ec-release-policy:konflux@${OLD_DIGEST}" \
+  "existing mirror pin preserved"
+assert_contains "${HOME}/policy-with-pinned-bundle.yaml" \
+  "oci::quay.io/conforma/release-policy@${NEW_DIGEST}" \
+  "floating mirror reference pinned"
+rm -rf "$TMPDIR"
+
+# -------------------------------------------------------------------
 echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"
 if (( FAIL > 0 )); then
