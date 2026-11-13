@@ -16,7 +16,10 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # This script resolves a policy configuration and replaces the release
-# policy OCI tag reference with a digest-pinned reference. It requires
+# policy OCI tag references with a digest-pinned reference. Both the
+# conforma repository and its enterprise-contract mirror are handled: the
+# release process retags both in the same step, so either reference
+# identifies the same policy image. It requires
 # the following environment variables:
 #
 # - POLICY_CONFIGURATION: Policy reference (k8s name, inline JSON, or file path).
@@ -75,24 +78,41 @@ else
   fi
 fi
 
-ORIGINAL="oci::quay.io/conforma/release-policy:konflux"
 REPLACEMENT="oci::quay.io/conforma/release-policy@${POLICY_BUNDLE_DIGEST}"
 
-if ! grep -q "${ORIGINAL}" "$WORKING_POLICY"; then
-  echo "'${ORIGINAL}' not found in policy configuration, nothing to do."
+# The enterprise-contract repository mirrors the release policy: the
+# release process copies the same digest to both tags, so either reference
+# can be pinned to the canonical repository.
+ORIGINALS=(
+  "oci::quay.io/conforma/release-policy:konflux"
+  "oci::quay.io/enterprise-contract/ec-release-policy:konflux"
+)
+
+REPLACED=0
+for ORIGINAL in "${ORIGINALS[@]}"; do
+  if ! grep -q "${ORIGINAL}" "$WORKING_POLICY"; then
+    continue
+  fi
+  # Hide occurrences that are already pinned to a digest behind a marker
+  # so that only floating references are replaced. A global sed alone
+  # cannot distinguish them: ORIGINAL@sha256:<old> contains ORIGINAL.
+  sed -i "s|${ORIGINAL}@sha256:|__PINNED_POLICY_REF__@sha256:|g" "$WORKING_POLICY"
+  if grep -q "${ORIGINAL}" "$WORKING_POLICY"; then
+    sed -i "s|${ORIGINAL}|${REPLACEMENT}|g" "$WORKING_POLICY"
+    echo "Replaced: ${ORIGINAL}"
+    echo "    with: ${REPLACEMENT}"
+    REPLACED=1
+  else
+    echo "'${ORIGINAL}' already has a pinned digest, skipping override."
+  fi
+  # Restore the hidden pinned occurrences.
+  sed -i "s|__PINNED_POLICY_REF__@sha256:|${ORIGINAL}@sha256:|g" "$WORKING_POLICY"
+done
+
+if [ "$REPLACED" -eq 0 ]; then
+  echo "Release policy reference not found in policy configuration, nothing to do."
   exit 0
 fi
-
-# If the reference is already digest-pinned (e.g. :konflux@sha256:...),
-# respect the existing pin rather than overriding it.
-if grep -q "${ORIGINAL}@sha256:" "$WORKING_POLICY"; then
-  echo "'${ORIGINAL}' already has a pinned digest, skipping override."
-  exit 0
-fi
-
-sed -i "s|${ORIGINAL}|${REPLACEMENT}|g" "$WORKING_POLICY"
-echo "Replaced: ${ORIGINAL}"
-echo "    with: ${REPLACEMENT}"
 
 POLICY_PATH="${HOME}/policy-with-pinned-bundle.yaml"
 cp "$WORKING_POLICY" "${POLICY_PATH}"
