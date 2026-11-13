@@ -28,7 +28,7 @@ import (
 	"sync"
 	"time"
 
-	hd "github.com/MakeNowJust/heredoc"
+	hd "github.com/MakeNowJust/heredoc/v2"
 	ecapi "github.com/conforma/crds/api/v1alpha1"
 	app "github.com/konflux-ci/application-api/api/v1alpha1"
 	log "github.com/sirupsen/logrus"
