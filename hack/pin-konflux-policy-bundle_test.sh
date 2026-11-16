@@ -224,6 +224,90 @@ fi
 rm -rf "$TMPDIR"
 
 # -------------------------------------------------------------------
+echo "Test 9: mirror tag reference is replaced"
+# -------------------------------------------------------------------
+TMPDIR="$(mktemp -d)"
+export HOME="${TMPDIR}"
+POLICY_FILE="${TMPDIR}/policy.json"
+cat > "$POLICY_FILE" <<'EOF'
+{"sources":[{"policy":["oci::quay.io/enterprise-contract/ec-release-policy:konflux"]}]}
+EOF
+POLICY_CONFIGURATION="$POLICY_FILE" POLICY_BUNDLE_DIGEST="$NEW_DIGEST" \
+  bash "$SCRIPT" > /dev/null
+
+assert_contains "${HOME}/policy-with-pinned-bundle.yaml" \
+  "oci::quay.io/conforma/release-policy@${NEW_DIGEST}" \
+  "mirror reference replaced with pinned canonical reference"
+assert_not_contains "${HOME}/policy-with-pinned-bundle.yaml" \
+  "ec-release-policy" \
+  "mirror reference removed"
+rm -rf "$TMPDIR"
+
+# -------------------------------------------------------------------
+echo "Test 10: already-pinned mirror reference is left alone"
+# -------------------------------------------------------------------
+TMPDIR="$(mktemp -d)"
+export HOME="${TMPDIR}"
+POLICY_FILE="${TMPDIR}/policy.json"
+cat > "$POLICY_FILE" <<EOF
+{"sources":[{"policy":["oci::quay.io/enterprise-contract/ec-release-policy:konflux@${OLD_DIGEST}"]}]}
+EOF
+POLICY_CONFIGURATION="$POLICY_FILE" POLICY_BUNDLE_DIGEST="$NEW_DIGEST" \
+  bash "$SCRIPT" > /dev/null
+
+if [[ ! -f "${HOME}/policy-with-pinned-bundle.yaml" ]]; then
+  echo "  PASS: no output file created (existing mirror pin respected)"
+  (( PASS++ ))
+else
+  echo "  FAIL: should not override an already-pinned mirror reference"
+  (( FAIL++ ))
+fi
+rm -rf "$TMPDIR"
+
+# -------------------------------------------------------------------
+echo "Test 11: pinned canonical plus floating mirror in one config"
+# -------------------------------------------------------------------
+TMPDIR="$(mktemp -d)"
+export HOME="${TMPDIR}"
+POLICY_FILE="${TMPDIR}/policy.json"
+cat > "$POLICY_FILE" <<EOF
+{"sources":[{"policy":["oci::quay.io/conforma/release-policy:konflux@${OLD_DIGEST}","oci::quay.io/enterprise-contract/ec-release-policy:konflux"]}]}
+EOF
+POLICY_CONFIGURATION="$POLICY_FILE" POLICY_BUNDLE_DIGEST="$NEW_DIGEST" \
+  bash "$SCRIPT" > /dev/null
+
+assert_contains "${HOME}/policy-with-pinned-bundle.yaml" \
+  "oci::quay.io/conforma/release-policy:konflux@${OLD_DIGEST}" \
+  "existing canonical pin unchanged"
+assert_contains "${HOME}/policy-with-pinned-bundle.yaml" \
+  "oci::quay.io/conforma/release-policy@${NEW_DIGEST}" \
+  "floating mirror reference pinned"
+rm -rf "$TMPDIR"
+
+# -------------------------------------------------------------------
+echo "Test 12: pinned and floating mirror references in one config"
+# -------------------------------------------------------------------
+TMPDIR="$(mktemp -d)"
+export HOME="${TMPDIR}"
+POLICY_FILE="${TMPDIR}/policy.json"
+cat > "$POLICY_FILE" <<EOF
+{"sources":[
+  {"policy":["oci::quay.io/enterprise-contract/ec-release-policy:konflux@${OLD_DIGEST}"]},
+  {"policy":["oci::quay.io/enterprise-contract/ec-release-policy:konflux"]}
+]}
+EOF
+POLICY_CONFIGURATION="$POLICY_FILE" POLICY_BUNDLE_DIGEST="$NEW_DIGEST" \
+  bash "$SCRIPT" > /dev/null
+
+assert_contains "${HOME}/policy-with-pinned-bundle.yaml" \
+  "oci::quay.io/enterprise-contract/ec-release-policy:konflux@${OLD_DIGEST}" \
+  "existing mirror pin preserved"
+assert_contains "${HOME}/policy-with-pinned-bundle.yaml" \
+  "oci::quay.io/conforma/release-policy@${NEW_DIGEST}" \
+  "floating mirror reference pinned"
+rm -rf "$TMPDIR"
+
+# -------------------------------------------------------------------
 echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"
 if (( FAIL > 0 )); then
