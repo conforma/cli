@@ -39,6 +39,7 @@ Tests use build tags with different timeouts:
 
 ## Key Conventions
 
+- **Developer prerequisites:** `jq` is required for the Claude Code PostToolUse hook (auto-formats `.go` files on edit).
 - **Multi-module project:** root, `acceptance/`, `tools/` each have their own go.mod.
   Run `go mod tidy` in the right module.
 - **Debug mode:** `EC_DEBUG=1` preserves `ec-work-*` temp directories for inspection.
