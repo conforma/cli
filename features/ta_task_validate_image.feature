@@ -38,13 +38,13 @@ Feature: Verify Conforma Trusted Artifact Tekton Task
       }
       ```
     When version 0.1 of the task named "verify-conforma-konflux-ta" is run with parameters:
-      | SNAPSHOT_FILENAME       | snapshotartifact                                                                                    |
+      | SNAPSHOT_FILENAME       | snapshotartifact                                                     |
       | SOURCE_DATA_ARTIFACT    | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST} |
-      | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                                                              |
-      | STRICT                  | true                                                                                                     |
-      | IGNORE_REKOR            | true                                                                                                     |
-      | TRUSTED_ARTIFACTS_DEBUG | "true"                                                                                                   |
-      | ORAS_OPTIONS            | --plain-http                                                                                             |
+      | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                          |
+      | STRICT                  | true                                                                 |
+      | IGNORE_REKOR            | true                                                                 |
+      | TRUSTED_ARTIFACTS_DEBUG | "true"                                                               |
+      | ORAS_OPTIONS            | --plain-http                                                         |
     Then the task should succeed
      And the task logs for step "pin-policy-bundle" should match the snapshot
      And the task logs for step "report-json" should match the snapshot
@@ -83,14 +83,14 @@ Feature: Verify Conforma Trusted Artifact Tekton Task
       }
       ```
     When version 0.1 of the task named "verify-conforma-konflux-ta" is run with parameters:
-      | SNAPSHOT_FILENAME       | snapshotartifact                                                                                    |
+      | SNAPSHOT_FILENAME       | snapshotartifact                                                     |
       | SOURCE_DATA_ARTIFACT    | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST} |
-      | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                                                              |
-      | STRICT                  | true                                                                                                     |
-      | IGNORE_REKOR            | true                                                                                                     |
-      | EC_USE_OPA              | 1                                                                                                        |
-      | TRUSTED_ARTIFACTS_DEBUG | "true"                                                                                                   |
-      | ORAS_OPTIONS            | --plain-http                                                                                             |
+      | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                          |
+      | STRICT                  | true                                                                 |
+      | IGNORE_REKOR            | true                                                                 |
+      | EC_USE_OPA              | 1                                                                    |
+      | TRUSTED_ARTIFACTS_DEBUG | "true"                                                               |
+      | ORAS_OPTIONS            | --plain-http                                                         |
     Then the task should succeed
      And the task results should match the snapshot
 
@@ -125,14 +125,14 @@ Feature: Verify Conforma Trusted Artifact Tekton Task
       }
       ```
     When version 0.1 of the task named "verify-conforma-konflux-ta" is run with parameters:
-      | SNAPSHOT_FILENAME       | snapshotartifact                                                     |
-      | SOURCE_DATA_ARTIFACT    | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST}  |
-      | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                          |
+      | SNAPSHOT_FILENAME       | snapshotartifact                                                        |
+      | SOURCE_DATA_ARTIFACT    | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST}    |
+      | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                             |
       | POLICY_BUNDLE_DIGEST    | sha256:2a851b5d56259ba46391f72bc4e75ed5475510dce5ae47d054b72baf1e908d26 |
-      | STRICT                  | false                                                                |
-      | IGNORE_REKOR            | true                                                                 |
-      | TRUSTED_ARTIFACTS_DEBUG | "true"                                                               |
-      | ORAS_OPTIONS            | --plain-http                                                         |
+      | STRICT                  | false                                                                   |
+      | IGNORE_REKOR            | true                                                                    |
+      | TRUSTED_ARTIFACTS_DEBUG | "true"                                                                  |
+      | ORAS_OPTIONS            | --plain-http                                                            |
     Then the task should succeed
      And the task logs for step "pin-policy-bundle" should match the snapshot
      And the task logs for step "show-config" should match the snapshot
@@ -173,14 +173,14 @@ Feature: Verify Conforma Trusted Artifact Tekton Task
       }
       ```
     When version 0.1 of the task named "verify-conforma-konflux-ta" is run with parameters:
-      | SNAPSHOT_FILENAME       | snapshotartifact                                                                                    |
+      | SNAPSHOT_FILENAME       | snapshotartifact                                                     |
       | SOURCE_DATA_ARTIFACT    | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST} |
-      | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                                                              |
-      | COLLECTOR_DATA          | /var/workdir/conforma/runtime_data.json                                                              |
-      | STRICT                  | true                                                                                                   |
-      | IGNORE_REKOR            | true                                                                                                   |
-      | TRUSTED_ARTIFACTS_DEBUG | "true"                                                                                                 |
-      | ORAS_OPTIONS            | --plain-http                                                                                           |
+      | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                          |
+      | COLLECTOR_DATA          | /var/workdir/conforma/runtime_data.json                              |
+      | STRICT                  | true                                                                 |
+      | IGNORE_REKOR            | true                                                                 |
+      | TRUSTED_ARTIFACTS_DEBUG | "true"                                                               |
+      | ORAS_OPTIONS            | --plain-http                                                         |
     Then the task should succeed
      And the task logs for step "inject-runtime-data" should match the snapshot
      And the task logs for step "show-config" should contain "file::/var/workdir/data-source-"
@@ -219,15 +219,15 @@ Feature: Verify Conforma Trusted Artifact Tekton Task
       }
       ```
     When version 0.1 of the task named "verify-conforma-konflux-ta" is run with parameters:
-      | SNAPSHOT_FILENAME       | snapshotartifact                                                                                    |
-      | SOURCE_DATA_ARTIFACT    | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST} |
-      | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                                                              |
-      | POLICY_BUNDLE_DIGEST    | sha256:2a851b5d56259ba46391f72bc4e75ed5475510dce5ae47d054b72baf1e908d26                       |
-      | COLLECTOR_DATA          | /var/workdir/conforma/runtime_data.json                                                              |
-      | STRICT                  | true                                                                                                   |
-      | IGNORE_REKOR            | true                                                                                                   |
-      | TRUSTED_ARTIFACTS_DEBUG | "true"                                                                                                 |
-      | ORAS_OPTIONS            | --plain-http                                                                                           |
+      | SNAPSHOT_FILENAME       | snapshotartifact                                                        |
+      | SOURCE_DATA_ARTIFACT    | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST}    |
+      | POLICY_CONFIGURATION    | ${NAMESPACE}/${POLICY_NAME}                                             |
+      | POLICY_BUNDLE_DIGEST    | sha256:2a851b5d56259ba46391f72bc4e75ed5475510dce5ae47d054b72baf1e908d26 |
+      | COLLECTOR_DATA          | /var/workdir/conforma/runtime_data.json                                 |
+      | STRICT                  | true                                                                    |
+      | IGNORE_REKOR            | true                                                                    |
+      | TRUSTED_ARTIFACTS_DEBUG | "true"                                                                  |
+      | ORAS_OPTIONS            | --plain-http                                                            |
     Then the task should succeed
      And the task logs for step "pin-policy-bundle" should match the snapshot
      And the task logs for step "inject-runtime-data" should match the snapshot
@@ -247,10 +247,10 @@ Feature: Verify Conforma Trusted Artifact Tekton Task
       }
       ```
     When version 0.1 of the task named "verify-conforma-konflux-ta" is run with parameters:
-      | SNAPSHOT_FILENAME    | snapshotartifact                                                                                    |
+      | SNAPSHOT_FILENAME    | snapshotartifact                                                     |
       | SOURCE_DATA_ARTIFACT | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST} |
-      | COLLECTOR_DATA       | /var/workdir/conforma/missing-runtime-data.json                                                        |
-      | ORAS_OPTIONS         | --plain-http                                                                                           |
+      | COLLECTOR_DATA       | /var/workdir/conforma/missing-runtime-data.json                      |
+      | ORAS_OPTIONS         | --plain-http                                                         |
     Then the task should fail
      And the task logs for step "inject-runtime-data" should contain "Data file does not exist: /var/workdir/conforma/missing-runtime-data.json"
 
@@ -267,15 +267,15 @@ Feature: Verify Conforma Trusted Artifact Tekton Task
 		  }
       ```
     When version 0.1 of the task named "verify-conforma-konflux-ta" is run with parameters:
-      | SNAPSHOT_FILENAME       | snapshotartifact                                                                                                                                                                                                                                                                                                                                                                                          |
-      | SOURCE_DATA_ARTIFACT    | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST}                                                                                                                                                                                                                                                                                                                                     |
+      | SNAPSHOT_FILENAME       | snapshotartifact                                                     |
+      | SOURCE_DATA_ARTIFACT    | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST} |
       | POLICY_CONFIGURATION    | {"publicKey":"-----BEGIN PUBLIC KEY-----\\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\\n-----END PUBLIC KEY-----","sources":[{"policy":["git::github.com/conforma/policy//policy/release?ref=d34eab36b23d43748e451004177ca144296bf323","git::github.com/conforma/policy//policy/lib?ref=d34eab36b23d43748e451004177ca144296bf323"],"config":{"include":["slsa_provenance_available"]}}]} |
-      | STRICT                  | true                                                                                                                                                                                                                                                                                                                                                                                                      |
-      | IGNORE_REKOR            | true                                                                                                                                                                                                                                                                                                                                                                                                      |
-      | ENABLE_VSA              | true                                                                                                                                                                                                                                                                                                                                                                                                      |
-      | ATTESTATION_FORMAT      | predicate                                                                                                                                                                                                                                                                                                                                                                                                 |
-      | TRUSTED_ARTIFACTS_DEBUG | "true"                                                                                                                                                                                                                                                                                                                                                                                                    |
-      | ORAS_OPTIONS            | --plain-http                                                                                                                                                                                                                                                                                                                                                                                              |
+      | STRICT                  | true                                                                 |
+      | IGNORE_REKOR            | true                                                                 |
+      | ENABLE_VSA              | true                                                                 |
+      | ATTESTATION_FORMAT      | predicate                                                            |
+      | TRUSTED_ARTIFACTS_DEBUG | "true"                                                               |
+      | ORAS_OPTIONS            | --plain-http                                                         |
     Then the task should succeed
      And the task result "VSA_GENERATED" should equal "true"
 
@@ -292,12 +292,12 @@ Feature: Verify Conforma Trusted Artifact Tekton Task
       }
       ```
     When version 0.1 of the task named "verify-conforma-konflux-ta" is run with parameters:
-      | SNAPSHOT_FILENAME       | snapshotartifact                                                                                    |
+      | SNAPSHOT_FILENAME       | snapshotartifact                                                     |
       | SOURCE_DATA_ARTIFACT    | oci:${REGISTRY}/acceptance/snapshotartifact@${BUILD_SNAPSHOT_DIGEST} |
       | POLICY_CONFIGURATION    | {"publicKey":"-----BEGIN PUBLIC KEY-----\\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERhr8Zj4dZW67zucg8fDr11M4lmRp\\nzN6SIcIjkvH39siYg1DkCoa2h2xMUZ10ecbM3/ECqvBV55YwQ2rcIEa7XQ==\\n-----END PUBLIC KEY-----","sources":[{"policy":["git::github.com/conforma/policy//policy/release?ref=d34eab36b23d43748e451004177ca144296bf323","git::github.com/conforma/policy//policy/lib?ref=d34eab36b23d43748e451004177ca144296bf323"],"config":{"include":["slsa_provenance_available"]}}]} |
-      | STRICT                  | true                                                                                                     |
-      | IGNORE_REKOR            | true                                                                                                     |
-      | TRUSTED_ARTIFACTS_DEBUG | "true"                                                                                                   |
-      | ORAS_OPTIONS            | --plain-http                                                                                             |
+      | STRICT                  | true                                                                 |
+      | IGNORE_REKOR            | true                                                                 |
+      | TRUSTED_ARTIFACTS_DEBUG | "true"                                                               |
+      | ORAS_OPTIONS            | --plain-http                                                         |
     Then the task should succeed
      And the task logs for step "show-config" should contain "slsa_provenance_available"
