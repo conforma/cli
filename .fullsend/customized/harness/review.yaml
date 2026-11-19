@@ -24,6 +24,10 @@ env:
     runner:
         REVIEW_FINDING_SEVERITY_THRESHOLD: "high"
         REVIEW_SKIP_AUTHORS: "app/renovate,app/red-hat-konflux"
+        # Upstream recommends keeping these identical: the review agent reads the sandbox value,
+        # and the post-script reads the runner value.
+        REVIEW_PROTECTED_PATHS: ".claude/,.cursor/,.pi/,.gitattributes,.gitignore,.github/,.pre-commit-config.yaml,AGENTS.md,agents/,api-servers/,CLAUDE.md,CODEOWNERS,Containerfile,Dockerfile,harness/,images/,plugins/,policies/,profiles/,providers/,scripts/,skills/,rpms.lock.yaml"
     sandbox:
         REVIEW_FINDING_SEVERITY_THRESHOLD: "high"
         REVIEW_SKIP_AUTHORS: "app/renovate,app/red-hat-konflux"
+        REVIEW_PROTECTED_PATHS: ".claude/,.cursor/,.pi/,.gitattributes,.gitignore,.github/,.pre-commit-config.yaml,AGENTS.md,agents/,api-servers/,CLAUDE.md,CODEOWNERS,Containerfile,Dockerfile,harness/,images/,plugins/,policies/,profiles/,providers/,scripts/,skills/,rpms.lock.yaml"
