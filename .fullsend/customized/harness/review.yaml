@@ -23,5 +23,11 @@ readonly_repo: true
 env:
     runner:
         REVIEW_FINDING_SEVERITY_THRESHOLD: "high"
+        # Upstream recommends keeping these identical: the review agent reads the sandbox value,
+        # and the post-script reads the runner value.
+        REVIEW_PROTECTED_PATHS: |
+            rpms.lock.yaml
     sandbox:
         REVIEW_FINDING_SEVERITY_THRESHOLD: "high"
+        REVIEW_PROTECTED_PATHS: |
+            rpms.lock.yaml
