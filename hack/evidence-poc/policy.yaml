@@ -1,0 +1,33 @@
+# Copyright The Conforma Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+name: Golden image with filesystem evidence
+description: >-
+  Apply the Red Hat release policy and the POC CHI checks to each image in
+  the snapshot, using verified OCI provenance and matching filesystem evidence.
+
+# Verify the image and its OCI attestations with the supplied Konflux key.
+# Filesystem CHI trust is configured separately through --evidence-key.
+publicKey: |
+  -----BEGIN PUBLIC KEY-----
+  MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZP/0htjhVt2y0ohjgtIIgICOtQtA
+  naYJRuLprwIv6FDhZ5yFjYUEtsmoNcW7rx2KM6FOXGsCX3BNc7qhHELT+g==
+  -----END PUBLIC KEY-----
+
+sources:
+  - name: Release
+    policy:
+      - oci::quay.io/conforma/release-policy:konflux
+    data:
+      - github.com/release-engineering/rhtap-ec-policy//data
+    config:
+      include:
+        - '@redhat'
+
+  # Separate selection ensures the @redhat filter does not exclude CHI rules.
+  - name: CHI
+    policy:
+      - /Users/jstuart/scratch_pad/ec-cli-evidence-poc/hack/evidence-poc/policy
+    config:
+      include:
+        - chi

@@ -52,6 +52,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/conforma/cli/internal/attestation"
+	"github.com/conforma/cli/internal/evidence"
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/signature"
 	"github.com/conforma/cli/internal/utils"
@@ -1765,4 +1766,44 @@ func makeBundleSigWithBase64(t *testing.T, base64Sig string, sigs []cosign.Signa
 	s, err := static.NewSignature(payload, base64Sig)
 	require.NoError(t, err)
 	return s
+}
+
+type sourceFunc func(context.Context, name.Digest) ([]attestation.Attestation, error)
+
+func (f sourceFunc) Collect(ctx context.Context, ref name.Digest) ([]attestation.Attestation, error) {
+	return f(ctx, ref)
+}
+
+func TestCollectAttestationSources(t *testing.T) {
+	ref, err := name.NewDigest("example.com/image@sha256:" + strings.Repeat("a", 64))
+	require.NoError(t, err)
+	record := createSimpleAttestation(nil)
+	for _, fail := range []bool{false, true} {
+		called := 0
+		sources := []evidence.AttestationSource{
+			sourceFunc(func(_ context.Context, got name.Digest) ([]attestation.Attestation, error) {
+				called++
+				require.Equal(t, ref, got)
+				if fail {
+					return []attestation.Attestation{record}, errors.New("bad signature")
+				}
+				return nil, nil // genuine absence does not suppress the next source
+			}),
+			sourceFunc(func(_ context.Context, got name.Digest) ([]attestation.Attestation, error) {
+				called++
+				require.Equal(t, ref, got)
+				return []attestation.Attestation{record}, nil
+			}),
+		}
+		a := ApplicationSnapshotImage{reference: ref, attestationSources: sources}
+		err := a.ValidateAttestationSignature(context.Background())
+		require.Equal(t, 2, called)
+		if fail {
+			require.ErrorContains(t, err, "bad signature")
+			require.Empty(t, a.Attestations())
+		} else {
+			require.NoError(t, err)
+			require.Len(t, a.Attestations(), 1)
+		}
+	}
 }

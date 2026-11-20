@@ -1,0 +1,21 @@
+{
+  "CRITICAL": {
+    "RHSA-2026:58936": {
+      "released_on": "2026-08-03T14:37:22Z",
+      "safe_until": "2026-09-02T14:37:22Z",
+      "blocked": true
+    },
+    "RHSA-2026:52036": {
+      "released_on": "2026-10-03T14:37:22Z",
+      "safe_until": "2026-11-02T14:37:22Z",
+      "blocked": false
+    }
+  },
+  "IMPORTANT": {
+    "RHSA-2026:55440": {
+      "released_on": "2026-10-01T14:37:22Z",
+      "safe_until": "2026-12-30T14:37:22Z",
+      "blocked": false
+    }
+  }
+}

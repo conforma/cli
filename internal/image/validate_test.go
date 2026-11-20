@@ -49,6 +49,7 @@ import (
 
 	"github.com/conforma/cli/internal/attestation"
 	"github.com/conforma/cli/internal/evaluator"
+	"github.com/conforma/cli/internal/evidence"
 	"github.com/conforma/cli/internal/policy"
 	"github.com/conforma/cli/internal/utils"
 	ecoci "github.com/conforma/cli/internal/utils/oci"
@@ -164,7 +165,7 @@ func TestBuiltinChecks(t *testing.T) {
 			client := ecoci.NewClient(ctx)
 			c.setup(client.(*fake.FakeClient))
 
-			actual, err := ValidateImage(ctx, c.component, &snap, p, evaluators, false)
+			actual, err := ValidateImage(ctx, c.component, &snap, p, evaluators, ValidationOptions{})
 			assert.NoError(t, err)
 
 			// Verify application snapshot was a part of input
@@ -360,7 +361,7 @@ func TestEvaluatorLifecycle(t *testing.T) {
 		},
 	}
 
-	_, err = ValidateImage(ctx, component, &snap, policy, evaluators, false)
+	_, err = ValidateImage(ctx, component, &snap, policy, evaluators, ValidationOptions{})
 
 	require.NoError(t, err)
 }
@@ -401,7 +402,7 @@ func TestComponentNamePassedToEvaluator(t *testing.T) {
 		Components: []app.SnapshotComponent{component},
 	}
 
-	_, err = ValidateImage(ctx, component, &snap, p, evaluators, false)
+	_, err = ValidateImage(ctx, component, &snap, p, evaluators, ValidationOptions{})
 	require.NoError(t, err)
 
 	// Verify that ComponentName was correctly passed to the evaluator
@@ -520,7 +521,7 @@ func TestValidateImageWithVSACheck(t *testing.T) {
 			snap := &app.SnapshotSpec{}
 			evaluators := []evaluator.Evaluator{}
 
-			out, err := ValidateImageWithVSACheck(ctx, comp, snap, p, evaluators, false, tt.vsaConfig)
+			out, err := ValidateImageWithVSACheck(ctx, comp, snap, p, evaluators, ValidationOptions{}, tt.vsaConfig)
 
 			if tt.expectSkip {
 				// VSA validation passed, output is nil (skip)
@@ -569,7 +570,7 @@ func TestValidateImageWithVSACheck_FlagCombinations(t *testing.T) {
 			evaluators := []evaluator.Evaluator{}
 
 			// All cases should fall back to full validation without error
-			_, err = ValidateImageWithVSACheck(ctx, comp, snap, p, evaluators, false, tt.vsaConfig)
+			_, err = ValidateImageWithVSACheck(ctx, comp, snap, p, evaluators, ValidationOptions{}, tt.vsaConfig)
 			assert.NoError(t, err)
 		})
 	}
@@ -636,7 +637,7 @@ func TestValidateImageSkipImageSigCheck(t *testing.T) {
 			evaluators := []evaluator.Evaluator{}
 
 			// Call ValidateImage
-			output, err := ValidateImage(ctx, comp, snap, updatedPolicy, evaluators, false)
+			output, err := ValidateImage(ctx, comp, snap, updatedPolicy, evaluators, ValidationOptions{})
 
 			// Validation should complete without error
 			require.NoError(t, err)
@@ -735,7 +736,7 @@ func TestValidateImageSkipAttSigCheck(t *testing.T) {
 			snap := &app.SnapshotSpec{}
 			evaluators := []evaluator.Evaluator{}
 
-			output, err := ValidateImage(ctx, comp, snap, updatedPolicy, evaluators, false)
+			output, err := ValidateImage(ctx, comp, snap, updatedPolicy, evaluators, ValidationOptions{})
 
 			require.NoError(t, err)
 			require.NotNil(t, output)
@@ -759,6 +760,55 @@ func TestValidateImageSkipAttSigCheck(t *testing.T) {
 				fakeClient.AssertCalled(t, "VerifyImageAttestations", refNoTag, mock.Anything)
 				fakeClient.AssertNotCalled(t, "FetchAttestationLayers", mock.Anything)
 			}
+		})
+	}
+}
+
+type recordingSource struct {
+	calls  int
+	ref    name.Digest
+	record attestation.Attestation
+}
+
+func (s *recordingSource) Collect(_ context.Context, ref name.Digest) ([]attestation.Attestation, error) {
+	s.calls++
+	s.ref = ref
+	return []attestation.Attestation{s.record}, nil
+}
+
+func TestSourceOptionsReachBothValidationPaths(t *testing.T) {
+	for _, withVSA := range []bool{false, true} {
+		t.Run(fmt.Sprintf("vsa=%t", withVSA), func(t *testing.T) {
+			ctx := utils.WithFS(context.Background(), afero.NewMemMapFs())
+			ctx = withImageConfig(ctx, imageRef)
+			client := ecoci.NewClient(ctx).(*fake.FakeClient)
+			client.On("Head", ref).Return(&v1.Descriptor{MediaType: types.OCIManifestSchema1}, nil)
+			client.On("HasBundles", mock.Anything, refNoTag).Return(false, nil)
+			client.On("VerifyImageSignatures", refNoTag, mock.Anything).Return([]oci.Signature{validSignature}, true, nil)
+			p, err := policy.NewOfflinePolicy(ctx, policy.Now)
+			require.NoError(t, err)
+			record, err := attestation.ProvenanceFromSignature(validAttestation)
+			require.NoError(t, err)
+			source := &recordingSource{record: record}
+			opts := ValidationOptions{AttestationSources: []evidence.AttestationSource{source}}
+			comp := app.SnapshotComponent{ContainerImage: imageRef}
+			snap := &app.SnapshotSpec{}
+			if withVSA {
+				// No retriever: entering VSA verification would fail. Explicit
+				// sources must bypass it and forward the same source set.
+				result, err := ValidateImageWithVSACheck(ctx, comp, snap, p, nil, opts, &vsa.VSAValidationConfig{VSAExpiration: time.Hour})
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				require.NotEmpty(t, result.PolicyInput)
+			} else {
+				result, err := ValidateImage(ctx, comp, snap, p, nil, opts)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				require.NotEmpty(t, result.PolicyInput)
+			}
+			require.Equal(t, 1, source.calls)
+			require.Equal(t, "sha256:"+imageDigest, source.ref.DigestStr())
+			client.AssertNotCalled(t, "VerifyImageAttestations", mock.Anything, mock.Anything)
 		})
 	}
 }
