@@ -140,6 +140,17 @@ for BRANCH in "${BRANCHES[@]}"; do
 
   # Checkout working branch
   WORK_BRANCH="go-mod-upgrade-${PKG_SHORT}-${BRANCH}"
+
+  # Check for existing open PR on this head branch
+  EXISTING_PR=$(gh pr list --head "$WORK_BRANCH" --base "$BRANCH" --state open --json number,url --jq '.[0].url // empty')
+  if [[ -n "$EXISTING_PR" ]]; then
+    echo "An open PR already exists for $WORK_BRANCH → $BRANCH:"
+    echo "  $EXISTING_PR"
+    echo "Skipping PR creation for $BRANCH."
+    echo
+    continue
+  fi
+
   git checkout -B "$WORK_BRANCH" "$UPSTREAM_REMOTE/$BRANCH" --no-track
   echo
 
