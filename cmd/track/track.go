@@ -17,7 +17,7 @@
 package track
 
 import (
-	hd "github.com/MakeNowJust/heredoc"
+	hd "github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/conforma/cli/internal/tracker"
