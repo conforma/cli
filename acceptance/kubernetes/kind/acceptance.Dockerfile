@@ -17,7 +17,7 @@
 # Minimal image for acceptance tests. The ec and kubectl binaries are
 # pre-built on the host and injected here to avoid the multi-stage Go
 # compilation that the production Dockerfile uses.
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:baafce2d34783a28b4a472779f304e97e00f9d35c99553bc53b068b14344d9a9
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:08d4c70f1baf6537a0728656cf7942d561e74a35916509d205b6519861266352
 
 RUN microdnf upgrade --assumeyes --nodocs --setopt=keepcache=0 --refresh && microdnf -y --nodocs --setopt=keepcache=0 install gzip jq ca-certificates
 
