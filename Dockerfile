@@ -16,7 +16,7 @@
 
 ## Build
 
-FROM docker.io/library/golang:1.26.7@sha256:e30143be198ab04cf7ba25fba83ab3a692ca584c994aad0bf131fa0eb32dd8c1 AS build
+FROM docker.io/library/golang:1.26.10@sha256:cfa27959837144bf4649802ba38e59daffd0dd2a7994aa83daaf113285b0f551 AS build
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -43,7 +43,7 @@ RUN /build/build.sh "${BUILD_LIST}" "${BUILD_SUFFIX}"
 
 ## Final image
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:baafce2d34783a28b4a472779f304e97e00f9d35c99553bc53b068b14344d9a9
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:08d4c70f1baf6537a0728656cf7942d561e74a35916509d205b6519861266352
 
 ARG TARGETOS
 ARG TARGETARCH
