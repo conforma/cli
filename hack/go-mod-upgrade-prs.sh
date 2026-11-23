@@ -197,6 +197,25 @@ for BRANCH in "${BRANCHES[@]}"; do
 
   # --- Push -----------------------------------------------------------------
 
+  # Avoid pushing to a branch that already has an open PR.
+  if ! EXISTING_PR=$(gh pr list \
+    --head "$WORK_BRANCH" \
+    --base "$BRANCH" \
+    --state open \
+    --json url \
+    --jq '.[0].url // empty'); then
+    echo "Error: failed to check for an existing PR for $WORK_BRANCH -> $BRANCH." >&2
+    exit 1
+  fi
+
+  if [[ -n "$EXISTING_PR" ]]; then
+    echo "An open PR already exists for $WORK_BRANCH -> $BRANCH:"
+    echo "  $EXISTING_PR"
+    echo "Skipping PR creation for $BRANCH."
+    echo
+    continue
+  fi
+
   if ! git push -u "$PUSH_REMOTE" "$WORK_BRANCH"; then
     echo
     echo "Push failed — remote branch may already exist."
