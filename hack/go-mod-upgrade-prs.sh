@@ -66,6 +66,14 @@ fi
 
 PKG="${POSITIONAL[0]}"
 PKG_SHORT="${PKG##*/}"
+# Keep the branch readable and use the full module path to distinguish modules.
+PKG_LABEL="$PKG_SHORT"
+if [[ "$PKG_SHORT" =~ ^v[0-9]+$ && "$PKG" == */* ]]; then
+  PKG_PARENT="${PKG%/*}"
+  PKG_LABEL="${PKG_PARENT##*/}-$PKG_SHORT"
+fi
+PKG_LABEL="${PKG_LABEL//[^a-zA-Z0-9_-]/-}"
+PKG_HASH=$(printf '%s' "$PKG" | git hash-object --stdin)
 
 if [[ ${#POSITIONAL[@]} -gt 1 ]]; then
   BRANCHES=("${POSITIONAL[@]:1}")
@@ -139,7 +147,7 @@ for BRANCH in "${BRANCHES[@]}"; do
   done
 
   # Checkout working branch
-  WORK_BRANCH="go-mod-upgrade-${PKG_SHORT}-${BRANCH}"
+  WORK_BRANCH="go-mod-upgrade-${PKG_LABEL}-${PKG_HASH:0:12}-${BRANCH}"
   git checkout -B "$WORK_BRANCH" "$UPSTREAM_REMOTE/$BRANCH" --no-track
   echo
 
