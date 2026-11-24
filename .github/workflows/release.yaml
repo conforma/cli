@@ -105,6 +105,7 @@ jobs:
         run: |
           go mod download
           (cd tools/kubectl && go mod download)
+          (cd tools/yq && go mod download)
 
       - name: Build distribution
         run: make dist

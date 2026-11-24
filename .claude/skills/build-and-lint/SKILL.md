@@ -79,6 +79,9 @@ go mod tidy && git diff --exit-code go.mod go.sum
 
 # If tools/kubectl/ files changed
 (cd tools/kubectl && go mod tidy && git diff --exit-code go.mod go.sum)
+
+# If tools/yq/ files changed
+(cd tools/yq && go mod tidy && git diff --exit-code go.mod go.sum)
 ```
 
 ## Step 5: Report
