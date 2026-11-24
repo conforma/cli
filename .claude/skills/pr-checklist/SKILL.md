@@ -32,6 +32,7 @@ go mod tidy && git diff --exit-code go.mod go.sum
 (cd acceptance && go mod tidy && git diff --exit-code go.mod go.sum)
 (cd tools && go mod tidy && git diff --exit-code go.mod go.sum)
 (cd tools/kubectl && go mod tidy && git diff --exit-code go.mod go.sum)
+(cd tools/yq && go mod tidy && git diff --exit-code go.mod go.sum)
 ```
 
 ## Step 3: Run lint

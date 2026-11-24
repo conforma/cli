@@ -115,7 +115,7 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-acceptance-${{ runner.os }}-${{ hashFiles('go.sum', 'tools/go.sum', 'tools/kubectl/go.sum') }}
+          key: go-acceptance-${{ runner.os }}-${{ hashFiles('go.sum', 'tools/go.sum', 'tools/kubectl/go.sum', 'tools/yq/go.sum') }}
           restore-keys: |
             go-acceptance-${{ runner.os }}-
 
