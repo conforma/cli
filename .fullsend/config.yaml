@@ -31,6 +31,12 @@ roles:
 agents:
     - name: review
       source: customized/harness/review.yaml
+      harness:
+          env:
+              runner:
+                  REVIEW_FINDING_SEVERITY_THRESHOLD: "high"
+              sandbox:
+                  REVIEW_FINDING_SEVERITY_THRESHOLD: "high"
     - name: retro
       source: customized/harness/retro.yaml
 allowed_remote_resources:
