@@ -66,7 +66,7 @@ build_ec() {
 }
 
 build_kubectl() {
-    GOOS="$1" GOARCH="$2" GOCACHE="$GOCACHE" GOMODCACHE="$GOMODCACHE" go install \
+    GOOS="$1" GOARCH="$2" CGO_ENABLED=0 GOCACHE="$GOCACHE" GOMODCACHE="$GOMODCACHE" go install \
         -modfile tools/kubectl/go.mod \
         -trimpath \
         --mod=readonly \
