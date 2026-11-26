@@ -3,6 +3,11 @@
   "extends": [
     "github>conforma/.github//config/renovate/renovate.json"
   ],
+  "baseBranchPatterns": [
+    "main",
+    "/^release-v0\\.(\\d{2,}|[8-9])$/",
+    "/^release-v[1-9]\\d*\\.\\d+$/"
+  ],
   // Vulnerability/security fixes are already kept as standalone PRs and created
   // immediately: Renovate internally forces `groupName: null` and ignores the
   // daily `schedule` for vulnerability alerts via its built-in `force` block,
