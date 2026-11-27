@@ -3525,7 +3525,7 @@ Error: error validating image ${REGISTRY}/acceptance/image of component Unnamed:
 ---
 
 [PURL functions:stderr - 1]
-time="${TIMESTAMP}" level=error msg="failed to parse PURL" error="purl scheme is not \"pkg\": \"\"" function=ec.purl.parse purl=this-is-not-a-valid-purl
+time="${TIMESTAMP}" level=error msg="failed to parse PURL" error="purl scheme is not \"pkg\": \"this-is-not-a-valid-purl\"" function=ec.purl.parse purl=this-is-not-a-valid-purl
 Error: success criteria not met
 
 ---
