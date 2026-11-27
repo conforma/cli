@@ -16,7 +16,7 @@
 
 ## Build
 
-FROM docker.io/library/golang:1.26.7@sha256:e30143be198ab04cf7ba25fba83ab3a692ca584c994aad0bf131fa0eb32dd8c1 AS build
+FROM docker.io/library/golang:1.26.10@sha256:cfa27959837144bf4649802ba38e59daffd0dd2a7994aa83daaf113285b0f551 AS build
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -36,6 +36,10 @@ RUN go mod download
 COPY tools/kubectl/go.mod tools/kubectl/go.sum ./tools/kubectl/
 RUN cd tools/kubectl && go mod download
 
+# Cache the yq module separately from the source tree
+COPY tools/yq/go.mod tools/yq/go.sum ./tools/yq/
+RUN cd tools/yq && go mod download
+
 # Now copy everything including .git
 COPY . .
 
@@ -43,7 +47,7 @@ RUN /build/build.sh "${BUILD_LIST}" "${BUILD_SUFFIX}"
 
 ## Final image
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:baafce2d34783a28b4a472779f304e97e00f9d35c99553bc53b068b14344d9a9
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:08d4c70f1baf6537a0728656cf7942d561e74a35916509d205b6519861266352
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -74,6 +78,9 @@ COPY --from=build "/build/dist/ec_${TARGETOS}_${TARGETARCH}" /usr/local/bin/ec
 # Copy the one kubectl binary that can run in this container
 COPY --from=build "/build/dist/kubectl_${TARGETOS}_${TARGETARCH}" /usr/local/bin/kubectl
 
+# Copy the yq binary for this container's platform
+COPY --from=build "/build/dist/yq_${TARGETOS}_${TARGETARCH}" /usr/local/bin/yq
+
 # Copy reduce-snapshot script needed for single component mode
 COPY hack/reduce-snapshot.sh /usr/local/bin/
 
@@ -94,6 +101,6 @@ RUN ln -s /usr/local/bin/ec /usr/local/bin/conforma
 USER 1001
 
 # Show some version numbers for troubleshooting purposes
-RUN jq --version && ec version && ls -l /usr/local/bin
+RUN jq --version && yq --version && ec version && ls -l /usr/local/bin
 
 ENTRYPOINT ["/usr/local/bin/ec"]
