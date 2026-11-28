@@ -574,8 +574,8 @@ github.com/shibumi/go-pathspec v1.3.0 h1:QUyMZhFo0Md5B8zV8x2tesohbb5kfbpTi9rBnKh
 github.com/shibumi/go-pathspec v1.3.0/go.mod h1:Xutfslp817l2I1cZvgcfeMQJG5QnU2lh5tVaaMCl3jE=
 github.com/shirou/gopsutil/v4 v4.26.6 h1:Mzr/npDtQC/xpeEuQKHZt8Zo9CmPvhTj8nkR8w5TLDs=
 github.com/shirou/gopsutil/v4 v4.26.6/go.mod h1:LZ6ewCSkBqUpvSOf+LsTGnRinC6iaNUNMGBtDkJBaLQ=
-github.com/sigstore/cosign/v3 v3.0.4 h1:SuEn9z8V0eyjF0PWxuGgQ7QSPWReNexLJovkZ3wLaf8=
-github.com/sigstore/cosign/v3 v3.0.4/go.mod h1:DJY5LPzHiI6bWpG/Q/NQUTfeASjkN8TDAUx1Nnt3I0I=
+github.com/sigstore/cosign/v3 v3.0.6 h1:k8XaUd9pmLknHBst/v0rUGHVdB4D9cfaBmWUaMAOocE=
+github.com/sigstore/cosign/v3 v3.0.6/go.mod h1:ckLRkVecfUCYxL8isHODY9lwyKmDaRCPn00p6yFxHg0=
 github.com/sigstore/protobuf-specs v0.5.1 h1:/5OPaNuolRJmQfeZLayJGFXMpsRJEdgC6ah1/+7Px7U=
 github.com/sigstore/protobuf-specs v0.5.1/go.mod h1:DRBzpFuE+LnvQMN10/dU6nBeKwVLGEQ6o2FovN2Rats=
 github.com/sigstore/rekor v1.5.3 h1:0Tyolw3zreRgm7PUW8dccFLXGBThi08278jI8EXNSr4=
