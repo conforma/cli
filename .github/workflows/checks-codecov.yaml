@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: audit
           disable-telemetry: true
@@ -61,7 +61,7 @@ jobs:
           cache: false
 
       - name: Check go versions
-        uses: conforma/github-workflows/golang-version-check@cc8da96038806c3fc70dee3f75b84505762549c4 # main
+        uses: conforma/github-workflows/golang-version-check@e81001eba1e1c1e584159a4cead5e8b131f1d999 # main
 
       - name: Show git sha and commit subject
         run: git log --oneline -n1
@@ -168,7 +168,7 @@ jobs:
     needs: [Test, Acceptance]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: audit
           disable-telemetry: true
